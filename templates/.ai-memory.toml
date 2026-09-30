@@ -1,0 +1,6 @@
+# ai-memory: capture only in this project (allowlist mode).
+workspace = "{{MEM_WORKSPACE}}"
+project = "{{MEM_PROJECT}}"
+
+[capture]
+ignore_paths = [".gauntlet/**", "graphify-out/**", "**/.env*"]

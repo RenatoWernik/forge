@@ -1,0 +1,441 @@
+<title>{{PROJECT_NAME}} Gauntlet Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: control-room console. Summary rail on top, agent lanes (builder vs critic) in the middle, work board + feed + notes below. Flight-strip cards, square edges. */
+:root {
+  --bg: #EDF0F3; --surface: #FFFFFF; --sunk: #E3E8ED; --ink: #16202B; --muted: #5B6877; --line: #D3DAE2;
+  --accent: #2F57C9; --builder: #0B7F73; --critic: #A8452F;
+  --ok: #1D7F48; --warn: #A86A12; --fail: #BE3434; --idle: #7A8594;
+  --builder-soft: #DDF1EE; --critic-soft: #F6E3DE; --ok-soft: #DDF0E4; --warn-soft: #F5EAD6; --fail-soft: #F7DEDE; --accent-soft: #E0E7FA;
+  --f-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0E1319; --surface: #151C24; --sunk: #1B242E; --ink: #E4EAF1; --muted: #8D9AA9; --line: #27313C;
+  --accent: #86A2FF; --builder: #42C2B2; --critic: #E58566;
+  --ok: #4FC27F; --warn: #E0A54A; --fail: #F07070; --idle: #7D8897;
+  --builder-soft: #12302D; --critic-soft: #3A2019; --ok-soft: #13301F; --warn-soft: #36290F; --fail-soft: #3A1717; --accent-soft: #1C2748;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0E1319; --surface: #151C24; --sunk: #1B242E; --ink: #E4EAF1; --muted: #8D9AA9; --line: #27313C;
+  --accent: #86A2FF; --builder: #42C2B2; --critic: #E58566;
+  --ok: #4FC27F; --warn: #E0A54A; --fail: #F07070; --idle: #7D8897;
+  --builder-soft: #12302D; --critic-soft: #3A2019; --ok-soft: #13301F; --warn-soft: #36290F; --fail-soft: #3A1717; --accent-soft: #1C2748;
+  color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45; padding-inline: 16px; padding-block: 20px 48px }
+.wrap { max-width: 1440px; margin: 0 auto; display: grid; gap: 20px }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance }
+h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em }
+h2 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted) }
+h3 { font-size: 0.95rem; font-weight: 700 }
+.mono { font-family: var(--f-data); font-variant-numeric: tabular-nums }
+.muted { color: var(--muted) }
+button, textarea { font: inherit; color: inherit }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px }
+.top .sub { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); margin-top: 4px }
+.live { display: inline-flex; align-items: center; gap: 8px; font-family: var(--f-data); font-size: 0.75rem; padding: 5px 10px; border: 1px solid var(--line); background: var(--surface) }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle) }
+.live[data-state="on"] .dot { background: var(--ok); animation: pulse 2s infinite }
+.live[data-state="off"] .dot { background: var(--fail) }
+@keyframes pulse { 50% { opacity: .35 } }
+@media (prefers-reduced-motion: reduce) { .live .dot { animation: none !important } }
+
+/* summary rail */
+.rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line) }
+.stat { background: var(--surface); padding: 12px 14px; display: grid; gap: 2px }
+.stat b { font-family: var(--f-data); font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums }
+.stat span { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em }
+.stat[data-tone="fail"] b { color: var(--fail) }
+.stat[data-tone="ok"] b { color: var(--ok) }
+.stat[data-tone="run"] b { color: var(--accent) }
+
+/* SDD stepper + checkpoints */
+.band { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px }
+@media (max-width: 900px) { .band { grid-template-columns: minmax(0, 1fr) } }
+.panel { background: var(--surface); border: 1px solid var(--line); padding: 14px 16px; display: grid; gap: 12px; align-content: start; min-width: 0 }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap }
+.steps { display: flex; flex-wrap: wrap; gap: 6px }
+.step { font-size: 0.78rem; padding: 4px 9px; border: 1px solid var(--line); color: var(--muted); background: var(--bg) }
+.step[data-s="done"] { color: var(--ok); border-color: var(--ok); background: var(--ok-soft) }
+.step[data-s="now"] { color: var(--surface); background: var(--accent); border-color: var(--accent); font-weight: 600 }
+.cps { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px }
+.cp { flex: 0 0 auto; min-width: 150px; max-width: 220px; border: 1px solid var(--line); padding: 8px 10px; display: grid; gap: 4px; background: var(--bg) }
+.cp[data-s="ativo"] { border-color: var(--accent); background: var(--accent-soft) }
+.cp[data-s="concluido"] { border-color: var(--ok) }
+.cp[data-s="falhou"] { border-color: var(--fail) }
+.cp .n { font-family: var(--f-data); font-size: 0.72rem; color: var(--muted) }
+.cp .t { font-weight: 600; font-size: 0.85rem }
+.cp .pt { font-size: 0.72rem; font-family: var(--f-data) }
+
+/* framework strip */
+.fw { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px }
+.fwi { border: 1px solid var(--line); padding: 8px 10px; display: grid; gap: 2px; background: var(--bg); min-width: 0 }
+.fwi .row { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.85rem }
+.fwi small { color: var(--muted); font-size: 0.74rem; overflow-wrap: anywhere }
+.fwi[data-s="ativo"] .dot { background: var(--ok) }
+.fwi[data-s="pausado"] .dot { background: var(--warn) }
+.fwi[data-s="erro"] .dot { background: var(--fail) }
+
+/* tabs */
+.tabs { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--line) }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; cursor: pointer; color: var(--muted); font-weight: 600 }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent) }
+.tab .c { font-family: var(--f-data); font-size: 0.72rem; margin-left: 6px; color: var(--muted) }
+
+/* agent lanes */
+.lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px }
+@media (max-width: 1100px) { .lanes { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (max-width: 560px) { .lanes { grid-template-columns: minmax(0, 1fr) } }
+.lane { display: grid; gap: 8px; align-content: start; min-width: 0 }
+.lane-head { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 2px; border-bottom: 2px solid var(--line) }
+.lane[data-k="running"] .lane-head { border-color: var(--accent) }
+.lane[data-k="failed"] .lane-head { border-color: var(--fail) }
+.lane[data-k="done"] .lane-head { border-color: var(--ok) }
+.lane-head .c { font-family: var(--f-data); font-size: 0.8rem; color: var(--muted) }
+
+.strip { display: grid; grid-template-columns: 6px minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); cursor: pointer; text-align: left; padding: 0; width: 100% }
+.strip .band-c { background: var(--builder) }
+.strip[data-role="critic"] .band-c { background: var(--critic) }
+.strip .body { padding: 9px 11px; display: grid; gap: 5px; min-width: 0 }
+.strip .l1 { display: flex; justify-content: space-between; gap: 8px; align-items: center }
+.strip .name { font-weight: 700; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.strip .task { font-size: 0.83rem; overflow-wrap: anywhere }
+.strip .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-family: var(--f-data); font-size: 0.7rem; color: var(--muted) }
+.strip .more { display: none; font-size: 0.8rem; border-top: 1px dashed var(--line); padding-top: 6px; gap: 4px }
+.strip[aria-expanded="true"] .more { display: grid }
+.strip .more dt { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em }
+.strip .more dd { margin: 0 0 4px; overflow-wrap: anywhere }
+.pill { font-family: var(--f-data); font-size: 0.68rem; padding: 1px 6px; border: 1px solid currentColor; white-space: nowrap }
+.pill.builder { color: var(--builder); background: var(--builder-soft); border-color: transparent }
+.pill.critic { color: var(--critic); background: var(--critic-soft); border-color: transparent }
+.pill.win { color: var(--ok); background: var(--ok-soft); border-color: transparent }
+.pill.lose { color: var(--fail); background: var(--fail-soft); border-color: transparent }
+.pill.warn { color: var(--warn); background: var(--warn-soft); border-color: transparent }
+.pill.loop { color: var(--muted) }
+
+.empty { border: 1px dashed var(--line); padding: 14px; color: var(--muted); font-size: 0.82rem; background: transparent }
+
+/* board */
+.board { display: grid; grid-template-columns: repeat(5, minmax(180px, 1fr)); gap: 10px; overflow-x: auto; padding-bottom: 4px }
+.col { display: grid; gap: 8px; align-content: start; min-width: 0 }
+.col-head { font-size: 0.78rem; font-weight: 700; display: flex; justify-content: space-between; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding-bottom: 4px; border-bottom: 1px solid var(--line) }
+.piece { border: 1px solid var(--line); background: var(--bg); padding: 9px 10px; display: grid; gap: 5px; min-width: 0 }
+.piece .t { font-weight: 600; font-size: 0.85rem; overflow-wrap: anywhere }
+.piece .gap { font-size: 0.78rem; color: var(--muted); overflow-wrap: anywhere }
+.piece .gap b { color: var(--critic); font-weight: 600 }
+.piece .m { display: flex; flex-wrap: wrap; gap: 4px 8px; font-family: var(--f-data); font-size: 0.7rem; color: var(--muted) }
+
+/* lower grid */
+.lower { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px }
+@media (max-width: 900px) { .lower { grid-template-columns: minmax(0, 1fr) } }
+.feed { display: grid; gap: 0; max-height: 520px; overflow-y: auto; border-top: 1px solid var(--line) }
+.ev { display: grid; grid-template-columns: 58px 16px minmax(0, 1fr); gap: 8px; padding: 7px 2px; border-bottom: 1px solid var(--line); font-size: 0.83rem; align-items: baseline }
+.ev time { font-family: var(--f-data); font-size: 0.7rem; color: var(--muted) }
+.ev .k { font-family: var(--f-data); font-weight: 700; text-align: center }
+.ev[data-k="ok"] .k { color: var(--ok) }
+.ev[data-k="fail"] .k { color: var(--fail) }
+.ev[data-k="decision"] .k { color: var(--accent) }
+.ev[data-k="info"] .k { color: var(--muted) }
+.ev .who { font-weight: 600 }
+.ev .txt { overflow-wrap: anywhere }
+.notes { display: grid; gap: 8px }
+.note { border: 1px solid var(--line); padding: 9px 11px; display: grid; gap: 3px; background: var(--bg) }
+.note[data-k="risco"] { border-color: var(--warn) }
+.note[data-k="pergunta"] { border-color: var(--accent); background: var(--accent-soft) }
+.note[data-k="erro"] { border-color: var(--fail) }
+.note .h { display: flex; justify-content: space-between; gap: 8px; align-items: baseline }
+.note .h b { font-size: 0.86rem }
+.note p { margin: 0; font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; white-space: pre-wrap }
+
+.inbox form { display: grid; gap: 8px }
+.inbox textarea { width: 100%; min-height: 70px; resize: vertical; background: var(--bg); border: 1px solid var(--line); padding: 8px 10px }
+.inbox .bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap }
+.btn { background: var(--accent); color: var(--surface); border: 0; padding: 7px 14px; font-weight: 700; cursor: pointer }
+.btn[disabled] { opacity: .5; cursor: default }
+.msg { font-size: 0.82rem; border-left: 2px solid var(--line); padding: 2px 0 2px 8px; display: grid; gap: 2px }
+.msg[data-s="lido"] { border-color: var(--ok) }
+.msg small { font-family: var(--f-data); font-size: 0.68rem; color: var(--muted) }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1 id="pname"></h1>
+      <div class="sub">
+        <span id="pdesc"></span>
+        <span class="mono" id="pupdated"></span>
+      </div>
+    </div>
+    <div class="live" id="live" data-state="wait" role="status"><span class="dot"></span><span id="livetxt"></span></div>
+  </header>
+
+  <section class="rail" data-al="summary">
+    <div class="stat" data-tone="run"><b id="s-run">0</b><span data-t="running"></span></div>
+    <div class="stat"><b id="s-queue">0</b><span data-t="queued"></span></div>
+    <div class="stat" data-tone="ok"><b id="s-won">0/0</b><span data-t="piecesWon"></span></div>
+    <div class="stat" data-tone="fail"><b id="s-fail">0</b><span data-t="problem"></span></div>
+    <div class="stat"><b id="s-rounds">0</b><span data-t="rounds"></span></div>
+    <div class="stat"><b id="s-cp">-</b><span data-t="currentCp"></span></div>
+  </section>
+
+  <section class="band">
+    <div class="panel">
+      <div class="panel-head"><h2 data-t="sddPhase"></h2><span class="mono muted" id="phase-note"></span></div>
+      <div class="steps" id="steps"></div>
+      <div class="panel-head"><h2 data-t="checkpoints"></h2><span class="mono muted" id="cp-count"></span></div>
+      <div class="cps" id="cps"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2 data-t="framework"></h2><span class="mono muted" data-t="frameworkNote"></span></div>
+      <div class="fw" id="fw"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="tabs" role="tablist" id="tabs">
+      <button class="tab" role="tab" data-f="all" aria-selected="true" id="tab-all"><span data-t="tabAll"></span><span class="c" id="c-all"></span></button>
+      <button class="tab" role="tab" data-f="build" aria-selected="false" id="tab-build"><span data-t="tabBuild"></span><span class="c" id="c-build"></span></button>
+      <button class="tab" role="tab" data-f="ponytail" aria-selected="false" id="tab-pony"><span data-t="tabPonytail"></span><span class="c" id="c-ponytail"></span></button>
+    </div>
+    <div class="lanes" id="lanes"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2 data-t="piecesTitle"></h2><span class="muted" style="font-size:.8rem" data-t="piecesNote"></span></div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section class="lower">
+    <div class="panel">
+      <div class="panel-head"><h2 data-t="activity"></h2><span class="mono muted" id="ev-count"></span></div>
+      <div class="feed" id="feed"></div>
+    </div>
+    <div style="display:grid;gap:20px;align-content:start;min-width:0">
+      <div class="panel">
+        <div class="panel-head"><h2 data-t="notesTitle"></h2><span class="muted" style="font-size:.8rem" data-t="notesNote"></span></div>
+        <div class="notes" id="notes"></div>
+      </div>
+      <div class="panel inbox">
+        <div class="panel-head"><h2 data-t="inboxTitle"></h2></div>
+        <form id="inbox-form">
+          <label for="inbox-text" class="muted" style="font-size:.8rem" data-t="inboxLabel"></label>
+          <textarea id="inbox-text" data-ph="inboxPlaceholder"></textarea>
+          <div class="bar"><span class="muted" id="inbox-status" style="font-size:.78rem"></span><button class="btn" id="inbox-send" type="submit" data-t="inboxSend"></button></div>
+        </form>
+        <div class="notes" id="inbox"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+// Texts: English here; a project in another language gets the overrides of its language in the object merged after EN (filled when the project is generated).
+const EN = {
+  title: "{name} Gauntlet Control", subtitle: "Live panel of the project agents", connecting: "connecting...", live: "live",
+  noData: "no connection to the data", lost: "connection lost, reload the page", updated: "updated",
+  summary: "Summary", running: "Running", queued: "Queued", piecesWon: "Pieces won", problem: "With problem", rounds: "Critic rounds", currentCp: "Current checkpoint",
+  sddPhase: "SDD phase", checkpoints: "Checkpoints", framework: "Framework", frameworkNote: "8 components, from step 0 to the last",
+  ph_constituicao: "Constitution", ph_especificar: "Specify", ph_clarificar: "Clarify", ph_planejar: "Plan", ph_tarefas: "Tasks", ph_implementar: "Implement", ph_entregue: "Delivered",
+  fwWaiting: "waiting for the first data", st_ativo: "active", st_pausado: "paused", st_erro: "error", st_ocioso: "idle",
+  cpDone: "{done}/{total} concluded", cpEmpty: "Checkpoints appear here as soon as the plan is approved. Each one goes through the Ponytail gauntlet before it closes.", cp: "CP", ponytail: "ponytail", pending: "pending",
+  st_planejado: "planned", st_concluido: "concluded", st_falhou: "failed",
+  tabAll: "All", tabBuild: "Gauntlet · Build", tabPonytail: "Gauntlet · Ponytail", loopBuild: "Build", loopPonytail: "Ponytail",
+  laneRunning: "Running now", laneQueued: "Queued", laneDone: "Finished", laneFailed: "With problem",
+  emptyRunning: "No agent working right now.", emptyQueued: "Nothing queued.", emptyDone: "No agent has finished yet.", emptyFailed: "No problem recorded.",
+  roleCritic: "Critic", roleBuilder: "Developer", verdictWin: "won blind", verdictLose: "lost blind", noTask: "no task assigned", noDetails: "No details yet.",
+  dPiece: "Piece", dCheckpoint: "Checkpoint", dGap: "Biggest gap", dResult: "Result", dError: "Error", dNext: "Next step", dNote: "Note",
+  colBacklog: "To do", colBuilding: "Building", colJudging: "Being judged", colWon: "Won", colFailed: "Stuck",
+  piecesTitle: "Work pieces", piecesNote: "Each piece goes through developer, then critic, until it wins blind",
+  gapLabel: "Gap", barLabel: "Bar", roundsN: "{n} round(s)", vd_ganhou: "won", vd_perdeu: "lost",
+  activity: "Activity", events: "{n} recent events", feedEmpty: "The activity of each agent shows up here: what started, what finished, what worked and what went wrong.",
+  notesTitle: "For you", notesNote: "Decisions, risks and questions", notesEmpty: "Decisions made, risks and questions that need your answer show up here.",
+  nk_decisao: "Decision", nk_risco: "Risk", nk_pergunta: "Question for you", nk_info: "Information", nk_erro: "Error",
+  inboxTitle: "Message to Claude", inboxLabel: "Claude reads these messages at every checkpoint.", inboxPlaceholder: "E.g.: do the login before the report", inboxSend: "Send message",
+  inboxSent: "Message sent.", inboxRead: "read by Claude", inboxWaiting: "waiting to be read", inboxReadOnly: "You only have read access to this panel.",
+  inboxFail: "Could not send. Try again shortly.", inboxUnavailable: "Messages are unavailable in this view.",
+  agoNow: "now", agoMin: "{n} min ago", agoHour: "{n} h ago"
+};
+const PROJECT = "{{PROJECT_NAME}}", LANG = "{{LANG_TAG}}";
+const T = Object.assign({}, EN, {{PANEL_OVERRIDES}});
+const tx = (k, o) => String(T[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => (o && o[n] != null ? o[n] : m));
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const S = { project: null, framework: null, checkpoints: [], pieces: [], agents: [], events: [], notes: [], inbox: [], filter: "all", open: new Set() };
+try { const f = localStorage.getItem("gc-filter"); if (f) S.filter = f } catch (e) {}
+
+document.title = tx("title", { name: PROJECT });
+document.documentElement.lang = LANG;
+document.querySelectorAll("[data-t]").forEach(el => { el.textContent = tx(el.dataset.t) });
+document.querySelectorAll("[data-ph]").forEach(el => { el.placeholder = tx(el.dataset.ph) });
+document.querySelectorAll("[data-al]").forEach(el => { el.setAttribute("aria-label", tx(el.dataset.al)) });
+$("livetxt").textContent = tx("connecting");
+
+// SDD phases and framework keys are identifiers the orchestrator writes to the panel; their names are texts.
+const SDD = ["constituicao","especificar","clarificar","planejar","tarefas","implementar","entregue"];
+const FW_DEFAULT = [["gauntlet","Gauntlet loop"],["ai-memory","AI Memory"],["claude-mem","Claude-mem"],["ponytail","Ponytail"],["sdd","SDD"],["tdd","TDD"],["mattpocock","Matt Pocock skills"],["graphify","Graphify"]];
+const LANES = [["running","laneRunning","emptyRunning"],["queued","laneQueued","emptyQueued"],["done","laneDone","emptyDone"],["failed","laneFailed","emptyFailed"]];
+const COLS = [["backlog","colBacklog"],["building","colBuilding"],["judging","colJudging"],["won","colWon"],["failed","colFailed"]];
+const loopName = l => tx(l === "ponytail" ? "loopPonytail" : "loopBuild");
+const word = (prefix, v) => T[prefix + v] || v;
+
+function ago(t) {
+  if (!t) return "";
+  const d = (Date.now() - new Date(t).getTime()) / 1000;
+  if (!isFinite(d)) return "";
+  if (d < 60) return tx("agoNow");
+  if (d < 3600) return tx("agoMin", { n: Math.floor(d / 60) });
+  if (d < 86400) return tx("agoHour", { n: Math.floor(d / 3600) });
+  return new Date(t).toLocaleDateString(LANG);
+}
+const hhmm = t => { const d = new Date(t); return isNaN(d) ? "" : d.toLocaleTimeString(LANG, {hour: "2-digit", minute: "2-digit"}) };
+const inFilter = x => S.filter === "all" || (x.loop || "build") === S.filter;
+const laneOf = s => s === "blocked" ? "failed" : (["running","queued","done","failed"].includes(s) ? s : "queued");
+
+function renderHeader() {
+  const p = S.project || {};
+  $("pname").textContent = p.name || tx("title", { name: PROJECT });
+  $("pdesc").textContent = p.description || tx("subtitle");
+  $("pupdated").textContent = p.updatedAt ? tx("updated") + " " + ago(p.updatedAt) : "";
+  const cur = p.phase || "constituicao";
+  const idx = SDD.indexOf(cur);
+  $("steps").innerHTML = SDD.map((s, i) => `<span class="step" data-s="${i < idx ? "done" : i === idx ? "now" : "next"}">${esc(tx("ph_" + s))}</span>`).join("");
+  $("phase-note").textContent = p.phaseNote || "";
+}
+
+function renderFramework() {
+  const items = (S.framework && Array.isArray(S.framework.items)) ? S.framework.items : FW_DEFAULT.map(([key, name]) => ({key, name, status: "ocioso", note: tx("fwWaiting")}));
+  $("fw").innerHTML = items.map(i => `<div class="fwi" data-s="${esc(i.status)}"><div class="row"><span class="dot"></span>${esc(i.name)}</div><small>${esc(word("st_", i.status))}${i.note ? " · " + esc(i.note) : ""}</small></div>`).join("");
+}
+
+function renderCheckpoints() {
+  const cps = S.checkpoints;
+  $("cp-count").textContent = cps.length ? tx("cpDone", { done: cps.filter(c => c.status === "concluido").length, total: cps.length }) : "";
+  $("cps").innerHTML = cps.length ? cps.map(c => `<div class="cp" data-s="${esc(c.status)}">
+      <span class="n">${esc(tx("cp"))} ${esc(c.n)} · ${esc(word("st_", c.status || "planejado"))}</span>
+      <span class="t">${esc(c.title)}</span>
+      <span class="pt">${esc(tx("ponytail"))}: ${esc(c.ponytail || tx("pending"))}</span></div>`).join("")
+    : `<div class="empty">${esc(tx("cpEmpty"))}</div>`;
+  const active = cps.find(c => c.status === "ativo");
+  $("s-cp").textContent = active ? tx("cp") + " " + active.n : "-";
+}
+
+function stripHTML(a) {
+  const role = a.role === "critic" ? "critic" : "builder";
+  const verdict = a.verdict === "ganhou" ? `<span class="pill win">${esc(tx("verdictWin"))}</span>` : a.verdict === "perdeu" ? `<span class="pill lose">${esc(tx("verdictLose"))}</span>` : "";
+  const open = S.open.has(a.id);
+  const rows = [["dPiece", a.piece], ["dCheckpoint", a.checkpoint], ["dGap", a.gap], ["dResult", a.result], ["dError", a.error], ["dNext", a.next], ["dNote", a.note]]
+    .filter(r => r[1]).map(r => `<dt>${esc(tx(r[0]))}</dt><dd>${esc(r[1])}</dd>`).join("");
+  return `<button class="strip" data-role="${role}" data-id="${esc(a.id)}" aria-expanded="${open}">
+    <span class="band-c" aria-hidden="true"></span>
+    <span class="body">
+      <span class="l1"><span class="name">${esc(a.label || a.id)}</span><span class="pill ${role}">${esc(tx(role === "critic" ? "roleCritic" : "roleBuilder"))}</span></span>
+      <span class="task">${esc(a.task || tx("noTask"))}</span>
+      <span class="meta"><span>${esc(a.model || "")}${a.effort ? " · " + esc(a.effort) : ""}</span>${a.round ? `<span>R${esc(a.round)}</span>` : ""}<span class="pill loop">${esc(loopName(a.loop))}</span><span>${esc(ago(a.updatedAt))}</span>${verdict}</span>
+      <dl class="more">${rows || `<dd class='muted'>${esc(tx("noDetails"))}</dd>`}</dl>
+    </span></button>`;
+}
+
+function renderAgents() {
+  const ags = S.agents;
+  const count = f => ags.filter(a => f === "all" || (a.loop || "build") === f).length;
+  $("c-all").textContent = count("all"); $("c-build").textContent = count("build"); $("c-ponytail").textContent = count("ponytail");
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.f === S.filter)));
+  const vis = ags.filter(inFilter).sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  $("lanes").innerHTML = LANES.map(([k, label, empty]) => {
+    const list = vis.filter(a => laneOf(a.status) === k);
+    return `<div class="lane" data-k="${k}"><div class="lane-head"><h3>${esc(tx(label))}</h3><span class="c">${list.length}</span></div>
+      ${list.length ? list.map(stripHTML).join("") : `<div class="empty">${esc(tx(empty))}</div>`}</div>`;
+  }).join("");
+  $("s-run").textContent = ags.filter(a => a.status === "running").length;
+  $("s-queue").textContent = ags.filter(a => laneOf(a.status) === "queued").length;
+  $("s-fail").textContent = ags.filter(a => laneOf(a.status) === "failed").length + S.pieces.filter(p => p.status === "failed").length;
+}
+
+function renderBoard() {
+  const vis = S.pieces.filter(inFilter);
+  $("board").innerHTML = COLS.map(([k, label]) => {
+    const list = vis.filter(p => (p.status || "backlog") === k);
+    return `<div class="col"><div class="col-head"><span>${esc(tx(label))}</span><span class="mono">${list.length}</span></div>
+      ${list.map(p => `<div class="piece">
+        <span class="t">${esc(p.title)}</span>
+        ${p.gap ? `<span class="gap"><b>${esc(tx("gapLabel"))}:</b> ${esc(p.gap)}</span>` : ""}
+        ${p.bar ? `<span class="gap">${esc(tx("barLabel"))}: ${esc(p.bar)}</span>` : ""}
+        <span class="m">${p.checkpoint ? `<span>${esc(tx("cp"))} ${esc(p.checkpoint)}</span>` : ""}<span>${esc(tx("roundsN", { n: p.rounds || 0 }))}</span>${p.verdict ? `<span class="pill ${p.verdict === "ganhou" ? "win" : "lose"}">${esc(word("vd_", p.verdict))}</span>` : ""}<span class="pill loop">${esc(loopName(p.loop))}</span></span>
+      </div>`).join("") || `<div class="empty">-</div>`}</div>`;
+  }).join("");
+  const won = S.pieces.filter(p => p.status === "won").length;
+  $("s-won").textContent = won + "/" + S.pieces.length;
+  $("s-rounds").textContent = S.pieces.reduce((n, p) => n + (Number(p.rounds) || 0), 0);
+}
+
+function renderFeed() {
+  const vis = S.events.filter(inFilter);
+  $("ev-count").textContent = vis.length ? tx("events", { n: vis.length }) : "";
+  const K = { ok: "+", fail: "x", decision: "*", info: "." };
+  $("feed").innerHTML = vis.length ? vis.map(e => `<div class="ev" data-k="${esc(e.kind || "info")}">
+      <time title="${esc(e.t)}">${esc(hhmm(e.t))}</time><span class="k">${K[e.kind] || "."}</span>
+      <span class="txt"><span class="who">${esc(e.who || "Claude")}</span> ${esc(e.text)}</span></div>`).join("")
+    : `<div class="empty" style="margin-top:8px">${esc(tx("feedEmpty"))}</div>`;
+}
+
+function renderNotes() {
+  $("notes").innerHTML = S.notes.length ? S.notes.map(n => `<div class="note" data-k="${esc(n.kind)}">
+      <div class="h"><b>${esc(n.title)}</b><span class="mono muted" style="font-size:.7rem">${esc(word("nk_", n.kind || ""))} · ${esc(ago(n.t))}</span></div>
+      ${n.body ? `<p>${esc(n.body)}</p>` : ""}</div>`).join("")
+    : `<div class="empty">${esc(tx("notesEmpty"))}</div>`;
+  $("inbox").innerHTML = S.inbox.map(m => `<div class="msg" data-s="${esc(m.status)}"><span>${esc(m.text)}</span><small>${esc(ago(m.t))} · ${esc(tx(m.status === "lido" ? "inboxRead" : "inboxWaiting"))}${m.reply ? " · " + esc(m.reply) : ""}</small></div>`).join("");
+}
+
+function renderAll() { renderHeader(); renderFramework(); renderCheckpoints(); renderAgents(); renderBoard(); renderFeed(); renderNotes() }
+
+$("tabs").addEventListener("click", e => {
+  const t = e.target.closest(".tab"); if (!t) return;
+  S.filter = t.dataset.f; try { localStorage.setItem("gc-filter", S.filter) } catch (err) {}
+  renderAgents(); renderBoard(); renderFeed();
+});
+$("lanes").addEventListener("click", e => {
+  const s = e.target.closest(".strip"); if (!s) return;
+  const id = s.dataset.id; S.open.has(id) ? S.open.delete(id) : S.open.add(id);
+  s.setAttribute("aria-expanded", String(S.open.has(id)));
+});
+
+renderAll();
+setInterval(() => { renderHeader(); renderAgents(); renderNotes() }, 30000);
+
+(async () => {
+  const db = await claude.use("db");
+  const live = $("live");
+  if (!db) { live.dataset.state = "off"; $("livetxt").textContent = tx("noData"); $("inbox-send").disabled = true; $("inbox-status").textContent = tx("inboxUnavailable"); return }
+  const mark = () => { live.dataset.state = "on"; $("livetxt").textContent = tx("live") };
+  const fail = e => { live.dataset.state = "off"; $("livetxt").textContent = tx("lost"); console.warn(e) };
+  const docs = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  db.doc("meta/project").onSnapshot(s => { S.project = s.exists ? s.data() : null; mark(); renderHeader() }, fail);
+  db.doc("meta/framework").onSnapshot(s => { S.framework = s.exists ? s.data() : null; renderFramework() }, fail);
+  db.collection("checkpoints").orderBy("n").onSnapshot(s => { S.checkpoints = docs(s); renderCheckpoints() }, fail);
+  db.collection("agents").onSnapshot(s => { S.agents = docs(s); mark(); renderAgents() }, fail);
+  db.collection("pieces").onSnapshot(s => { S.pieces = docs(s); renderBoard(); renderAgents() }, fail);
+  db.collection("events").orderBy("t", "desc").limit(120).onSnapshot(s => { S.events = docs(s); renderFeed() }, fail);
+  db.collection("notes").orderBy("t", "desc").limit(40).onSnapshot(s => { S.notes = docs(s); renderNotes() }, fail);
+  db.collection("inbox").orderBy("t", "desc").limit(20).onSnapshot(s => { S.inbox = docs(s); renderNotes() }, fail);
+
+  $("inbox-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const text = $("inbox-text").value.trim(); if (!text) return;
+    $("inbox-send").disabled = true;
+    try {
+      await db.collection("inbox").add({ t: new Date().toISOString(), text, status: "novo" });
+      $("inbox-text").value = ""; $("inbox-status").textContent = tx("inboxSent");
+    } catch (err) {
+      $("inbox-status").textContent = err && err.code === "invalid_argument" ? tx("inboxReadOnly") : tx("inboxFail");
+    } finally { $("inbox-send").disabled = false }
+  });
+})();
+</script>

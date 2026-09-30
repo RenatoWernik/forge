@@ -1,0 +1,311 @@
+{
+  "$comment": "Registry of every component forge installs. installed[] lists ways to detect it locally (first hit wins); latest says where the newest public version lives (never a pinned version); install/update are exact commands per platform (afterUpdate lists notes shown with an update command, as a list or per platform; a detector in installed[] may carry its own update, and requires, for a component found that way: pip, uv tool, pipx, a loose skill; a plain list holds on every platform; requires lists tools the commands need, as a list or per platform), printed by scripts/doctor.mjs and never run without the user's yes. Paths: ~ is the home dir, %VAR% an environment variable.",
+  "components": [
+    {
+      "id": "uv",
+      "name": "uv",
+      "type": "cli",
+      "group": "prerequisite",
+      "source": "https://github.com/astral-sh/uv",
+      "installDocs": "https://docs.astral.sh/uv/getting-started/installation/",
+      "installed": [
+        {
+          "method": "pip",
+          "package": "uv",
+          "update": { "windows": ["python -m pip install --upgrade uv"], "macos": ["python3 -m pip install --upgrade uv"], "linux": ["python3 -m pip install --upgrade uv"] }
+        },
+        { "method": "pipx", "package": "uv", "update": ["pipx upgrade uv"] },
+        { "method": "command", "commands": ["uv"], "regex": "uv ([0-9]+[.][0-9]+[.][0-9]+)" }
+      ],
+      "latest": { "method": "github-release", "repo": "astral-sh/uv" },
+      "install": {
+        "windows": ["powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""],
+        "macos": ["curl -LsSf https://astral.sh/uv/install.sh | sh"],
+        "linux": ["curl -LsSf https://astral.sh/uv/install.sh | sh"]
+      },
+      "update": { "windows": ["uv self update"], "macos": ["uv self update"], "linux": ["uv self update"] }
+    },
+    {
+      "id": "gauntlet-loop",
+      "name": "Gauntlet Loop skill",
+      "type": "skill",
+      "group": "gauntlet-loop",
+      "source": "https://github.com/robonuggets/gauntlet-loop",
+      "installDocs": "https://github.com/robonuggets/gauntlet-loop#quick-start",
+      "installed": [{ "method": "skill", "name": "gauntlet-loop" }],
+      "latest": { "method": "github-head", "repo": "robonuggets/gauntlet-loop", "content": { "path": ".claude/skills/gauntlet-loop/SKILL.md" } },
+      "install": {
+        "windows": [
+          "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/robonuggets/gauntlet-loop $src; New-Item -ItemType Directory -Force \"$HOME/.claude/skills/gauntlet-loop\" | Out-Null; Copy-Item -Force \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$HOME/.claude/skills/gauntlet-loop/SKILL.md\"; Remove-Item -Recurse -Force $src"
+        ],
+        "macos": [
+          "src=$(mktemp -d) && git clone --depth 1 https://github.com/robonuggets/gauntlet-loop \"$src\" && mkdir -p ~/.claude/skills/gauntlet-loop && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" ~/.claude/skills/gauntlet-loop/SKILL.md && rm -rf \"$src\""
+        ],
+        "linux": [
+          "src=$(mktemp -d) && git clone --depth 1 https://github.com/robonuggets/gauntlet-loop \"$src\" && mkdir -p ~/.claude/skills/gauntlet-loop && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" ~/.claude/skills/gauntlet-loop/SKILL.md && rm -rf \"$src\""
+        ]
+      },
+      "update": {
+        "windows": [
+          "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/robonuggets/gauntlet-loop $src; New-Item -ItemType Directory -Force \"$HOME/.claude/skills/gauntlet-loop\" | Out-Null; Copy-Item -Force \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$HOME/.claude/skills/gauntlet-loop/SKILL.md\"; Remove-Item -Recurse -Force $src"
+        ],
+        "macos": [
+          "src=$(mktemp -d) && git clone --depth 1 https://github.com/robonuggets/gauntlet-loop \"$src\" && mkdir -p ~/.claude/skills/gauntlet-loop && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" ~/.claude/skills/gauntlet-loop/SKILL.md && rm -rf \"$src\""
+        ],
+        "linux": [
+          "src=$(mktemp -d) && git clone --depth 1 https://github.com/robonuggets/gauntlet-loop \"$src\" && mkdir -p ~/.claude/skills/gauntlet-loop && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" ~/.claude/skills/gauntlet-loop/SKILL.md && rm -rf \"$src\""
+        ]
+      },
+      "requires": ["git"]
+    },
+    {
+      "id": "ai-memory",
+      "name": "AI Memory (ai-memory CLI)",
+      "type": "cli",
+      "group": "ai-memory",
+      "source": "https://github.com/akitaonrails/ai-memory",
+      "installDocs": "https://github.com/akitaonrails/ai-memory/blob/main/docs/install.md",
+      "installed": [
+        {
+          "method": "command",
+          "commands": ["ai-memory", "%LOCALAPPDATA%/ai-memory/ai-memory.exe", "~/Applications/ai-memory/ai-memory", "~/.local/bin/ai-memory"],
+          "regex": "ai-memory ([0-9]+[.][0-9]+[.][0-9]+)"
+        }
+      ],
+      "latest": { "method": "github-release", "repo": "akitaonrails/ai-memory" },
+      "install": {
+        "windows": [
+          "$Dest = \"$env:LOCALAPPDATA/ai-memory\"; New-Item -ItemType Directory -Force $Dest | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Dest -Force; Get-ChildItem \"$Dest/ai-memory.exe\" | Unblock-File"
+        ],
+        "macos": [
+          "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; mkdir -p ~/Applications/ai-memory && cd ~/Applications/ai-memory && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\""
+        ],
+        "linux": ["mise use -g github:akitaonrails/ai-memory"]
+      },
+      "update": {
+        "windows": [
+          "$ErrorActionPreference = \"Stop\"; $Dest = \"$env:LOCALAPPDATA/ai-memory\"; $Exe = \"$Dest/ai-memory.exe\"; New-Item -ItemType Directory -Force $Dest | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe \"ai-memory.exe.old\" }; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Dest -Force; Get-ChildItem $Exe | Unblock-File"
+        ],
+        "macos": [
+          "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; mkdir -p ~/Applications/ai-memory && cd ~/Applications/ai-memory && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\""
+        ],
+        "linux": ["mise use -g github:akitaonrails/ai-memory"]
+      },
+      "afterUpdate": {
+        "windows": [
+          "Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it.",
+          "The running ai-memory.exe cannot be overwritten, so the old one is renamed to ai-memory.exe.old first (a previous .old is deleted); if the rename fails because that .old is still in use, stop the process that still runs ai-memory.exe.old (usually `ai-memory serve`) and run the command again."
+        ],
+        "macos": ["Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it."],
+        "linux": ["Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it."]
+      },
+      "requires": { "linux": ["mise"] }
+    },
+    {
+      "id": "ai-memory-mcp",
+      "name": "AI Memory MCP server registration",
+      "type": "mcp",
+      "group": "ai-memory",
+      "source": "https://github.com/akitaonrails/ai-memory",
+      "installDocs": "https://github.com/akitaonrails/ai-memory/blob/main/docs/mcp-install.md",
+      "sameAs": "ai-memory",
+      "installed": [{ "method": "mcp", "name": "ai-memory" }],
+      "install": {
+        "windows": ["& \"$env:LOCALAPPDATA/ai-memory/ai-memory.exe\" install-mcp --client claude-code --apply"],
+        "macos": ["~/Applications/ai-memory/ai-memory install-mcp --client claude-code --apply"],
+        "linux": ["ai-memory install-mcp --client claude-code --apply"]
+      },
+      "update": {
+        "windows": [
+          "$ErrorActionPreference = \"Stop\"; $Dest = \"$env:LOCALAPPDATA/ai-memory\"; $Exe = \"$Dest/ai-memory.exe\"; New-Item -ItemType Directory -Force $Dest | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe \"ai-memory.exe.old\" }; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Dest -Force; Get-ChildItem $Exe | Unblock-File"
+        ],
+        "macos": [
+          "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; mkdir -p ~/Applications/ai-memory && cd ~/Applications/ai-memory && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\""
+        ],
+        "linux": ["mise use -g github:akitaonrails/ai-memory"]
+      },
+      "afterUpdate": {
+        "windows": [
+          "Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it.",
+          "The running ai-memory.exe cannot be overwritten, so the old one is renamed to ai-memory.exe.old first (a previous .old is deleted); if the rename fails because that .old is still in use, stop the process that still runs ai-memory.exe.old (usually `ai-memory serve`) and run the command again."
+        ],
+        "macos": ["Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it."],
+        "linux": ["Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it."]
+      }
+    },
+    {
+      "id": "claude-mem",
+      "name": "Claude-mem plugin",
+      "type": "plugin",
+      "group": "claude-mem",
+      "source": "https://github.com/thedotmack/claude-mem",
+      "installDocs": "https://github.com/thedotmack/claude-mem#readme",
+      "installed": [{ "method": "plugin", "id": "claude-mem@thedotmack" }],
+      "latest": { "method": "github-release", "repo": "thedotmack/claude-mem" },
+      "install": {
+        "windows": ["claude plugin marketplace add thedotmack/claude-mem", "claude plugin install claude-mem@thedotmack"],
+        "macos": ["claude plugin marketplace add thedotmack/claude-mem", "claude plugin install claude-mem@thedotmack"],
+        "linux": ["claude plugin marketplace add thedotmack/claude-mem", "claude plugin install claude-mem@thedotmack"]
+      },
+      "update": {
+        "windows": ["claude plugin update claude-mem@thedotmack"],
+        "macos": ["claude plugin update claude-mem@thedotmack"],
+        "linux": ["claude plugin update claude-mem@thedotmack"]
+      }
+    },
+    {
+      "id": "ponytail",
+      "name": "Ponytail plugin",
+      "type": "plugin",
+      "group": "ponytail",
+      "source": "https://github.com/DietrichGebert/ponytail",
+      "installDocs": "https://github.com/DietrichGebert/ponytail#install",
+      "installed": [
+        { "method": "plugin", "id": "ponytail@ponytail" },
+        {
+          "method": "skill",
+          "name": "ponytail",
+          "update": {
+            "windows": [
+              "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/DietrichGebert/ponytail $src; New-Item -ItemType Directory -Force \"$HOME/.claude/skills\" | Out-Null; Copy-Item -Recurse -Force \"$src/skills/*\" \"$HOME/.claude/skills/\"; Remove-Item -Recurse -Force $src"
+            ],
+            "macos": [
+              "src=$(mktemp -d) && git clone --depth 1 https://github.com/DietrichGebert/ponytail \"$src\" && mkdir -p ~/.claude/skills && cp -R \"$src\"/skills/* ~/.claude/skills/ && rm -rf \"$src\""
+            ],
+            "linux": [
+              "src=$(mktemp -d) && git clone --depth 1 https://github.com/DietrichGebert/ponytail \"$src\" && mkdir -p ~/.claude/skills && cp -R \"$src\"/skills/* ~/.claude/skills/ && rm -rf \"$src\""
+            ]
+          },
+          "requires": ["git"]
+        }
+      ],
+      "latest": { "method": "github-release", "repo": "DietrichGebert/ponytail", "content": { "path": "skills/ponytail/SKILL.md" } },
+      "install": {
+        "windows": ["claude plugin marketplace add DietrichGebert/ponytail", "claude plugin install ponytail@ponytail"],
+        "macos": ["claude plugin marketplace add DietrichGebert/ponytail", "claude plugin install ponytail@ponytail"],
+        "linux": ["claude plugin marketplace add DietrichGebert/ponytail", "claude plugin install ponytail@ponytail"]
+      },
+      "update": { "windows": ["claude plugin update ponytail@ponytail"], "macos": ["claude plugin update ponytail@ponytail"], "linux": ["claude plugin update ponytail@ponytail"] }
+    },
+    {
+      "id": "spec-kit",
+      "name": "Spec Kit (specify CLI)",
+      "type": "cli",
+      "group": "sdd",
+      "source": "https://github.com/github/spec-kit",
+      "installDocs": "https://github.github.io/spec-kit/installation.html",
+      "requires": ["uv"],
+      "installed": [
+        { "method": "uv-tool", "package": "specify-cli" },
+        { "method": "pipx", "package": "specify-cli", "update": ["pipx upgrade specify-cli"], "requires": [] },
+        {
+          "method": "pip",
+          "package": "specify-cli",
+          "update": {
+            "windows": ["python -m pip install --upgrade specify-cli"],
+            "macos": ["python3 -m pip install --upgrade specify-cli"],
+            "linux": ["python3 -m pip install --upgrade specify-cli"]
+          },
+          "requires": []
+        },
+        { "method": "command", "commands": ["specify"], "regex": "specify ([0-9][0-9A-Za-z.+-]*)" }
+      ],
+      "latest": { "method": "pypi", "package": "specify-cli" },
+      "install": { "windows": ["uv tool install specify-cli"], "macos": ["uv tool install specify-cli"], "linux": ["uv tool install specify-cli"] },
+      "update": { "windows": ["uv tool upgrade specify-cli"], "macos": ["uv tool upgrade specify-cli"], "linux": ["uv tool upgrade specify-cli"] }
+    },
+    {
+      "id": "sdd",
+      "name": "SDD skill (Spec-Driven Development guide)",
+      "type": "skill",
+      "group": "sdd",
+      "source": "https://github.com/SpillwaveSolutions/sdd-skill",
+      "installDocs": "https://github.com/SpillwaveSolutions/sdd-skill#readme",
+      "installed": [{ "method": "skill", "name": "sdd" }],
+      "latest": { "method": "github-frontmatter", "repo": "SpillwaveSolutions/sdd-skill", "path": "skill.md" },
+      "install": {
+        "windows": [
+          "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill $src; $dst = \"$HOME/.claude/skills/sdd\"; New-Item -ItemType Directory -Force $dst | Out-Null; Copy-Item -Force \"$src/skill.md\" \"$dst/SKILL.md\"; Copy-Item -Force \"$src/skill.json\", \"$src/README.md\" $dst; Copy-Item -Recurse -Force \"$src/references\", \"$src/scripts\" $dst; Remove-Item -Recurse -Force $src"
+        ],
+        "macos": [
+          "src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=~/.claude/skills/sdd && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
+        ],
+        "linux": [
+          "src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=~/.claude/skills/sdd && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
+        ]
+      },
+      "update": {
+        "windows": [
+          "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill $src; $dst = \"$HOME/.claude/skills/sdd\"; New-Item -ItemType Directory -Force $dst | Out-Null; Copy-Item -Force \"$src/skill.md\" \"$dst/SKILL.md\"; Copy-Item -Force \"$src/skill.json\", \"$src/README.md\" $dst; Copy-Item -Recurse -Force \"$src/references\", \"$src/scripts\" $dst; Remove-Item -Recurse -Force $src"
+        ],
+        "macos": [
+          "src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=~/.claude/skills/sdd && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
+        ],
+        "linux": [
+          "src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=~/.claude/skills/sdd && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
+        ]
+      },
+      "requires": ["git"]
+    },
+    {
+      "id": "mattpocock-skills",
+      "name": "Matt Pocock skills plugin (includes tdd)",
+      "type": "plugin",
+      "group": "matt-pocock",
+      "source": "https://github.com/mattpocock/skills",
+      "installDocs": "https://github.com/mattpocock/skills#readme",
+      "installed": [{ "method": "plugin", "id": "mattpocock-skills@claude-plugins-official" }],
+      "latest": { "method": "github-release", "repo": "mattpocock/skills" },
+      "install": {
+        "windows": ["claude plugin install mattpocock-skills@claude-plugins-official"],
+        "macos": ["claude plugin install mattpocock-skills@claude-plugins-official"],
+        "linux": ["claude plugin install mattpocock-skills@claude-plugins-official"]
+      },
+      "update": {
+        "windows": ["claude plugin update mattpocock-skills@claude-plugins-official"],
+        "macos": ["claude plugin update mattpocock-skills@claude-plugins-official"],
+        "linux": ["claude plugin update mattpocock-skills@claude-plugins-official"]
+      }
+    },
+    {
+      "id": "graphify",
+      "name": "Graphify CLI",
+      "type": "cli",
+      "group": "graphify",
+      "source": "https://github.com/Graphify-Labs/graphify",
+      "installDocs": "https://github.com/Graphify-Labs/graphify#install",
+      "requires": ["uv"],
+      "installed": [
+        { "method": "uv-tool", "package": "graphifyy" },
+        { "method": "pipx", "package": "graphifyy", "update": ["pipx upgrade graphifyy"], "requires": [] },
+        {
+          "method": "pip",
+          "package": "graphifyy",
+          "update": {
+            "windows": ["python -m pip install --upgrade graphifyy"],
+            "macos": ["python3 -m pip install --upgrade graphifyy"],
+            "linux": ["python3 -m pip install --upgrade graphifyy"]
+          },
+          "requires": []
+        },
+        { "method": "command", "commands": ["graphify"], "regex": "graphify ([0-9]+[.][0-9]+[.][0-9]+)" }
+      ],
+      "latest": { "method": "pypi", "package": "graphifyy" },
+      "install": { "windows": ["uv tool install graphifyy"], "macos": ["uv tool install graphifyy"], "linux": ["uv tool install graphifyy"] },
+      "update": { "windows": ["uv tool upgrade graphifyy"], "macos": ["uv tool upgrade graphifyy"], "linux": ["uv tool upgrade graphifyy"] }
+    },
+    {
+      "id": "graphify-skill",
+      "name": "Graphify skill for Claude Code",
+      "type": "skill",
+      "group": "graphify",
+      "source": "https://github.com/Graphify-Labs/graphify",
+      "installDocs": "https://github.com/Graphify-Labs/graphify#install",
+      "requires": ["graphify"],
+      "installed": [{ "method": "skill", "name": "graphify", "versionFile": ".graphify_version" }],
+      "latest": { "method": "pypi", "package": "graphifyy" },
+      "install": { "windows": ["graphify install"], "macos": ["graphify install"], "linux": ["graphify install"] },
+      "update": { "windows": ["graphify install"], "macos": ["graphify install"], "linux": ["graphify install"] }
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+.gauntlet/
+.claude/
+.specify/scripts/
+.specify/templates/
+.specify/workflows/
+graphify-out/

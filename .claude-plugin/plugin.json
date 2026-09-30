@@ -1,0 +1,20 @@
+{
+  "name": "forge",
+  "version": "0.1.0",
+  "description": "Generates a complete AI-assisted engineering project: gauntlet loop, AI Memory, Claude-mem, Ponytail, Spec-Kit, TDD, Matt Pocock's skills and Graphify, with a live panel. Models are chosen by you, tools are checked against their latest public release.",
+  "author": {
+    "name": "forge contributors"
+  },
+  "homepage": "https://github.com/RenatoWernik/forge",
+  "repository": "https://github.com/RenatoWernik/forge",
+  "license": "MIT",
+  "keywords": [
+    "gauntlet-loop",
+    "spec-driven-development",
+    "tdd",
+    "ponytail",
+    "ai-memory",
+    "graphify",
+    "scaffold"
+  ]
+}

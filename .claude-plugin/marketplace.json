@@ -1,0 +1,22 @@
+{
+  "name": "forge",
+  "owner": {
+    "name": "forge contributors",
+    "url": "https://github.com/RenatoWernik"
+  },
+  "description": "forge: the gauntlet-loop framework packaged as an installable Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "forge",
+      "source": "./",
+      "description": "Sets up a complete forge project (/forge:new-project) and syncs improvements back into the package (/forge:sync).",
+      "category": "development",
+      "keywords": [
+        "gauntlet-loop",
+        "spec-driven-development",
+        "tdd",
+        "scaffold"
+      ]
+    }
+  ]
+}
