@@ -7,7 +7,7 @@
 //   model  = alias or ID passed to agent() (sonnet, opus, ...); effort = low | medium | high | xhigh | max; reason = why this model and effort
 //   label  = name shown on the panel (default: model); match = regex the model ID declared by an agent must satisfy (default: model)
 //   escalation = sameCriterionFailures and minutesWithoutProgress (integer, 1 or more), attacksRedOnDelivery and visualBelowReference (true or false), each with a description
-const fs = require('fs'), os = require('os'), path = require('path'), vm = require('vm'), { spawnSync } = require('child_process')
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm'), { spawnSync } = require('node:child_process')
 process.chdir(path.join(__dirname, '..'))
 const H = os.homedir(), AIM = 'ai-memory', ENV = process.argv.includes('--env')
 const sh = (exe, args, input) => spawnSync(exe, args, { input, encoding: 'utf8' })

@@ -6,6 +6,10 @@ import { parseArgs } from 'node:util';
 const TEMPLATES = fileURLToPath(new URL('../templates/', import.meta.url));
 // copied as is: its comments quote the marker syntax
 const VERBATIM = new Set(['.claude/check.cjs']);
+const LEITOR = fileURLToPath(new URL('./painel-leitor.mjs', import.meta.url));
+export const LEITOR_NO_PROJETO = '.claude/painel-leitor.mjs';
+const PAINEL = '.checkpoints/painel.json';
+const MODO_DO_PAINEL = { rigorous: 'rigoroso', accelerated: 'acelerado' }; // the mode of forge.json, in the words of painel.json
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const ROLES = ['developer', 'developerUi', 'critic', 'tester', 'aux'];
 const WORKFLOW_ROLES = ['developer', 'critic', 'aux']; // the roles the workflows read from args.models today
@@ -17,8 +21,8 @@ const ESCALATION = {
   minutesWithoutProgress: { value: 30, description: 'Minutes an agent may go without progress before the orchestrator wakes it' },
   visualBelowReference: { value: true, description: 'A visual result below the reference counts as a failed criterion' },
 };
-const STYLE_CHARS = /[–—→☀-➿\u{1F300}-\u{1FAFF}]/gu; // what the plainStyle line of check.cjs refuses
-const PANEL_URL =/^https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+$/;
+const STYLE_CHARS = /[\u2013\u2014\u2192\u2600-\u27BF\u{1F300}-\u{1FAFF}]/gu; // what the plainStyle line of check.cjs refuses
+const PANEL_URL = /^https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+$/;
 const PENDING_URL = 'https://claude.ai/artifact/PANEL-URL-PENDING';
 
 // Panel texts in Portuguese (Brazil); English lives in the panel page itself. Any other language comes in as answers.panelStrings.
@@ -172,12 +176,15 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
     tree[rel] = VERBATIM.has(rel) ? text : text.replace(/\{\{([\w.]+)\}\}/g, (m, k) => vars[k] ?? m);
   }
   tree['.claude/forge.json'] = JSON.stringify({ language: lang.name, langTag: lang.tag, plainStyle: answers.plainStyle !== false, mode: answers.mode, models: answers.models, escalation: ESCALATION }, null, 2) + '\n';
+  tree[PAINEL] = JSON.stringify({ versao: 1, projeto: answers.projectName, modo: MODO_DO_PAINEL[answers.mode], tickets: [], agentes: [] }, null, 2) + '\n';
+  tree[LEITOR_NO_PROJETO] = await readFile(LEITOR, 'utf8'); // the single source of the reader, copied as is (its text has no markers to fill)
   const files = Object.keys(tree);
   const conflicts = [];
   for (const rel of files) if (await exists(join(dest, rel))) conflicts.push(rel);
   if (!dryRun) {
     if (conflicts.length && !force) throw new Error(`refusing to overwrite existing files (use force to replace them): ${conflicts.join(', ')}`);
     for (const [rel, text] of Object.entries(tree)) {
+      if (rel === PAINEL && conflicts.includes(rel)) continue; // force never wipes the tickets and agents of a live board
       await mkdir(dirname(join(dest, rel)), { recursive: true });
       await writeFile(join(dest, rel), text);
     }
@@ -243,8 +250,11 @@ export async function main(argv, write) {
       plainStyle: v['no-plain-style'] ? false : base.plainStyle,
     };
     const { files, conflicts } = await scaffold(answers, { dest, dryRun: v['dry-run'], force: v.force });
+    const kept = v['dry-run'] ? [] : conflicts.filter((f) => f === PAINEL); // a real run keeps the board
+    const replaced = conflicts.filter((f) => !kept.includes(f));
     write([`forge scaffold${v['dry-run'] ? ' (dry run, nothing written)' : ''}: ${files.length} files in ${dest}`, ...files.map((f) => `  ${f}`),
-      ...(conflicts.length ? [`existing files${v['dry-run'] ? ' (a real run needs --force)' : ' (replaced)'}: ${conflicts.join(', ')}`] : [])].join('\n'));
+      ...(replaced.length ? [`existing files${v['dry-run'] ? ' (a real run needs --force)' : ' (replaced)'}: ${replaced.join(', ')}`] : []),
+      ...(kept.length ? [`existing files (kept): ${kept.join(', ')}`] : [])].join('\n'));
     return 0;
   } catch (e) {
     write(`${e.message}\n${USAGE}`);
