@@ -138,3 +138,9 @@ test('C5 (P7, limiar dos args): o mesmo args.vida de 45 minutos com minutesWitho
   const run = await runWf(BUILD, baseArgs([p], { esc: { minutesWithoutProgress: 60 }, vida: vida(p, 45, 'parado') }), scenario([p], { pa: [fail(1), fail(2)] }));
   notEscalatedBy(run, p, 'minutesWithoutProgress');
 });
+test('C5 (P8, contra-caso): peça com redesigns 0 e sameCriterionFailures 1 → C1 reprovado na R1 não escala (só depois de um redesenho) e ganha na R2', async () => {
+  const p = contract('pa', 9101, { redesigns: 0 });
+  const run = await runWf(BUILD, baseArgs([p], { esc: { sameCriterionFailures: 1 } }), scenario([p], { pa: [fail(1)] }));
+  const r = notEscalatedBy(run, p, 'sameCriterionFailures');
+  assert.ok(r.won === true && devCount(run, p) === 2, why(run, p.id));
+});
