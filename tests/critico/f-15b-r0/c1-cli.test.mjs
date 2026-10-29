@@ -79,8 +79,8 @@ test('C1 fixture: tem o URL de cada fonte latest do registo (o gauntlet-loop no 
     'https://pypi.org/pypi/graphifyy/json',
   ];
   assert.deepEqual(fontes.filter((u) => !txt.includes(u)), [], 'fontes do registo sem entrada na fixture');
-  assert.match(txt, /github(usercontent)?\.com\/(repos\/)?RenatoWernik\/forge\b/i, 'a fixture não tem a fonte do alvo forge');
-  assert.match(txt, /github(usercontent)?\.com\/(repos\/)?robonuggets\/gauntlet-loop\b/i, 'a fixture não tem a fonte do original robonuggets (aviso de commits novos, emenda do fork)');
+  assert.match(txt, /https:\/\/api\.github\.com\/repos\/RenatoWernik\/forge\/commits\/(HEAD|main)\b/i, 'a fixture não tem a fonte do alvo forge (commit HEAD da main, P6)');
+  assert.match(txt, /https:\/\/api\.github\.com\/repos\/robonuggets\/gauntlet-loop\/compare\/9b1975a[0-9a-f]{0,33}\.\.\.HEAD\b/i, 'a fixture não tem o compare/<base>...HEAD do original robonuggets (P11)');
   // campos que o doctor nunca usa: uma resposta inteira da API do GitHub ou do PyPI foi gravada
   assert.doesNotMatch(txt, /"(node_id|assets_url|upload_url|zipball_url|tarball_url|uploader|vulnerabilities|requires_dist|project_urls)"\s*:/, 'a fixture tem campos que nenhuma sonda usa');
 });

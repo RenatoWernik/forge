@@ -180,6 +180,9 @@ export const PYPI = (pkg, v) => [`https://pypi.org/pypi/${pkg}/json`, JSON.strin
 export const RAW = (repo, ref, path) => `https://raw.githubusercontent.com/${repo}/${ref}/${path}`;
 export const URL_PONYTAIL = REL('DietrichGebert/ponytail', 'x')[0];
 export const FORGE_ULTIMA = '0.2.0';
+// P6: a mais recente do forge é o commit HEAD da main (github-head); o plugin instalado regista o gitCommitSha
+export const FORGE_SHA = 'f0e1d2c3b4a5968778695a4b3c2d1e0f1a2b3c4d';
+export const FORGE_SHA_ANTIGO = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
 // v: versão → tag/versão de cada fonte. Por omissão, tudo no verifiedWith.
 export function latest({ uv = '0.13.6', aim = '3.2.10', ponytail = '5.3.3', mattpocock = '1.3.2', specify = '1.2.5', graphify = '0.9.97', sdd = SYN.sdd, gauntlet = SYN['gauntlet-loop'], pony = SYN.ponytail, forge = FORGE_ULTIMA, upstream = UPSTREAM_SHA, sem = [] } = {}) {
   const urls = {
@@ -195,28 +198,17 @@ export function latest({ uv = '0.13.6', aim = '3.2.10', ponytail = '5.3.3', matt
   for (const u of sem) delete urls[u];
   return { urls, forge, upstream };
 }
-// O alvo forge (PERGUNTA P6): o repositório não tem releases nem tags; os ataques respondem a qualquer fonte plausível dele.
-const forgeResponde = (url, v) => {
-  if (!/github(usercontent)?\.com\/(repos\/)?renatowernik\/forge\b/i.test(url)) return undefined;
-  if (/\/releases\/latest\b/.test(url)) return JSON.stringify({ tag_name: 'v' + v });
-  if (/\/tags\b/.test(url)) return JSON.stringify([{ name: 'v' + v, commit: { sha: 'f'.repeat(40) } }]);
-  if (/\/commits\//.test(url)) return JSON.stringify({ sha: 'f'.repeat(40) });
-  if (/marketplace\.json\b/.test(url)) return JSON.stringify({ name: 'forge', plugins: [{ name: 'forge', source: './', version: v }] });
-  if (/plugin\.json\b/.test(url)) return JSON.stringify({ name: 'forge', version: v });
-  return undefined;
-};
+// O alvo forge (resposta P6): a mais recente é o commit HEAD da main (github-head), e só essa fonte responde.
+const forgeResponde = (url) => (/^https:\/\/api\.github\.com\/repos\/RenatoWernik\/forge\/commits\/(HEAD|main)$/i.test(url) ? JSON.stringify({ sha: FORGE_SHA }) : undefined);
 
-// O original robonuggets/gauntlet-loop (só para o aviso de commits novos; PERGUNTA P11): responde à HEAD, à lista de commits e à
-// comparação com a base do fork. up = sha da HEAD do original; igual a UPSTREAM_SHA = sem novidades.
+// O original robonuggets/gauntlet-loop (só para o aviso de commits novos; resposta P11): só responde a compare/<base>...HEAD, com a
+// base 9b1975a do campo components.gauntlet-loop.upstream. up = sha da HEAD do original; igual a UPSTREAM_SHA = sem novidades.
 const upstreamResponde = (url, up) => {
   if (!/github(usercontent)?\.com\/(repos\/)?robonuggets\/gauntlet-loop\b/i.test(url)) return undefined;
   if (up === null) return undefined; // original inacessível (404)
   const novos = up === UPSTREAM_SHA ? [] : [{ sha: up, commit: { message: 'critico: commit novo no original', committer: { date: '2026-10-29T12:00:00Z' } } }];
-  if (/\/compare\//.test(url)) return JSON.stringify({ status: novos.length ? 'ahead' : 'identical', ahead_by: novos.length, behind_by: 0, total_commits: novos.length, commits: novos });
-  if (/\/commits\/[^/?]+$/.test(url)) return JSON.stringify({ sha: up });
-  if (/\/commits\b/.test(url)) return JSON.stringify([...novos, { sha: UPSTREAM_SHA, commit: { message: 'base do fork', committer: { date: '2026-08-05T00:00:00Z' } } }]);
-  if (/\/branches\/main\b/.test(url)) return JSON.stringify({ name: 'main', commit: { sha: up } });
-  return undefined;
+  if (!/\/repos\/robonuggets\/gauntlet-loop\/compare\/9b1975a[0-9a-f]{0,33}\.\.\.HEAD$/i.test(url)) return undefined;
+  return JSON.stringify({ status: novos.length ? 'ahead' : 'identical', ahead_by: novos.length, behind_by: 0, total_commits: novos.length, commits: novos });
 };
 
 // ---------- sondas de versão (as únicas chamadas permitidas fora de um --apply) ----------
@@ -276,7 +268,7 @@ export function maquina({ platform = 'win32', cfg = null, env = {}, fontes = lat
     async fetchText(url) {
       m.fetches.push(String(url));
       if (url in m.fontes.urls) return m.fontes.urls[url];
-      const f = forgeResponde(String(url), m.fontes.forge) ?? upstreamResponde(String(url), m.fontes.upstream);
+      const f = forgeResponde(String(url)) ?? upstreamResponde(String(url), m.fontes.upstream);
       if (f !== undefined) return f;
       throw new Error('HTTP 404 ' + url);
     },
@@ -303,7 +295,8 @@ export function instala(m, s) {
   if (s.ponytail) plugins['ponytail@ponytail'] = s.ponytail;
   if (s.mattpocock) plugins[s.mattpocock[0]] = s.mattpocock[1];
   if (s.forge) plugins['forge@forge'] = s.forge;
-  if (Object.keys(plugins).length) poe(m, join('plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: Object.fromEntries(Object.entries(plugins).map(([id, v]) => [id, [{ scope: 'user', version: v }]])) }, null, 2));
+  const sha = (id) => (id === 'forge@forge' ? { gitCommitSha: s.forge === FORGE_ULTIMA ? FORGE_SHA : FORGE_SHA_ANTIGO } : {});
+  if (Object.keys(plugins).length) poe(m, join('plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: Object.fromEntries(Object.entries(plugins).map(([id, v]) => [id, [{ scope: 'user', version: v, ...sha(id) }]])) }, null, 2));
   if (s['gauntlet-loop'] !== undefined) skillLocal(m, 'gauntlet-loop', s['gauntlet-loop']);
   if (s.sdd !== undefined) skillLocal(m, 'sdd', s.sdd);
   if (s['graphify-skill']) { skillLocal(m, 'graphify', '---\nname: graphify\n---\n# graphify'); poe(m, join('skills', 'graphify', '.graphify_version'), s['graphify-skill'] + '\n'); }

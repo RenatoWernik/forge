@@ -27,10 +27,10 @@ test('C4 --apply forge --yes: executa «claude plugin marketplace update forge»
   assert.deepEqual(diffManifesto(antes, manifesto(m.root)), []);
 });
 
-test('C4 --apply forge sem --yes: código 2, nada executado', async () => {
+test('C4 --apply forge sem --yes: código 3 (P5), nada executado', async () => {
   const m = instala(maquina(), { forge: '0.1.0' });
   const r = await upd(m, ['--apply', 'forge']);
-  assert.equal(r.code, 2);
+  assert.equal(r.code, 3);
   sequencia(r.execs, [], 'forge sem --yes');
 });
 
@@ -56,12 +56,20 @@ test('C4 --apply speckit-project --project <dir hostil> --yes: uma execução de
   assert.deepEqual(diffManifesto(antes, manifesto(m.root)), []);
 });
 
+test('C4 speckit-project sem --yes: código 3 (P5), nada executado', async () => {
+  const m = comSpecKit();
+  const dir = projeto(m);
+  const r = await upd(m, ['--apply', 'speckit-project', '--project', dir]);
+  assert.equal(r.code, 3);
+  sequencia(r.execs, [], 'speckit-project sem --yes');
+});
+
 test('C4 speckit-project: sem <dir>/.specify/ recusa e não executa', async () => {
   const m = comSpecKit();
   const dir = join(m.root, 'sem specify');
   mkdirSync(dir);
   const r = await upd(m, ['--apply', 'speckit-project', '--project', dir, '--yes']);
-  assert.notEqual(r.code, 0);
+  assert.ok([1, 2].includes(r.code), 'sem .specify/: uso inválido (2) ou erro (1), nunca ' + r.code);
   sequencia(r.execs, [], 'sem .specify');
 });
 
@@ -70,7 +78,7 @@ for (const [nome, estado] of [['spec-kit outdated', { 'spec-kit': '1.0.13' }], [
     const m = comSpecKit({ estado });
     const dir = projeto(m);
     const r = await upd(m, ['--apply', 'speckit-project', '--project', dir, '--yes', '--accept-unverified', '--backup-confirmed']);
-    assert.notEqual(r.code, 0);
+    assert.equal(r.code, 1, nome + ': outro erro → código 1 (P5)');
     sequencia(r.execs, [], nome);
   });
 }
@@ -81,7 +89,7 @@ test('C4 speckit-project: quando o upstream recusa por edições locais, reporta
   const dir = projeto(m);
   const r = await upd(m, ['--apply', 'speckit-project', '--project', dir, '--yes']);
   sequencia(r.execs, [SPECIFY], 'speckit-project recusado pelo upstream');
-  assert.notEqual(r.code, 0, 'a recusa do upstream saiu com o código 0');
+  assert.equal(r.code, 1, 'a recusa do upstream: outro erro → código 1 (P5)');
   assert.match(r.out, /speckit-plan|refusing to upgrade|modified locally/, 'não reporta a recusa do upstream');
   semEscritas(r);
 });

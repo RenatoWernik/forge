@@ -12,14 +12,15 @@ import {
 } from './helpers.mjs';
 
 const ref = (o = {}) => instala(maquina(o), TUDO_REFERENCIA);
-const recusa = (r, msg) => { assert.notEqual(r.code, 0, msg + ': recusa com o código 0'); assert.deepEqual(r.execs.map((c) => c.str), [], msg + ': executou'); semEscritas(r); };
+// P5: 2 = uso inválido ou alvo proibido; 3 = barreira não confirmada (--yes, --accept-unverified, --backup-confirmed, --overwrite); 1 = outro erro
+const recusa = (r, msg, code) => { assert.equal(r.code, code, `${msg}: código ${r.code}, esperado ${code} (P5)`); assert.deepEqual(r.execs.map((c) => c.str), [], msg + ': executou'); semEscritas(r); };
 
 // ---------- (a) ----------
-test('(a) --apply <id> sem --yes: imprime o que faria (o comando), não executa nada e sai com 2', async () => {
+test('(a) --apply <id> sem --yes: imprime o que faria (o comando), não executa nada e sai com 3 (barreira não confirmada, P5)', async () => {
   const m = ref();
   const cmd = await doDoctor(m, 'uv');
   const r = await upd(m, ['--apply', 'uv']);
-  assert.equal(r.code, 2);
+  assert.equal(r.code, 3);
   sequencia(r.execs, [], 'sem --yes');
   semEscritas(r);
   for (const c of cmd) assert.ok(r.out.includes(c), 'não imprime o que faria: ' + c);
@@ -83,13 +84,13 @@ test('(h) no fim corre o --check desse id (sondas de novo, depois da execução)
 test('(c) spec-kit sem uv: recusa, diz que o uv vem primeiro, não executa', async () => {
   const m = instala(maquina(), { 'spec-kit': '1.0.13' });
   const r = await upd(m, ['--apply', 'spec-kit', '--yes', '--accept-unverified', '--backup-confirmed']);
-  recusa(r, 'spec-kit sem uv');
+  recusa(r, 'spec-kit sem uv', 1);
   assert.match(r.out, /\buv\b/, 'não diz qual tratar primeiro (uv)');
 });
 
 test('(c) spec-kit com o uv por atualizar (requires não ok): recusa; com o uv ok, executa exatamente o comando do doctor', async () => {
   const m = ref();
-  recusa(await upd(m, ['--apply', 'spec-kit', '--yes']), 'uv outdated');
+  recusa(await upd(m, ['--apply', 'spec-kit', '--yes']), 'uv outdated', 1);
   const m2 = instala(maquina(), { ...TUDO_REFERENCIA, uv: '0.13.6' });
   const cmd = await doDoctor(m2, 'spec-kit');
   sequencia((await upd(m2, ['--apply', 'spec-kit', '--yes'])).execs, cmd, 'spec-kit com uv ok');
@@ -98,7 +99,7 @@ test('(c) spec-kit com o uv por atualizar (requires não ok): recusa; com o uv o
 test('(c) graphify-skill com o graphify por atualizar: recusa e nomeia o graphify', async () => {
   const m = ref();
   const r = await upd(m, ['--apply', 'graphify-skill', '--yes']);
-  recusa(r, 'graphify-skill');
+  recusa(r, 'graphify-skill', 1);
   assert.match(r.out, /\bgraphify\b(?!-skill)/);
 });
 
@@ -114,6 +115,7 @@ test('(d) ai-memory-mcp com o dono por atualizar: remete para o ai-memory e não
   const r = await upd(m, ['--apply', 'ai-memory-mcp', '--yes', '--backup-confirmed', '--accept-unverified']);
   sequencia(r.execs, [], 'sameAs');
   semEscritas(r);
+  assert.equal(r.code, 1, 'sameAs com o dono por atualizar: outro erro → código 1 (P5)');
   assert.match(r.out, /--apply ai-memory(?!-mcp)\b|\bai-memory\b(?!-mcp)/, 'não remete para o dono');
 });
 
@@ -122,7 +124,7 @@ test('(e) unverified sem --accept-unverified: recusa; com a flag executa exatame
   const fontes = latest({ ponytail: '5.4.0' });
   const m = instala(maquina({ fontes }), { ...TUDO_VERIFICADO, ponytail: '5.3.3' });
   const r = await upd(m, ['--apply', 'ponytail', '--yes']);
-  recusa(r, 'unverified');
+  recusa(r, 'unverified', 3);
   const cmd = await doDoctor(m, 'ponytail');
   sequencia((await upd(m, ['--apply', 'ponytail', '--yes', '--accept-unverified'])).execs, cmd, 'ponytail aceite');
 });
@@ -131,7 +133,7 @@ test('(e) unverified sem --accept-unverified: recusa; com a flag executa exatame
 test('(f) ai-memory 2.5.0 → 3.2.10 atravessa a 3.0.0: sem --backup-confirmed recusa com os passos do upstream; com a flag executa', async () => {
   const m = ref();
   const r = await upd(m, ['--apply', 'ai-memory', '--yes', '--accept-unverified']);
-  recusa(r, 'ai-memory 2→3');
+  recusa(r, 'ai-memory 2→3', 3);
   assert.match(r.out, /upgrading-to-3\.0\.md/, 'a recusa não mostra os passos do upstream');
   const cmd = await doDoctor(m, 'ai-memory');
   sequencia((await upd(m, ['--apply', 'ai-memory', '--yes', '--backup-confirmed'])).execs, cmd, 'ai-memory com backup confirmado');
@@ -139,7 +141,7 @@ test('(f) ai-memory 2.5.0 → 3.2.10 atravessa a 3.0.0: sem --backup-confirmed r
 
 test('(f) fronteiras: 2.5.0 → 3.0.0 atravessa (inclusive); 3.0.0 → 3.2.10 não atravessa e não pede a flag', async () => {
   const m1 = instala(maquina({ fontes: latest({ aim: '3.0.0' }) }), { ...TUDO_REFERENCIA, uv: '0.13.6' });
-  recusa(await upd(m1, ['--apply', 'ai-memory', '--yes']), '2.5.0 → 3.0.0');
+  recusa(await upd(m1, ['--apply', 'ai-memory', '--yes']), '2.5.0 → 3.0.0', 3);
   const m2 = instala(maquina(), { ...TUDO_REFERENCIA, 'ai-memory': '3.0.0' });
   const cmd = await doDoctor(m2, 'ai-memory');
   sequencia((await upd(m2, ['--apply', 'ai-memory', '--yes'])).execs, cmd, '3.0.0 → 3.2.10');
@@ -150,7 +152,7 @@ test('(f) a classe, não o caso: uma nota requiresBackup noutra componente (grap
   compat.components.graphify.notes = { ...(compat.components.graphify.notes ?? {}), '0.9.80': notaComo(compat, 'PASSOS-DO-UPSTREAM-critico: backup antes', true) };
   const m = instala(maquina({ compat }), { ...TUDO_REFERENCIA, uv: '0.13.6' });
   const r = await upd(m, ['--apply', 'graphify', '--yes']);
-  recusa(r, 'graphify 0.9.73 → 0.9.97 com nota requiresBackup');
+  recusa(r, 'graphify 0.9.73 → 0.9.97 com nota requiresBackup', 3);
   assert.match(r.out, /PASSOS-DO-UPSTREAM-critico/);
   const cmd = await doDoctor(m, 'graphify');
   sequencia((await upd(m, ['--apply', 'graphify', '--yes', '--backup-confirmed'])).execs, cmd, 'graphify com backup confirmado');
@@ -159,8 +161,8 @@ test('(f) a classe, não o caso: uma nota requiresBackup noutra componente (grap
 test('(e)+(f) unverified E requiresBackup: só uma das flags recusa; as duas executam', async () => {
   const fontes = latest({ aim: '3.3.0' });
   const m = instala(maquina({ fontes }), TUDO_REFERENCIA);
-  recusa(await upd(m, ['--apply', 'ai-memory', '--yes', '--accept-unverified']), 'só --accept-unverified');
-  recusa(await upd(m, ['--apply', 'ai-memory', '--yes', '--backup-confirmed']), 'só --backup-confirmed');
+  recusa(await upd(m, ['--apply', 'ai-memory', '--yes', '--accept-unverified']), 'só --accept-unverified', 3);
+  recusa(await upd(m, ['--apply', 'ai-memory', '--yes', '--backup-confirmed']), 'só --backup-confirmed', 3);
   const cmd = await doDoctor(m, 'ai-memory');
   sequencia((await upd(m, ['--apply', 'ai-memory', '--yes', '--accept-unverified', '--backup-confirmed'])).execs, cmd, 'as duas flags');
 });
@@ -175,7 +177,7 @@ for (const id of ['gauntlet-loop', 'sdd']) {
   test(`(g) ${id} customized sem --overwrite: recusa, não executa, não copia nem escreve`, async () => {
     const m = instala(maquina(), { ...TUDO_REFERENCIA, uv: '0.13.6', [id]: custom(id) });
     const antes = manifesto(m.root);
-    recusa(await upd(m, ['--apply', id, '--yes', '--accept-unverified', '--backup-confirmed']), id + ' sem --overwrite');
+    recusa(await upd(m, ['--apply', id, '--yes', '--accept-unverified', '--backup-confirmed']), id + ' sem --overwrite', 3);
     assert.deepEqual(diffManifesto(antes, manifesto(m.root)), []);
   });
 
@@ -233,7 +235,7 @@ test('(g) se o backup falha, nada é executado (o comando que sobrescreve nunca 
   const m = instala(maquina({ falhaCopia: true }), { ...TUDO_REFERENCIA, uv: '0.13.6', 'gauntlet-loop': personalizada() });
   const r = await upd(m, ['--apply', 'gauntlet-loop', '--yes', '--overwrite']).catch((e) => { if (e instanceof assert.AssertionError) throw e; return { code: 'lançou: ' + e.message, execs: m.calls.filter((c) => !c.probe), events: [] }; });
   sequencia(r.execs, [], 'backup falhado');
-  assert.notEqual(r.code, 0);
+  assert.equal(r.code, 1, 'backup falhado: outro erro → código 1 (P5)');
 });
 
 test('(g) [F-15a: skill solta] ponytail solto com uma skill personalizada: sem --overwrite recusa; com --overwrite a pasta personalizada vai para forge-backups/ponytail-<carimbo> antes de executar', async () => {
@@ -241,7 +243,7 @@ test('(g) [F-15a: skill solta] ponytail solto com uma skill personalizada: sem -
   const solto = Object.fromEntries(PONYTAIL_SKILLS.map((n) => [n, SYN.ponytail]));
   solto['ponytail-review'] = muta(SYN.ponytail, prng(7)) + '\n- regra local do utilizador';
   instala(m, { ponytailSolto: solto });
-  recusa(await upd(m, ['--apply', 'ponytail', '--yes', '--accept-unverified']), 'ponytail solto sem --overwrite');
+  recusa(await upd(m, ['--apply', 'ponytail', '--yes', '--accept-unverified']), 'ponytail solto sem --overwrite', 3);
   const cmd = await doDoctor(m, 'ponytail');
   const r = await upd(m, ['--apply', 'ponytail', '--yes', '--overwrite', '--accept-unverified']);
   sequencia(r.execs, cmd, 'ponytail solto com --overwrite');

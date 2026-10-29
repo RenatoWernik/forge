@@ -6,6 +6,7 @@
 // Depende do F-15a: o registo e o compat.json apontam o gauntlet-loop ao fork (fc6b2fc).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { compatReal } from './helpers.mjs';
 import {
   maquina, instala, estado, upd, doDoctor, sequencia, latest, manifesto, diffManifesto, TUDO_VERIFICADO, TUDO_REFERENCIA, ALVOS, NOVO_UPSTREAM, SYN,
 } from './helpers.mjs';
@@ -17,6 +18,22 @@ const aviso = (out) => {
   const l = out.split('\n');
   return l.some((x, i) => ORIGINAL.test(x) && (NOVOS.test(x) || NOVOS.test(l[i + 1] ?? '') || NOVOS.test(l[i - 1] ?? '')));
 };
+test('emenda fork (P11): components.gauntlet-loop.upstream é exatamente { repo: "robonuggets/gauntlet-loop", base: "9b1975a" }', () => {
+  const u = compatReal().components['gauntlet-loop']?.upstream;
+  assert.ok(u && typeof u === 'object', 'falta components.gauntlet-loop.upstream');
+  assert.deepEqual(Object.keys(u).sort(), ['base', 'repo']);
+  assert.equal(u.repo, 'robonuggets/gauntlet-loop');
+  assert.match(u.base, /^9b1975a[0-9a-f]{0,33}$/);
+});
+
+test('emenda fork (P11): o aviso lê compare/<base>...HEAD do original e nada mais do original', async () => {
+  const m = comOriginal(NOVO_UPSTREAM);
+  await upd(m, ['--check']);
+  const doOriginal = m.fetches.filter((u) => ORIGINAL.test(u));
+  assert.ok(doOriginal.length > 0, 'o --check não consultou o original');
+  assert.deepEqual(doOriginal.filter((u) => !/^https:\/\/api\.github\.com\/repos\/robonuggets\/gauntlet-loop\/compare\/9b1975a[0-9a-f]{0,33}\.\.\.HEAD$/i.test(u)), [], 'consultas ao original fora de compare/<base>...HEAD');
+});
+
 const comOriginal = (upstream, estadoMaq = TUDO_VERIFICADO) => instala(maquina({ fontes: latest({ upstream }) }), estadoMaq);
 
 test('emenda fork [F-15a]: com commits novos no original, o --check avisa (robonuggets/gauntlet-loop, commits novos) e o gauntlet-loop continua ok', async () => {

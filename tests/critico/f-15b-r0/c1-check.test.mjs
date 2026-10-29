@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import {
   maquina, instala, estado, upd, latest, compatSint, notaComo, manifesto, diffManifesto, rede, SYN, ALVOS, IDS, VERIFIED, REFERENCIA,
-  TUDO_VERIFICADO, TUDO_REFERENCIA, NAO_TESTADA, personalizada, FIXTURE, URL_PONYTAIL, FORGE_ULTIMA,
+  TUDO_VERIFICADO, TUDO_REFERENCIA, NAO_TESTADA, personalizada, FIXTURE, URL_PONYTAIL, FORGE_SHA,
 } from './helpers.mjs';
 
 const soLe = (m, r, antes) => {
@@ -133,12 +133,11 @@ test('C1: a mais recente igual ao verifiedWith é outdated, nunca unverified; ac
   assert.equal((await estado(m3)).by.ponytail.status, 'ok', 'instalada = mais recente (acima do verifiedWith) já está atualizada: ok');
 });
 
-test('C1: o forge aparece no --check com a versão instalada e a mais recente', async () => {
+test('C1: o forge aparece no --check, com a mais recente no commit HEAD da main (P6)', async () => {
   const m = instala(maquina(), { forge: '0.1.0' });
   const r = await estado(m);
   assert.equal(r.by.forge?.status, 'outdated');
-  assert.equal(r.by.forge.installedVersion, '0.1.0');
-  assert.equal(String(r.by.forge.latestVersion).replace(/^v/, ''), FORGE_ULTIMA);
+  assert.ok(FORGE_SHA.startsWith(String(r.by.forge.latestVersion).slice(0, 7)) && String(r.by.forge.latestVersion).length >= 7, 'a mais recente do forge não é o commit HEAD da main (P6): ' + r.by.forge.latestVersion);
 });
 
 test('C1: SYN é o conteúdo do pristine sintético (sanidade do próprio ataque)', () => {
