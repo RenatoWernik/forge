@@ -839,6 +839,32 @@ test('AI_MEMORY_BIN set: neither the CLI nor the MCP registration ever points at
   }
 });
 
+// The update keeps the exact path and name in AI_MEMORY_BIN: the file it points at is the one that gets the new version, on every
+// platform (downloads and extraction are stubbed, nothing leaves the machine).
+for (const [platform, key] of PLATFORMS) {
+  test(`AI_MEMORY_BIN with a file name of its own: the update replaces that very file, ${key}`, { skip: !hasShell(platform) && 'no shell for this platform' }, async () => {
+    const dir = tmp();
+    const bin = join(dir, 'my bin', platform === 'win32' ? 'aimem.exe' : 'aimem');
+    mkdirSync(join(dir, 'my bin'), { recursive: true });
+    writeFileSync(bin, 'old');
+    const sh = platform !== 'win32';
+    const value = sh ? bin.replaceAll('\\', '/') : bin;
+    const cmd = (await doctorOn({ platform, env: { AI_MEMORY_BIN: value }, exec: { [value + ' --version']: 'ai-memory 2.3.2' } }))['ai-memory'].command;
+    assert.equal(cmd.length, 1);
+    const stub = sh
+      ? 'curl() { :; }\ntar() { echo new > ai-memory; }\n'
+      : 'function Invoke-WebRequest { param($Uri, $OutFile) Set-Content -LiteralPath $OutFile "zip" }\nfunction Expand-Archive { param($Path, $DestinationPath, [switch]$Force) Set-Content -LiteralPath (Join-Path $DestinationPath "ai-memory.exe") "new" }\nfunction Unblock-File { process { } }\n';
+    const script = join(dir, sh ? 'run.sh' : 'run.ps1');
+    writeFileSync(script, stub + cmd[0] + '\n');
+    const env = { ...process.env, HOME: dir, USERPROFILE: dir, TEMP: dir, TMP: dir, TMPDIR: dir };
+    delete env.NODE_TEST_CONTEXT;
+    const r = sh ? spawnSync('sh', [script.replaceAll('\\', '/')], { cwd: dir, encoding: 'utf8', env }) : spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], { cwd: dir, encoding: 'utf8', env });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(readFileSync(bin, 'utf8').trim(), 'new');
+    assert.deepEqual(readdirSync(join(dir, 'my bin')).filter((n) => !n.endsWith('.old')), [platform === 'win32' ? 'aimem.exe' : 'aimem']);
+  });
+}
+
 test('the gauntlet-loop comes from the fork: a local copy equal to it is current, one equal to anything else is outdated and the command clones the fork', async () => {
   const text = '---\nname: gauntlet-loop\n---\n# the fork\n';
   const path = '.claude/skills/gauntlet-loop/SKILL.md';

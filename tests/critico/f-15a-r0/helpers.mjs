@@ -225,7 +225,7 @@ export const PERSONAL = [
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /[\w.+-]+@(?!example\.)[\w-]+\.(com|pt|br|org|net|io)\b/i,
 ];
 // Única exceção (emenda): o slug público do fork do gauntlet-loop, decidido pelo responsável. Qualquer outra ocorrência continua a reprovar.
-export const personalHits = (text) => { const t = text.replace(/renatowernik\/gauntlet-loop/gi, ''); return PERSONAL.filter((re) => re.test(t)).map(String); };
+export const personalHits = (text) => { const t = text.replace(/renatowernik\/gauntlet-loop(?![\w.-])/gi, ''); return PERSONAL.filter((re) => re.test(t)).map(String); };
 
 // ---------- ensaio real de um comando de skill (só git local, sem rede) ----------
 export const git = (cwd, ...a) => spawnSync('git', ['-c', 'user.name=critico', '-c', 'user.email=critico@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.autocrlf=false', ...a], { cwd, encoding: 'utf8', env: sandboxEnv() });
