@@ -64,12 +64,12 @@ test('C4 speckit-project sem --yes: código 3 (P5), nada executado', async () =>
   sequencia(r.execs, [], 'speckit-project sem --yes');
 });
 
-test('C4 speckit-project: sem <dir>/.specify/ recusa e não executa', async () => {
+test('C4 speckit-project: sem <dir>/.specify/ é uso inválido (código 2) e não executa', async () => {
   const m = comSpecKit();
   const dir = join(m.root, 'sem specify');
   mkdirSync(dir);
   const r = await upd(m, ['--apply', 'speckit-project', '--project', dir, '--yes']);
-  assert.ok([1, 2].includes(r.code), 'sem .specify/: uso inválido (2) ou erro (1), nunca ' + r.code);
+  assert.equal(r.code, 2, 'sem .specify/: uso inválido → código 2 (orquestrador)');
   sequencia(r.execs, [], 'sem .specify');
 });
 
