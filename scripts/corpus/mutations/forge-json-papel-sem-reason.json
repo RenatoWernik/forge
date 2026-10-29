@@ -1,0 +1,7 @@
+{
+  "base": "pt-plain-pending",
+  "find": "\"reason\": \"the critic stays on the strongest model, in a fresh context every round\"",
+  "replace": "\"reason\": \"\"",
+  "file": ".claude/forge.json",
+  "line": "forge.json: mode (rigorous or accelerated), the 5 roles (model, effort low, medium, high, xhigh or max, reason, and a match that accepts their own label) and the escalation (4 conditions, each with a value and a description)"
+}

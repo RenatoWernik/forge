@@ -30,7 +30,7 @@ test('C5: cada conjunto do corpus gera .checkpoints/painel.json válido, com o p
     assert.ok(!raw.includes('\r'), s.name + ': o painel.json gerado tem CR (resposta 12: só LF)');
     // resposta 6: sem modo no forge.json (antes do F-03), o inicial usa "rigoroso"; com ele, copia-o
     const fj = JSON.parse(readFileSync(join(dest, '.claude/forge.json'), 'utf8'));
-    assert.equal(o.modo, fj.modo ?? 'rigoroso', s.name + ': modo');
+    assert.equal(o.modo, { rigorous: 'rigoroso', accelerated: 'acelerado' }[fj.mode], s.name + ': modo');
     assert.deepEqual(o.tickets, [], s.name);
   }
 });
@@ -70,11 +70,11 @@ test('âmbito: o leitor tem uma só fonte no pacote (nenhum outro ficheiro fora 
   assert.deepEqual(iguais.map((f) => relative(ROOT, f)), []);
 });
 
-// --- Fica todo até existir o F-03 (#4), que traz o modo no forge.json (resposta 6) ---
-test('C5 (resposta 6): com o modo no setup (forge.json v2), o painel.json inicial copia-o', { todo: 'resposta 6: só depois do F-03 (#4)' }, async () => {
+// --- O F-03 (#4) trouxe o modo no forge.json (resposta 6): o setup dá `mode` (rigorous | accelerated) e o painel.json usa as palavras dele ---
+test('C5 (resposta 6): com o modo no setup (forge.json v2), o painel.json inicial copia-o', async () => {
   const [s] = corpusAnswers();
-  for (const modo of ['rigoroso', 'acelerado']) {
-    const dest = await buildProject({ ...s.value, modo }, join(tmp(), 'm'));
+  for (const [mode, modo] of [['rigorous', 'rigoroso'], ['accelerated', 'acelerado']]) {
+    const dest = await buildProject({ ...s.value, mode }, join(tmp(), 'm'));
     assert.equal(JSON.parse(readFileSync(join(dest, '.checkpoints/painel.json'), 'utf8')).modo, modo);
   }
 });

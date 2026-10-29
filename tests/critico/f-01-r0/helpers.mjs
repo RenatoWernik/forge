@@ -65,7 +65,14 @@ export const loadScaffold = () => import(pathToFileURL(join(ROOT, 'scripts/scaff
 export const ANSWERS = (over = {}) => ({
   projectName: 'Acme Billing',
   language: 'English',
-  models: { developer: { model: 'sonnet', effort: 'high' }, critic: { model: 'opus', effort: 'high' }, aux: { model: 'sonnet', effort: 'medium' } },
+  mode: 'rigorous',
+  models: {
+    developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
+    developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
+    critic: { model: 'opus', effort: 'high', reason: 'the critic stays on the strongest model' },
+    tester: { model: 'haiku', effort: 'xhigh', reason: 'the batch suite is mechanical work' },
+    aux: { model: 'sonnet', effort: 'medium', reason: 'panel records only' },
+  },
   memory: { workspace: 'acme', project: 'billing' },
   ...over,
 });
