@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": "FRAMEWORK.md",
+  "find": "`gh issue view <n> --json body,comments`",
+  "replace": "`cat docs/tickets/<n>.md`",
+  "line": "ticket contract: GitHub Issues (FRAMEWORK.md reads it with `gh issue view <n> --json body,comments`, with no contract file in the project)"
+}
