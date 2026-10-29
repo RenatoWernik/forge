@@ -1,9 +1,10 @@
 // F-15a critério 1 (base verificada): o compat.json tem exatamente as 10 entradas do registo, cada uma com o verifiedWith do
-// contrato, a surface com o URL de origem na tag ou no sha verificados, e o aviso do ai-memory 3.0.0. Não depende do F-05.
+// contrato, o campo `source` com o URL de origem na tag ou no sha verificados (P7), e o aviso do ai-memory 3.0.0.
+// Não depende do F-05.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { COMPAT, IDS, VERIFIED, entries, readJson, registry, stripV, surfaceNames, surfaceUrls, strings, personalHits } from './helpers.mjs';
+import { COMPAT, IDS, VERIFIED, entries, readJson, registry, stripV, surfaceNames, strayUrls, strings, personalHits } from './helpers.mjs';
 
 const compat = () => {
   assert.ok(existsSync(COMPAT), 'falta compat.json na raiz do pacote');
@@ -40,20 +41,18 @@ test('C1: o verifiedWith de cada entrada é o do contrato (uv 0.13.6, gauntlet-l
   assert.deepEqual(errados, []);
 });
 
-// O URL de cada lista aponta para o repositório da componente, na tag ou no sha verificados (nunca main, master ou HEAD)
+// P7: o URL de origem é o campo próprio `source` de cada entrada, um só URL do repositório da componente, na tag ou no sha do
+// verifiedWith (nunca main, master ou HEAD). O sdd não tem tags: o sha verificado é eba9606.
 const ref = (id) => (id === 'gauntlet-loop' ? '9b1975a' : id === 'sdd' ? 'eba9606' : null);
-// Os URLs são as strings https da entrada fora de `notes` (PERGUNTA 7: onde ficam na forma fixada)
-test('C1: cada surface com nomes traz o URL de origem, no repositório da componente e na tag ou no sha verificados', () => {
+test('C1 (P7): cada uma das 10 entradas tem `source`, um só URL https no repositório da componente e na tag ou no sha verificados', () => {
   const e = entries(compat());
   const src = Object.fromEntries(registry().components.map((c) => [c.id, c.source.replace(/^https:\/\/github\.com\//, '').toLowerCase()]));
   const falhas = [];
   for (const id of IDS) {
-    const names = surfaceNames(e[id]);
-    if (!names.length) continue;
-    const urls = surfaceUrls(e[id]);
-    if (!urls.length) { falhas.push(`${id}: surface sem URL de origem`); continue; }
+    const u = e[id]?.source;
+    if (typeof u !== 'string') { falhas.push(`${id}: falta o campo source (um só URL, texto)`); continue; }
     const tag = ref(id);
-    for (const u of urls) {
+    {
       const low = u.toLowerCase();
       const repoOk = low.includes(src[id]) || (id === 'spec-kit' && low.includes('github/spec-kit'));
       const refOk = tag ? new RegExp(`[/=@]${tag}[0-9a-f]*([/?#]|$)`).test(u) : new RegExp(`[/=@]v?${VERIFIED[id].replace(/\./g, '\\.')}([/?#]|$)`).test(u);
@@ -64,6 +63,12 @@ test('C1: cada surface com nomes traz o URL de origem, no repositório da compon
     }
   }
   assert.deepEqual(falhas, []);
+});
+
+test('C1 (P7): o URL de origem só está em `source` — nenhum URL na surface nem noutro campo da entrada', () => {
+  const e = entries(compat());
+  const fora = IDS.flatMap((id) => strayUrls(e[id]).map((u) => `${id}: ${u}`));
+  assert.deepEqual(fora, []);
 });
 
 test('C1: as componentes que os templates usam têm surface com nomes (mattpocock-skills, spec-kit, ponytail, graphify, ai-memory)', () => {

@@ -8,7 +8,8 @@
 //   { "components": { "<id>": { "verifiedWith": "<versão>", "surface": { "skills": [...], "commands": [...] }, "notes": {...} } } }
 // Os nomes são as strings (não URL) de surface.skills (skills: mattpocock-skills:<x>, speckit-<x>, ponytail*) e de
 // surface.commands (subcomandos e flags: graphify <sub>, ai-memory <sub>, specify init --<flag>). Os URLs de origem são as
-// strings https da entrada fora de `notes` (onde ficam na forma fixada: PERGUNTA 7).
+// campo próprio `components.<id>.source` (resposta P7): um só URL do repositório, na tag ou no sha do verifiedWith; nunca na
+// surface nem nas notes, e nenhum outro URL na entrada.
 // Um nome N está numa lista quando uma string é N ou termina em N depois de um separador (`:`, `-`, `.`, `/` ou espaço), de modo
 // que `converge`, `speckit-converge` e `/speckit.converge` contam todos como `converge`.
 // SECÇÕES PROIBIDAS (resposta P3): o que os templates citam só nas secções «Do not run» e «Do not use» fica FORA da surface.
@@ -85,7 +86,8 @@ export const strings = (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? 
 export const isUrl = (s) => /^https?:\/\//i.test(s);
 const listOf = (e, k) => (Array.isArray(e?.surface?.[k]) ? e.surface[k].filter((s) => typeof s === 'string' && !isUrl(s)) : []);
 export const surfaceNames = (e, bucket) => (bucket ? listOf(e, bucket) : [...listOf(e, 'skills'), ...listOf(e, 'commands')]);
-export const surfaceUrls = (e) => strings(Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k !== 'notes'))).filter(isUrl);
+// URLs fora do campo `source` (e fora de `notes`): na forma fixada (P7) não pode haver nenhum
+export const strayUrls = (e) => strings(Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k !== 'notes' && k !== 'source'))).filter(isUrl);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const hasName = (e, n, bucket) => surfaceNames(e, bucket).some((s) => s === n || new RegExp(`[:\\-./ ]${esc(n)}$`).test(s));
 
