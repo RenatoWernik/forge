@@ -3,5 +3,5 @@
   "file": "CLAUDE.md",
   "find": "## Terms",
   "replace": "## Terms —",
-  "line": "style: no dash, arrow or emoji in CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist)"
+  "line": "style: no dash, arrow or emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist)"
 }

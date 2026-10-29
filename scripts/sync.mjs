@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import { spawnSync } from 'node:child_process';
 
 // Project data that must never travel back into the public templates: always turned back into its marker.
-const PRIVATE = ['PROJECT_NAME', 'MEM_WORKSPACE', 'MEM_PROJECT', 'DASHBOARD_URL'];
+const PRIVATE = ['PROJECT_NAME', 'MEM_WORKSPACE', 'MEM_PROJECT', 'DASHBOARD_URL', 'REPO'];
 // Markers whose value can only be learned from the project files (models and language come from forge.json).
 const SCALAR = [...PRIVATE, 'SPECIFY_SCRIPT', 'LANG_TAG', 'PANEL_OVERRIDES'];
 
@@ -15,6 +15,11 @@ const MARKER = /^\{\{([\w.]+)\}\}$/;
 const hasMarker = (line) => /\{\{[\w.]+\}\}/.test(line);
 // ponytail: CRLF read as LF so a Windows editor does not turn every line into a diff, upgrade: keep per-file line endings if a template ever needs CRLF
 const readText = async (p) => (await readFile(p, 'utf8')).replace(/\r\n/g, '\n');
+// The panel page embeds the shared reader of painel.json in place of {{PAINEL_LEITOR}} (scaffold.mjs). Whatever reader version sits there
+// goes back to the marker, so the reader (one source: scripts/painel-leitor.mjs) never travels into a template.
+// shortcut: the end of the reader is found by the "// The page code." line after it; a project that edits that line gets the reader in its patch.
+const READER = /^(<script type="module">\n)[\s\S]*?\n(\/\/ The page code\.)/m;
+const collapse = (text) => text.replace(READER, '$1{{PAINEL_LEITOR}}\n$2');
 const split = (text) => (text ? text.replace(/\n$/, '').split('\n') : []);
 
 const filesOf = async (root) => (await readdir(root, { withFileTypes: true, recursive: true })).filter((e) => e.isFile()).map((e) => relative(root, join(e.parentPath, e.name)).split('\\').join('/')).sort();
@@ -106,7 +111,7 @@ async function inferAnswers(projectDir, templates) {
   const votes = Object.fromEntries(SCALAR.map((n) => [n, new Map()]));
   for (const [rel, tText] of Object.entries(templates)) {
     let pLines;
-    try { pLines = split(await readText(join(projectDir, rel))); } catch { continue; }
+    try { pLines = split(collapse(await readText(join(projectDir, rel)))); } catch { continue; }
     for (const tLine of split(tText).filter(hasMarker)) {
       for (const pLine of pLines) {
         const got = capture(tLine, pLine);
@@ -120,7 +125,7 @@ async function inferAnswers(projectDir, templates) {
   let panelStrings;
   try { panelStrings = JSON.parse(w.PANEL_OVERRIDES); } catch { /* left to the built-in texts */ }
   return {
-    projectName: w.PROJECT_NAME, language: forge.language, plainStyle: forge.plainStyle, mode: forge.mode, models: forge.models,
+    projectName: w.PROJECT_NAME, repo: w.REPO, language: forge.language, plainStyle: forge.plainStyle, mode: forge.mode, models: forge.models,
     memory: { workspace: w.MEM_WORKSPACE, project: w.MEM_PROJECT }, script: w.SPECIFY_SCRIPT, dashboardUrl: w.DASHBOARD_URL,
     langTag: w.LANG_TAG, panelStrings,
   };
@@ -139,7 +144,7 @@ const strayCommon = (tLine, text, values, common) => [...common].some((n) => {
 
 // A model line the pairing could not tie to a template line keeps the models as typed: flagged like the project name (roles = their filled-in texts).
 function findLeaks(patch, answers, roles, skip) {
-  const secrets = [answers.projectName, answers.memory?.workspace, answers.memory?.project, answers.dashboardUrl?.split('/').pop(), ...roles]
+  const secrets = [answers.projectName, answers.repo, answers.memory?.workspace, answers.memory?.project, answers.dashboardUrl?.split('/').pop(), ...roles]
     .filter((s) => typeof s === 'string' && s.length >= 3 && !skip.includes(s)).map((s) => s.toLowerCase());
   const leaks = [];
   let file = '', header = false;
@@ -169,7 +174,7 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
     // marker values, learned from each template line and the same line rendered by the scaffold
     const values = {}, R = {};
     for (const [rel, tText] of Object.entries(templates)) {
-      R[rel] = await readText(join(rendered, rel));
+      R[rel] = collapse(await readText(join(rendered, rel)));
       const [tl, rl] = [split(tText), split(R[rel])];
       if (tl.length !== rl.length) throw new Error(`${rel}: a marker value spans lines, cannot map the file back`);
       tl.forEach((t, i) => { if (hasMarker(t) && t !== rl[i]) for (const [n, v] of Object.entries(capture(t, rl[i]) ?? {})) values[n] ??= v; });
@@ -181,7 +186,7 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
     const files = [], missing = [], flagged = [];
     for (const [rel, tText] of Object.entries(templates)) {
       let pText;
-      try { pText = await readText(join(projectDir, rel)); } catch { missing.push(rel); continue; }
+      try { pText = collapse(await readText(join(projectDir, rel))); } catch { missing.push(rel); continue; }
       if (pText === R[rel]) continue;
       const [tl, pl] = [split(tText), split(pText)];
       const out = [];
