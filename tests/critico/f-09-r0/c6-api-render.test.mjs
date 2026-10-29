@@ -1,8 +1,10 @@
 // F-09 critério 6: o gauntlet-batch passa as 3 linhas do contrato da API `Workflow` (meta literal puro; opts só da API, com fase,
 // modelo e schema certos; retoma determinística) e respeita o --render. Oráculo: as linhas do bloco «Workflow API contract» do
 // check.cjs, reescritas aqui e aplicadas ao gauntlet-batch de um projeto gerado; as mesmas 3 linhas com a etiqueta `batch:` na
-// saída do check.cjs; e a ida e volta do --render com o tester (mudar models.tester no forge.json → o check falha → --render → o
-// meta tem o texto novo do tester e o check volta a «All ok.»).
+// saída do check.cjs; e a ida e volta do --render (mudar models.critic no forge.json → o check falha → --render → o meta do
+// gauntlet-batch tem o texto novo do crítico e o check volta a «All ok.»). O tester NÃO tem de aparecer no meta (PERGUNTA 8): o
+// tests/critico/f-03-r0/c2-check-forge-json.test.mjs («papéis novos sem os opcionais») muda o label do tester sem --render e exige
+// «All ok.», o que só vale enquanto nenhum meta mostra o tester.
 // Nota de regressão: o tests/critico/f-03-r0/c3-render.test.mjs e a linha «render:» do check.cjs exigem em TODOS os workflows os
 // textos do developer e do critic no meta e a fase Panel com o modelo do aux; valem também para o gauntlet-batch.
 // Depende do F-08: só as linhas do check.cjs (correm o check inteiro).
@@ -71,18 +73,18 @@ test('C6 as 3 linhas da API aparecem na saída do check.cjs com a etiqueta «bat
   assert.match(r.out, /All ok\./);
 });
 
-test('C6 render: no projeto gerado o meta do gauntlet-batch não tem marcadores por preencher, nomeia o tester do forge.json e a fase Panel (se existir) corre o aux', () => {
+test('C6 render: no projeto gerado o meta do gauntlet-batch não tem marcadores por preencher, nomeia o developer e o critic do forge.json (f-03 C3a) e a fase Panel (se existir) corre o aux', () => {
   assert.ok(!src.includes('{{'), 'ficaram marcadores {{…}} no gauntlet-batch gerado');
-  assert.ok(description(src).includes(text(F.tester)), `o meta não nomeia o tester («${text(F.tester)}»): ${description(src)}`);
+  for (const r of ['developer', 'critic']) assert.ok(description(src).includes(text(F[r])), `o meta não nomeia o ${r} («${text(F[r])}»): ${description(src)}`);
   const panel = (src.match(/title:\s*'Panel'[^}]*?model:\s*'([^']*)'/) || [])[1];
   if (panel !== undefined) assert.equal(panel, F.aux.model);
 });
 
-test('C6 render (ida e volta): mudar o tester no forge.json faz o check falhar; o --render reescreve o meta do gauntlet-batch com o texto novo e o check volta a «All ok.»; um segundo --render não muda nada', async () => {
+test('C6 render (ida e volta): mudar o crítico no forge.json faz o check falhar; o --render reescreve o meta do gauntlet-batch com o texto novo e o check volta a «All ok.»; um segundo --render não muda nada', async () => {
   const { dest: d } = await generate(ANSWERS());
   const fjPath = join(d, '.claude/forge.json'), fj = readJson(fjPath);
-  const NEW = { model: 'haiku', effort: 'high', label: 'Tester 9.9', reason: 'changed: more effort for the batch' };
-  fj.models.tester = NEW;
+  const NEW = { model: 'opus', effort: 'low', label: 'Judge 9.9', match: 'opus', reason: 'changed: cheaper critic' };
+  fj.models.critic = NEW;
   writeFileSync(fjPath, JSON.stringify(fj, null, 2) + '\n');
   const stale = check(d);
   assert.equal(stale.status, 1, 'o check não deu pelo meta desatualizado:\n' + stale.out.slice(-1500));
@@ -90,8 +92,11 @@ test('C6 render (ida e volta): mudar o tester no forge.json faz o check falhar; 
   assert.equal(r.status, 0, r.out);
   const after = readFileSync(join(d, WF, BATCH), 'utf8');
   assert.ok(description(after).includes(text(NEW)), `o --render não pôs «${text(NEW)}» no meta do gauntlet-batch: ${description(after)}`);
-  assert.ok(!description(after).includes(text(MODELS().tester)), 'o meta ainda tem o texto antigo do tester');
+  assert.ok(!description(after).includes(text(MODELS().critic)), 'o meta ainda tem o texto antigo do crítico');
   const ok = check(d);
   assert.equal(ok.status, 0, fails(ok.out));
   assert.match(check(d, ['--render']).out, /nothing to render/);
+  // só o gauntlet-batch com o texto antigo do crítico: o check tem de dar por ele (os outros workflows estão certos)
+  writeFileSync(join(d, WF, BATCH), after.replace(text(NEW), text(MODELS().critic)));
+  assert.equal(check(d).status, 1, 'o check não deu pelo meta desatualizado só no gauntlet-batch');
 });
