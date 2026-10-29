@@ -104,24 +104,24 @@
         "AI_MEMORY_BIN": {
           "install": {
             "windows": [
-              "$ErrorActionPreference = \"Stop\"; $Exe = {AI_MEMORY_BIN}; $Dest = Split-Path -Parent $Exe; New-Item -ItemType Directory -Force $Dest | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe ((Split-Path -Leaf $Exe) + \".old\") }; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Dest -Force; Get-ChildItem \"$Dest/ai-memory.exe\" | Unblock-File"
+              "$ErrorActionPreference = \"Stop\"; $Exe = {AI_MEMORY_BIN}; $Dest = Split-Path -Parent $Exe; $Tmp = Join-Path $env:TEMP \"forge-aim-$([guid]::NewGuid())\"; New-Item -ItemType Directory -Force $Dest, $Tmp | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Tmp -Force; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe ((Split-Path -Leaf $Exe) + \".old\") }; Move-Item -Force \"$Tmp/ai-memory.exe\" $Exe; Get-ChildItem $Exe | Unblock-File; Remove-Item -Recurse -Force $Tmp"
             ],
             "macos": [
-              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; dir=$(dirname \"$bin\") && mkdir -p \"$dir\" && cd \"$dir\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\""
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
             ],
             "linux": [
-              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; dir=$(dirname \"$bin\") && mkdir -p \"$dir\" && cd \"$dir\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-linux-$arch.tar.gz\" && tar -xzf \"ai-memory-linux-$arch.tar.gz\""
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-linux-$arch.tar.gz\" && tar -xzf \"ai-memory-linux-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
             ]
           },
           "update": {
             "windows": [
-              "$ErrorActionPreference = \"Stop\"; $Exe = {AI_MEMORY_BIN}; $Dest = Split-Path -Parent $Exe; New-Item -ItemType Directory -Force $Dest | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe ((Split-Path -Leaf $Exe) + \".old\") }; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Dest -Force; Get-ChildItem \"$Dest/ai-memory.exe\" | Unblock-File"
+              "$ErrorActionPreference = \"Stop\"; $Exe = {AI_MEMORY_BIN}; $Dest = Split-Path -Parent $Exe; $Tmp = Join-Path $env:TEMP \"forge-aim-$([guid]::NewGuid())\"; New-Item -ItemType Directory -Force $Dest, $Tmp | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Tmp -Force; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe ((Split-Path -Leaf $Exe) + \".old\") }; Move-Item -Force \"$Tmp/ai-memory.exe\" $Exe; Get-ChildItem $Exe | Unblock-File; Remove-Item -Recurse -Force $Tmp"
             ],
             "macos": [
-              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; dir=$(dirname \"$bin\") && mkdir -p \"$dir\" && cd \"$dir\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\""
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
             ],
             "linux": [
-              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; dir=$(dirname \"$bin\") && mkdir -p \"$dir\" && cd \"$dir\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-linux-$arch.tar.gz\" && tar -xzf \"ai-memory-linux-$arch.tar.gz\""
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-linux-$arch.tar.gz\" && tar -xzf \"ai-memory-linux-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
             ]
           }
         }
@@ -167,13 +167,13 @@
           },
           "update": {
             "windows": [
-              "$ErrorActionPreference = \"Stop\"; $Exe = {AI_MEMORY_BIN}; $Dest = Split-Path -Parent $Exe; New-Item -ItemType Directory -Force $Dest | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe ((Split-Path -Leaf $Exe) + \".old\") }; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Dest -Force; Get-ChildItem \"$Dest/ai-memory.exe\" | Unblock-File"
+              "$ErrorActionPreference = \"Stop\"; $Exe = {AI_MEMORY_BIN}; $Dest = Split-Path -Parent $Exe; $Tmp = Join-Path $env:TEMP \"forge-aim-$([guid]::NewGuid())\"; New-Item -ItemType Directory -Force $Dest, $Tmp | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Tmp -Force; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe ((Split-Path -Leaf $Exe) + \".old\") }; Move-Item -Force \"$Tmp/ai-memory.exe\" $Exe; Get-ChildItem $Exe | Unblock-File; Remove-Item -Recurse -Force $Tmp"
             ],
             "macos": [
-              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; dir=$(dirname \"$bin\") && mkdir -p \"$dir\" && cd \"$dir\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\""
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
             ],
             "linux": [
-              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; dir=$(dirname \"$bin\") && mkdir -p \"$dir\" && cd \"$dir\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-linux-$arch.tar.gz\" && tar -xzf \"ai-memory-linux-$arch.tar.gz\""
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-linux-$arch.tar.gz\" && tar -xzf \"ai-memory-linux-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
             ]
           }
         }

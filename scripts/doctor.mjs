@@ -26,6 +26,10 @@ function expand(cmd, sys) {
   return vars.some((v) => !sys.env[v]) ? null : home.replace(/%(\w+)%/g, (_, v) => sys.env[v]);
 }
 
+// C0, C1, DEL (all of \p{Cc}) and the Unicode line and paragraph separators. Not global, so test() keeps no state.
+const CONTROL_RE = /[\p{Cc}\u2028\u2029]/u;
+const PLUGIN_ID =/^[A-Za-z0-9][\w.-]*@[\w.-]+$/;
+
 // The Claude config folder and its .claude.json: CLAUDE_CONFIG_DIR when set (always from sys.env), else under the home dir.
 const configDir = (sys) => sys.env.CLAUDE_CONFIG_DIR || join(sys.home, '.claude');
 const claudeJson = (sys) => (sys.env.CLAUDE_CONFIG_DIR ? join(sys.env.CLAUDE_CONFIG_DIR, '.claude.json') : join(sys.home, '.claude.json'));
@@ -75,10 +79,10 @@ const detectors = {
       const entry = plugins?.[spec.id]?.[0];
       return entry ? { version: entry.version ?? null } : null;
     }
-    const instances = Object.entries(plugins ?? {})
-      .filter(([id, entries]) => id.startsWith(spec.name + '@') && id.length > spec.name.length + 1 && entries?.[0])
-      .map(([id, [entry]]) => ({ id, version: entry.version ?? null }));
-    return instances.length ? { version: instances[0].version, instances } : null;
+    // Only well-formed ids count: anything else (control characters, quotes, spaces) is ignored, never echoed.
+    const ours = Object.entries(plugins ?? {}).filter(([id, entries]) => id.startsWith(spec.name + '@') && entries?.[0]);
+    const instances = ours.filter(([id]) => PLUGIN_ID.test(id)).map(([id, [entry]]) => ({ id, version: entry.version ?? null }));
+    return ours.length ? { version: instances[0]?.version ?? null, instances, ignored: ours.length - instances.length } : null;
   },
   async skill(spec, sys) {
     const dir = join(configDir(sys), 'skills', spec.name);
@@ -175,8 +179,10 @@ function instancesResult(c, r, found, latest, platform, sys) {
 
 async function checkComponent(c, sys, platform) {
   const r = { ...meta(c), installed: false, installedVersion: null, latestVersion: null };
-  const [found, detectError] = await attempt(() => detect(c.installed, sys));
+  let [found, detectError] = await attempt(() => detect(c.installed, sys));
   if (detectError) return { ...r, status: 'unknown', error: detectError, command: null };
+  if (found?.ignored) r.warnings = [`${found.ignored} plugin id(s) ignored: not a valid plugin id`];
+  if (found?.instances && !found.instances.length) found = null;
   const [latest, latestError] = await attempt(() => finders[c.latest.method](c.latest, sys));
   if (!found) return withCommand(c, { ...r, status: 'missing', latestVersion: latest?.version ?? null, ...(latestError && { error: latestError }) }, platform, undefined, sys);
   r.installed = true;
@@ -215,16 +221,20 @@ export async function runDoctor(registry, sys) {
 }
 
 function formatText(report) {
-  const lines = [`forge doctor - platform: ${report.platform}`, ''];
+  // This text is what an agent reads and follows: a value that came from a file or the environment never ends a line or starts
+  // a new one. Control characters are shown escaped, and a command that has one is not shown at all.
+  const show = (v) => String(v).replace(new RegExp(CONTROL_RE.source, 'gu'), (ch) => '\\u' + ch.codePointAt(0).toString(16).padStart(4, '0'));
+  const lines = [`forge doctor - platform: ${show(report.platform)}`, ''];
   for (const c of report.components) {
-    const installed = c.installed ? `installed ${c.installedVersion ?? 'version unknown'}${c.versionSource ? ` (by ${c.versionSource})` : ''}` : 'not installed';
-    lines.push(`[${c.status}] ${c.name} (${c.type}) - ${installed} - latest ${c.latestVersion ?? 'unknown'}`);
-    for (const i of c.instances ?? []) lines.push(`    ${i.id} ${i.version ?? 'version unknown'} (${i.status})`);
-    if (c.error) lines.push(`    error: ${c.error}`);
-    if (c.requires?.length) lines.push(`    requires: ${c.requires.join(', ')}`);
-    for (const cmd of c.command ?? []) lines.push(`    run: ${cmd}`);
-    for (const note of c.notes ?? []) lines.push(`    note: ${note}`);
-    if (c.command) lines.push(`    docs: ${c.installDocs}`);
+    const installed = c.installed ? `installed ${show(c.installedVersion ?? 'version unknown')}${c.versionSource ? ` (by ${show(c.versionSource)})` : ''}` : 'not installed';
+    lines.push(`[${show(c.status)}] ${show(c.name)} (${show(c.type)}) - ${installed} - latest ${show(c.latestVersion ?? 'unknown')}`);
+    for (const i of c.instances ?? []) lines.push(`    ${show(i.id)} ${show(i.version ?? 'version unknown')} (${show(i.status)})`);
+    for (const w of c.warnings ?? []) lines.push(`    warning: ${show(w)}`);
+    if (c.error) lines.push(`    error: ${show(c.error)}`);
+    if (c.requires?.length) lines.push(`    requires: ${show(c.requires.join(', '))}`);
+    for (const cmd of c.command ?? []) lines.push(CONTROL_RE.test(cmd) ? '    run: [not shown: the command has control characters]' : `    run: ${cmd}`);
+    for (const note of c.notes ?? []) lines.push(`    note: ${show(note)}`);
+    if (c.command) lines.push(`    docs: ${show(c.installDocs)}`);
   }
   const count = (s) => report.components.filter((c) => c.status === s).length;
   lines.push('', ['ok', 'outdated', 'missing', 'unknown'].map((s) => `${count(s)} ${s}`).join(', '));
