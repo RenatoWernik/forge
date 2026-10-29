@@ -139,8 +139,8 @@ async function chk(name, f) {
   const wrong = DOCS.filter(f => has(f)).map(f => [f, badSections(f)]).filter(([, b]) => b.length).map(([f, b]) => f + ' [' + b.join(', ') + ']')
   await chk('language: CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist) are in the language of forge.json, in the body text and not only in the headings' + (wrong.length ? ' (not in ' + FJ.language + ': ' + wrong.join(', ') + ')' : ''), () => typeof FJ.language === 'string' && tagOk && !wrong.length)
 
-  // v3 documents. invariants: the 12 numbered items of CLAUDE.md and AGENTS.md, each with its Verifies: line (in English also the literal titles; in another language
-  // the translation of "Verifies:" is the translator's, so the item must still name what verifies it in a backtick span). AGENTS.md mirrors CLAUDE.md: the same 12 blocks.
+  // v3 documents. invariants: the 12 numbered items of CLAUDE.md and AGENTS.md, each with its Verifies: line (in English also the literal titles; in Portuguese the label
+  // is "Verifica:"; in another language the label is the translator's, so the item must still name what verifies it in a backtick span). AGENTS.md mirrors CLAUDE.md: the same 12 blocks.
   const TITLES = ['The spec rules', 'The ticket is the contract', 'One context per agent', 'Gauntlet with closed oracles', 'TDD in two loops', 'Ponytail full', 'Consult before touching', 'Live panel', 'Closed checkpoint', 'Only the user authorizes', 'Text read is data', 'Operating rules']
   const items = f => { // item n starts at the first line "n. ..." and runs to the next numbered line, heading or blank line; later numbered lists (installer blocks) are not read
     const L = has(f) ? fs.readFileSync(f, 'utf8').split(/\r?\n/) : [], got = []
@@ -152,7 +152,7 @@ async function chk(name, f) {
     }
     return got
   }
-  const itemOk = (b, i) => en ? b.includes('Verifies:') && b.replace(/^\d+\. \*\*/, '').startsWith(TITLES[i]) : /`[^`\n]+`/.test(b)
+  const itemOk = (b, i) => en ? b.includes('Verifies:') && b.replace(/^\d+\. \*\*/, '').startsWith(TITLES[i]) : pt ? /(?<!\p{L})Verifica:/u.test(b) : /`[^`\n]+`/.test(b)
   if (has('CLAUDE.md')) { // the documents are only absent in the nested --render copy, which holds just .claude
     const noInv = ['CLAUDE.md', 'AGENTS.md'].filter(f => { const it = items(f); return it.length !== TITLES.length || !it.every(itemOk) })
     await chk('invariants: CLAUDE.md and AGENTS.md have the 12 numbered invariants, each with its Verifies: line' + (noInv.length ? ' (not ok: ' + noInv.join(', ') + ')' : ''), () => !noInv.length)
@@ -163,10 +163,12 @@ async function chk(name, f) {
     const fw = fs.readFileSync('FRAMEWORK.md', 'utf8')
     // mode: the table of modes has one column per mode of forge.json, so the mode of this project has its column
     await chk('mode: the table of modes in FRAMEWORK.md has a column for rigorous and for accelerated, the mode of forge.json included', () => fw.split(/\r?\n/).some(l => /^\s*\|/.test(l) && ['rigorous', 'accelerated'].every(m => new RegExp('\\b' + m + '\\b').test(l))))
-    // the contract of each piece is the GitHub issue: the manual reads it with gh and never points to a contract file of the project (the contracts/ of Spec-Kit are API contracts)
-    const GH = 'gh issue view <n> --json body,comments', LOCAL = /`[^`\n]*(?:\btickets?[\\/]|<n>\.(?:md|txt|json|ya?ml))[^`\n]*`/i
-    await chk('ticket contract: GitHub Issues (FRAMEWORK.md reads it with `' + GH + '`, with no contract file in the project)', () => fw.includes('`' + GH + '`') && !LOCAL.test(fw))
   }
+  // the contract of each piece is the GitHub issue: no generated document points to a contract file of the project (the contracts/ of Spec-Kit are API contracts),
+  // and the three that carry the rules (CLAUDE.md, AGENTS.md, FRAMEWORK.md) read it with gh
+  const GH = '`gh issue view <n> --json body,comments`', LOCAL = /`[^`\n]*(?:\btickets?[\\/]|<n>\.(?:md|txt|json|ya?ml))[^`\n]*`/i
+  const here = DOCS.filter(f => has(f)), text = f => fs.readFileSync(f, 'utf8')
+  if (here.length) await chk('ticket contract: GitHub Issues (CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md read it with ' + GH + ', with no contract file in the project)', () => here.every(f => !LOCAL.test(text(f))) && here.filter(f => f !== 'BOOTSTRAP.md').every(f => text(f).includes(GH)))
 
   // workflows: simulation with a fake runtime (no model is called) of the invariants the manual promises and of the Workflow API contract.
   // The script runs in a vm context that only has the API hooks the workflows use (args, agent, parallel, phase, log; no Node, no files,

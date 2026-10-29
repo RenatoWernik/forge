@@ -343,7 +343,7 @@ const translate = (text, { line = LINE.pt, headings = {}, prose = true } = {}) =
     if (fence || !l.trim() || /^[|\s:-]+$/.test(l)) return l;
     if (l.startsWith('#')) return headings[l] ?? l.replace(/^(#{2,} )(\d+\. )?.*$/, '$1$2Seção');
     if (!prose) return l;
-    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + line + ' ' + (l.match(/`[^`]*`/g) ?? []).join(' ');
+    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + line + (l.includes('Verifies:') ? ' Verifica: ' : ' ') + (l.match(/`[^`]*`/g) ?? []).join(' ');
   }).join('\n');
 };
 const rewrite = async (dest, rules, opts) => {
@@ -447,6 +447,55 @@ test('no generated file, in English or Portuguese, cites the skill resolving-mer
     const dest = await tmp();
     const { files } = await scaffold(answers({ language }), { dest });
     for (const rel of files) assert.doesNotMatch(await read(dest, rel), /resolving-merge-conflicts/, `${language}: ${rel}`);
+  }
+});
+
+test('invariants: any one of the 12 items without its label (Verifies: in English, Verifica: in Portuguese) fails the line', async () => {
+  for (const [language, label] of [['English', 'Verifies:'], ['Portuguese (Brazil)', 'Verifica:']]) {
+    const dest = await tmp();
+    await scaffold(answers({ language }), { dest });
+    if (language !== 'English') await rewrite(dest, [], { headings: NATURAL });
+    const original = await read(dest, 'CLAUDE.md'), lines = original.split('\n');
+    assert.match(CHECK(dest).stdout, /^ok {4}invariants: /m, language);
+    const items = lines.flatMap((l, i) => (/^\d+\. /.test(l) ? [i] : [])).slice(0, 12);
+    assert.equal(items.length, 12, language);
+    for (const i of items) {
+      assert.ok(lines[i].includes(label), `${language}: item at line ${i + 1} has no ${label}`);
+      await writeFile(join(dest, 'CLAUDE.md'), lines.map((l, j) => (j === i ? l.replace(label, 'Seen in:') : l)).join('\n'));
+      assert.match(CHECK(dest).stdout, /^FAIL {2}invariants: /m, `${language}: item at line ${i + 1}`);
+    }
+  }
+});
+
+const GH = '`gh issue view <n> --json body,comments`', KEEP = GH + ' and keep a copy in `docs/tickets/<n>.md`';
+test('ticket contract: a contract kept in a project file fails the line in each of the four documents, in English and in Portuguese, and in CLAUDE.md and AGENTS.md together the mirror line stays ok', async () => {
+  for (const language of ['English', 'Portuguese (Brazil)']) {
+    const make = async () => {
+      const dest = await tmp();
+      await scaffold(answers({ language }), { dest });
+      if (language !== 'English') await rewrite(dest, [], { headings: NATURAL });
+      return dest;
+    };
+    const swap = async (dest, rel) => { const t = await read(dest, rel); assert.ok(t.includes(GH), rel); await writeFile(join(dest, rel), t.replaceAll(GH, KEEP)); };
+    const ok = await make();
+    assert.match(CHECK(ok).stdout, /^ok {4}ticket contract: GitHub Issues/m, language);
+    for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md']) {
+      const dest = await make();
+      await swap(dest, rel);
+      assert.match(CHECK(dest).stdout, /^FAIL {2}ticket contract: GitHub Issues/m, `${language} ${rel}`);
+    }
+    const boot = await make();
+    await writeFile(join(boot, 'BOOTSTRAP.md'), (await read(boot, 'BOOTSTRAP.md')) + '\nSave each contract in `docs/tickets/<n>.md`.\n');
+    assert.match(CHECK(boot).stdout, /^FAIL {2}ticket contract: GitHub Issues/m, `${language} BOOTSTRAP.md`);
+    const both = await make();
+    await swap(both, 'CLAUDE.md');
+    await swap(both, 'AGENTS.md');
+    const r = CHECK(both).stdout;
+    assert.match(r, /^FAIL {2}ticket contract: GitHub Issues/m, language + ' CLAUDE.md and AGENTS.md together');
+    assert.match(r, /^ok {4}AGENTS\.md mirrors CLAUDE\.md/m, language);
+    const noGh = await make();
+    for (const rel of ['CLAUDE.md', 'AGENTS.md']) await writeFile(join(noGh, rel), (await read(noGh, rel)).replaceAll(GH, '`gh issue view <n>`'));
+    assert.match(CHECK(noGh).stdout, /^FAIL {2}ticket contract: GitHub Issues/m, language + ' without the gh command in CLAUDE.md and AGENTS.md');
   }
 });
 
