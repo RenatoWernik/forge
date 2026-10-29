@@ -13,6 +13,7 @@ const ANSWERS = {
   projectName: 'Acme Billing',
   language: 'English',
   mode: 'rigorous',
+  repo: 'acme/billing',
   models: {
     developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
     developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
