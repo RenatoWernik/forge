@@ -97,7 +97,7 @@ export const generate = async (over = {}) => {
   const dest = mkdtempSync(join(tmpdir(), 'critico-f01-proj-'));
   await scaffold(ANSWERS(over), { dest });
   if (/^pt/.test(readJson(join(dest, '.claude/forge.json')).langTag)) {
-    for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
+    for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', '.checkpoints/README.md', ...['dev', 'critic', 'round-minus-1', 'batch'].map((b) => `.claude/briefs/${b}.md`)]) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   }
   return dest;
 };

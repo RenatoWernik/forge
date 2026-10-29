@@ -193,7 +193,7 @@ export const translatePt = (text) => {
 };
 export const traduzSePt = (proj) => {
   if (!/^pt/i.test(readJson(join(proj, '.claude/forge.json')).langTag)) return;
-  for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(proj, rel), translatePt(readFileSync(join(proj, rel), 'utf8')));
+  for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', '.checkpoints/README.md', ...['dev', 'critic', 'round-minus-1', 'batch'].map((b) => `.claude/briefs/${b}.md`)]) writeFileSync(join(proj, rel), translatePt(readFileSync(join(proj, rel), 'utf8')));
 };
 
 // ---- Fotografia de uma pasta: { caminho relativo: sha256 } ----
