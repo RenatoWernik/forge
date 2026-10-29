@@ -90,7 +90,7 @@ test('compat.json: pristine only for the skills forge copies, each entry has a r
   assert.deepEqual(withPristine.sort(), ['gauntlet-loop', 'ponytail', 'sdd']);
   for (const id of withPristine) for (const [file, versions] of Object.entries(compat.components[id].pristine)) {
     assert.match(file, /^[\w-]+\/SKILL\.md$/);
-    for (const v of versions) assert.ok(v.ref && /^[0-9a-f]{64}$/.test(v.sha256) && /^https:\/\//.test(v.url), `${id} ${file}`);
+    for (const v of versions) assert.ok((v.ref || v.refs?.length) && /^[0-9a-f]{64}$/.test(v.sha256) && /^https:\/\//.test(v.url), `${id} ${file}`);
   }
   assert.equal(compat.components['ai-memory'].notes['3.0.0'].requiresBackup, true);
 });
@@ -110,6 +110,43 @@ const withCompat = (m, c) => {
   return m;
 };
 
+test('the ponytail pristine has every release from v4.10.0 to v5.3.3 in each of the 6 skills (an intact copy of any release is never customized)', () => {
+  const files = Object.values(compat.components.ponytail.pristine);
+  assert.equal(files.length, 6);
+  const tags = files.map((versions) => versions.flatMap((v) => v.refs).sort().join(' '));
+  assert.equal(new Set(tags).size, 1, 'every skill covers the same releases');
+  const all = tags[0].split(' ');
+  assert.equal(all.length, 15);
+  assert.ok(all.includes('v4.10.0') && all.includes('v5.3.3'));
+});
+
+test('an update that installs an unverified version is not reported as customized afterwards: the file equals the latest ref', async () => {
+  const old = '---\nname: sdd\nversion: 2.1.0\n---\nold body\n';
+  const next = '---\nname: sdd\nversion: 2.1.2\n---\nnew body\n';
+  const c = structuredClone(compat);
+  c.components.sdd.pristine['sdd/SKILL.md'] = [{ ref: 'x', sha256: sha(old), url: 'https://raw.githubusercontent.com/SpillwaveSolutions/sdd-skill/eba9606/skill.md' }];
+  const files = { [skillPath('sdd')]: old };
+  const m = withCompat(machine({ urls: urls({ 'https://raw.githubusercontent.com/SpillwaveSolutions/sdd-skill/HEAD/skill.md': next }), files }), c);
+  m.sys.run = async (cmd, args) => { m.calls.push({ cmd, args }); files[skillPath('sdd')] = next; return ''; };
+  assert.equal((await status(m)).sdd, 'unverified');
+  const r = await run(m, '--apply', 'sdd', '--yes', '--accept-unverified');
+  assert.equal(m.calls.length, 1);
+  assert.equal(r.code, 0);
+  assert.doesNotMatch(r.out, /customized/);
+  assert.equal((await status(m)).sdd, 'ok');
+  files[skillPath('sdd')] = next + 'my edit';
+  assert.equal((await status(m)).sdd, 'customized');
+});
+test('loose ponytail skills equal to the latest release (above the pristine) are not customized; one edited skill still is', async () => {
+  const novo = '---\nname: ponytail\n---\nthe 5.3.4 text\n';
+  const pony = ['ponytail', 'ponytail-audit', 'ponytail-debt', 'ponytail-gain', 'ponytail-help', 'ponytail-review'];
+  const raw = Object.fromEntries(pony.map((n) => [`https://raw.githubusercontent.com/DietrichGebert/ponytail/v5.3.4/skills/${n}/SKILL.md`, novo]));
+  const files = Object.fromEntries(pony.map((n) => [skillPath(n), novo]));
+  const m = machine({ urls: urls({ ...Object.fromEntries([rel('DietrichGebert/ponytail', 'v5.3.4')]), ...raw }), files });
+  assert.equal((await status(m)).ponytail, 'ok');
+  files[skillPath('ponytail-help')] = novo + 'my rule';
+  assert.equal((await status(m)).ponytail, 'customized');
+});
 test('a skill that is a published copy is never customized (LF or CRLF); one changed byte makes it customized', async () => {
   for (const [text, expected] of [[original, 'outdated'], [original.replaceAll('\n', '\r\n'), 'outdated'], [original + 'x', 'customized'], ['b' + original, 'customized']]) {
     const m = withCompat(machine({ urls: urls(), files: { [skillPath('gauntlet-loop')]: text } }), pristineCompat(original));

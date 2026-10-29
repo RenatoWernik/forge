@@ -93,17 +93,31 @@ const crossed = (notes, installed, latest) => (!isSemver(latest ?? '') ? [] : Ob
   .sort(([a], [b]) => compareVersions(a, b))
   .map(([version, n]) => ({ version, text: typeof n === 'string' ? n : n.text, requiresBackup: n.requiresBackup === true })));
 
-// The skill folders whose SKILL.md matches no published version. A plugin install is never customized, and neither is the file that the
-// doctor found equal to the latest content (a release the pristine does not list yet).
+const RAW_URL = /^https:\/\/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/[^/]+\/(.+)$/;
+
+// The ref the latest version is read at, as the doctor reads it (a release tag, the head commit, or HEAD).
+async function latestRef(spec, sys) {
+  const api = (path) => sys.fetchText(`https://api.github.com/repos/${spec.repo}/${path}`).then(JSON.parse);
+  const ref = spec.method === 'github-head' ? (await api('commits/HEAD')).sha : spec.method === 'github-release' ? (await api('releases/latest')).tag_name : 'HEAD';
+  if (!/^[\w.-]+$/.test(ref)) throw new Error('not a ref');
+  return ref;
+}
+
+// The skill folders whose SKILL.md is no published version: it matches no sha of the pristine and it is not the file at the latest ref
+// either (a release published after compat.json, which the pristine cannot list yet). A plugin install is never customized.
+// A latest that cannot be read leaves the file customized.
 async function customFolders(c, entry, r, sys) {
   if (!entry?.pristine || !r.installed) return [];
   const plugin = c.installed.find((d) => d.method === 'plugin' && d.id);
   if (plugin && (await installedPlugin(sys, plugin.id))) return [];
-  const latest = r.versionSource === 'content' ? `${c.installed.find((d) => d.method === 'skill')?.name}/SKILL.md` : null;
   const folders = [];
-  for (const [file, versions] of Object.entries(entry.pristine).filter(([f]) => f !== latest)) {
+  let ref;
+  for (const [file, versions] of Object.entries(entry.pristine)) {
     const text = await sys.readFile(join(configDir(sys), 'skills', ...file.split('/')));
-    if (text !== null && !versions.some((v) => v.sha256 === sha256(text))) folders.push(file.split('/')[0]);
+    if (text === null || versions.some((v) => v.sha256 === sha256(text))) continue;
+    const path = versions.map((v) => RAW_URL.exec(v.url)).find((m) => m?.[1] === c.latest.repo)?.[2];
+    const [latest] = path ? await settle(async () => { ref ??= await latestRef(c.latest, sys); return sys.fetchText(`https://raw.githubusercontent.com/${c.latest.repo}/${ref}/${path}`); }) : [null];
+    if (latest === null || sha256(latest) !== sha256(text)) folders.push(file.split('/')[0]);
   }
   return folders;
 }
