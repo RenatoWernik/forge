@@ -52,7 +52,7 @@ const translatePt = (text) => {
 let n = 0;
 const build = async (set) => {
   const dest = join(WORK, 'p' + ++n);
-  await scaffold(answers.get(set) ?? set, { dest });
+  await scaffold(answers.get(set), { dest });
   const forge = readJson(join(dest, '.claude/forge.json'));
   const pending = readFileSync(join(dest, 'CLAUDE.md'), 'utf8').includes('PANEL-URL-PENDING'); // before the translation drops the bare URL
   if (/^pt/i.test(forge.langTag)) for (const rel of ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
