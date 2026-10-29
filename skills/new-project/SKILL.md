@@ -75,7 +75,7 @@ Ask in chat, in this order, waiting for the answers. You may propose a value, bu
 
 For a language other than English or Portuguese, also translate the panel page: take the values of the `EN` object in `${CLAUDE_PLUGIN_ROOT}/templates/.claude/dashboard/panel.html`, translate them keeping the keys, the `{n}`-style placeholders and the separators between words, and pass the result as `panelStrings`, with a BCP 47 `langTag`. Identifiers such as `ganhou`, `pergunta` or `ativo` are never translated.
 
-Write the answers of steps 2 and 3 as JSON to a file in the operating system's temp folder (not in the project):
+Write the answers as JSON to a file in the operating system's temp folder (not in the project), with the mode and the models the user said yes to in step 2 and the answers of this step:
 
 ```json
 {"projectName":"My Project","language":"English","mode":"rigorous","models":{"developer":{"model":"sonnet","effort":"high","reason":"logic and server code"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"sonnet","effort":"medium","reason":"the panel only records"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
