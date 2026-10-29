@@ -82,11 +82,17 @@ Write the answers as JSON to a file in the operating system's temp folder (not i
 {"projectName":"My Project","language":"English","mode":"rigorous","repo":"my-owner/my-project","models":{"developer":{"model":"haiku","effort":"xhigh","reason":"builds from a closed contract, and the effort replaces the size"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"opus","effort":"high","reason":"panel agent and readers, where a slip is costly"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
 ```
 
-The values above are an example: replace every one with the user's answers. `mode`, `repo` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role.
+The values above are an example: replace every one with the user's answers. `mode`, `repo` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role. Step 4 adds the optional `hooks` key to this file.
 
 ## 4. Install the protection hooks
 
-The protection hooks of the project come with a later ticket of forge (F-13). Until they exist there is nothing to install here: tell the user so and go on. Once they do, install them only with the user's yes, asked for this action alone (they change what the agents may do in this folder), and show what each hook blocks before asking.
+Three hooks protect the agents of this project. They go into this project's own `.claude/settings.json`, never into a global one, and only with the user's yes. Ask one question per hook, show first what it blocks, and wait for each yes or no; a missing answer is not a yes, and a yes to one hook is not a yes to the next:
+
+- `killByName`: blocks killing processes by name (`taskkill /IM`, `killall`, `pkill`, `Stop-Process -Name`), which also ends the processes of the other agents and of the user. Killing by PID stays allowed.
+- `backgroundTests`: blocks test commands started with `run_in_background`, which leave an agent waiting with nobody noticing. Tests run in the foreground, in blocks of up to 9 minutes.
+- `idleWatch`: warns the orchestrator, on each prompt, when an agent active in `.checkpoints/painel.json` has written no checkpoint for 10 minutes.
+
+Add `"hooks":{"killByName":true,"backgroundTests":false,"idleWatch":true}` to the answers file, with `true` only on the hooks the user said yes to. If the user says no to all, leave `hooks` out: nothing is installed and `.claude/settings.json` is not touched. Step 5 installs them, together with the other files.
 
 ## 5. Generate the files
 
@@ -97,7 +103,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --d
 node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --dest .
 ```
 
-It writes `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the mode, the five roles with their reasons and the escalation rules), `.claude/check.cjs`, both workflows and `.claude/dashboard/panel.html`. It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
+It writes `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the mode, the five roles with their reasons and the escalation rules), `.claude/check.cjs`, both workflows and `.claude/dashboard/panel.html`. With `hooks` answers it also writes the scripts of the hooks answered `true` to `.claude/hooks/` and joins their entries to the project's `.claude/settings.json`, keeping every other key and hook already there (an existing `settings.json` that is not valid JSON is never overwritten: it stops with exit code 1 and writes nothing). It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
 
 ### Translate the documents
 
