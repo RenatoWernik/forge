@@ -499,6 +499,21 @@ test('ticket contract: a contract kept in a project file fails the line in each 
   }
 });
 
+// The class of «the contract in a project file»: a file reference named like a contract, in any folder, with or without code spans. The first six are the variants a critic tried.
+const LOCAL_FILES = ['`.gauntlet/contracts/T012.md`', 'docs/tickets/12.md', '`specs/001-x/contract.md`', '`CONTRACT.md`', '`docs/tickets/12.md`', '`.gauntlet/<n>.md`', '`tickets/<id>.json`'];
+test('ticket contract: every contract file name of the class fails the line, and a tickets/ folder or ticketing code that is not a contract file does not', async () => {
+  for (const language of ['English', 'Portuguese (Brazil)']) {
+    const dest = await tmp();
+    await scaffold(answers({ language }), { dest });
+    if (language !== 'English') await rewrite(dest, [], { headings: NATURAL });
+    const original = await read(dest, 'FRAMEWORK.md');
+    const verdict = async (extra) => { await writeFile(join(dest, 'FRAMEWORK.md'), original + '\n' + extra + '\n'); return CHECK(dest).stdout; };
+    for (const f of LOCAL_FILES) assert.match(await verdict(`- Agents read the contract from ${f} and work from that file.`), /^FAIL {2}ticket contract: GitHub Issues/m, `${language}: ${f}`);
+    const fine = await verdict('- The helpdesk code lives in `src/tickets/api.ts` and the folder `tickets/`, with `docs/tickets/README.md` and `tickets/` tests.');
+    assert.match(fine, /^ok {4}ticket contract: GitHub Issues/m, language + ': a tickets/ folder is not a contract file');
+  }
+});
+
 // developerUi, tester and the reasons only come through --answers; the flags still override the roles of the file
 const ANSWERS_FILE = join(await tmp(), 'answers.json');
 await writeFile(ANSWERS_FILE, JSON.stringify(answers()));

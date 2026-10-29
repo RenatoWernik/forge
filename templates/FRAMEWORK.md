@@ -138,7 +138,7 @@ Format rules:
 
 The workflow repeats developer and critic per piece until `won:true`: ours chosen blind, tests passing in the critic's run and no blocking error. While it runs:
 
-- Round `escalateAfter` (default 6): the `pergunta` note `cp{N}-{piece}-travada` goes up (change the bar, narrow the scope or stop) and the loop goes on by itself.
+- Round `escalateAfter` (default 6): the `pergunta` note `cp{N}-{piece}-travada` goes up (change the bar, narrow the scope or stop) and the loop goes on by itself. It is only a backstop: the round cap of the mode (3 in `rigorous`, 2 in `accelerated`, section 10.2) stops the run first.
 - The user, or the round cap of the mode (section 10.2), says stop: interrupt the run with the `TaskStop` tool (ToolSearch `select:TaskStop`) with `task_id` set to the `taskId` that the `Workflow` call returned, mark the piece `failed` on the panel and record the decision. A `+Nk` token cap from the user also ends it (`agent()` throws when it is reached).
 - Changing bar or scope: adjust `pieces[]` and run only that piece again.
 - An agent without an answer (skipped or API error) ends the piece with `stopped`.
@@ -306,7 +306,7 @@ The `mode` of `.claude/forge.json` picks the column of this table, and the table
 | Blind comparison | two orders | one order, a tie passes |
 | Never relaxes | secrets, security, data loss, false alarms or charges, regressions | same |
 
-The rules of `escalation` in `forge.json` apply in both modes: the same criterion failed `sameCriterionFailures` times makes the orchestrator write a `REDESIGN` comment; an attack still red on delivery sends the piece back to the developer before the critic sees it; an agent without progress for `minutesWithoutProgress` is woken; a visual result below the reference counts as a failed criterion.
+The rules of `escalation` in `forge.json` apply in both modes: the same criterion failed `sameCriterionFailures` times makes the orchestrator write a `REDESIGN` comment (in `accelerated`, the cap of 2 rounds comes first, section 10.4); an attack still red on delivery sends the piece back to the developer before the critic sees it; an agent without progress for `minutesWithoutProgress` is woken; a visual result below the reference counts as a failed criterion.
 
 ### 10.3 TDD in two loops
 
@@ -322,7 +322,9 @@ This is not the horizontal slicing that the `tdd` skill forbids. Horizontal slic
 - The critic applies a test of materiality: it fails a piece only for a blocking flaw (the always-fails list, the aim of a criterion, or the oracle failing in a reproducible real case). The rest is minor and goes to the notes or to a follow-up issue.
 - The developer fixes by class: for each failure it finds the class of inputs that causes it, fixes the class and adds a test of the class, besides the critic's case.
 - An intermittent test fails the ticket only when its cause is in the diff; otherwise it becomes an issue labelled `flaky`.
-- The same criterion failed twice: the orchestrator writes the `REDESIGN` comment with the mechanism, the algorithm and the tests that prove it, the developer implements that design and the critic judges against it. A third failure of any kind stops the ticket, and the orchestrator rewrites the contract; a ticket past 3 rounds is reviewed as a specification failure.
+- In `rigorous` (3 rounds), the same criterion failed twice: the orchestrator writes the `REDESIGN` comment with the mechanism, the algorithm and the tests that prove it, the developer implements that design and the critic judges against it. A third failed round of any kind stops the ticket, and the orchestrator rewrites the contract.
+- In `accelerated` (2 rounds), the cap comes before a second failure of the same criterion can be redesigned: round 2 fails only the always-fails list and the core criteria of the contract, everything else it finds becomes a follow-up issue, and a piece still failing after round 2 stops, and the orchestrator rewrites the contract.
+- A ticket that reaches its cap without winning is reviewed as a specification failure.
 
 ### 10.5 Batches and operating rules
 

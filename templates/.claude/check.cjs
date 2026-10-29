@@ -166,7 +166,10 @@ async function chk(name, f) {
   }
   // the contract of each piece is the GitHub issue: no generated document points to a contract file of the project (the contracts/ of Spec-Kit are API contracts),
   // and the three that carry the rules (CLAUDE.md, AGENTS.md, FRAMEWORK.md) read it with gh
-  const GH = '`gh issue view <n> --json body,comments`', LOCAL = /`[^`\n]*(?:\btickets?[\\/]|<n>\.(?:md|txt|json|ya?ml))[^`\n]*`/i
+  // a contract file is a file reference (in a code span or not) whose name is a contract's: contract(s), ticket(s), issue(s), <n> (or <id>, <number>), a number or an id such as T012, whatever its folder;
+  // a folder called tickets/ or the code of a ticketing feature (src/tickets/api.ts) is not one
+  const GH = '`gh issue view <n> --json body,comments`', FILES = /[\w.\/<>#-]+\.(?:md|txt|json|ya?ml)\b/gi
+  const LOCAL = { test: t => (t.match(FILES) || []).some(f => /^(?:contracts?|tickets?|issues?|<(?:n|id|num|number|ticket|issue)>|\d+|[A-Z]\d{2,})$/i.test(f.split('/').pop().replace(/\.[^.]+$/, ''))) }
   const here = DOCS.filter(f => has(f)), text = f => fs.readFileSync(f, 'utf8')
   if (here.length) await chk('ticket contract: GitHub Issues (CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md read it with ' + GH + ', with no contract file in the project)', () => here.every(f => !LOCAL.test(text(f))) && here.filter(f => f !== 'BOOTSTRAP.md').every(f => text(f).includes(GH)))
 
