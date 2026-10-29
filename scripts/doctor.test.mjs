@@ -536,7 +536,9 @@ test('real registry: never pins a version (latest is always looked up, commands 
 });
 
 test('real registry: no personal or company data', () => {
-  const text = readFileSync(REGISTRY_URL, 'utf8');
+  // The one exception: the public slug of the fork the gauntlet-loop is distributed from (decision of the owner, 2026-10-29).
+  const text = readFileSync(REGISTRY_URL, 'utf8').replace(/RenatoWernik\/gauntlet-loop/gi, 'FORK/gauntlet-loop');
+  assert.ok(text.includes('FORK/gauntlet-loop'), 'the gauntlet-loop comes from the fork');
   // Forbidden words are assembled from pieces so this file stays clean of them too.
   const words = [['key', 'rus'], ['one', 'drive'], ['skill', '.?', 'kri', 'ti'], ['wer', 'nik'], ['ren', 'ato']].map((w) => new RegExp(w.join(''), 'i'));
   const paths = [/C:[\/]Users/i, /\/Users\//, /\/home\/[a-z]/, /[\w.]+@[\w-]+\.[a-z]{2,}/i];

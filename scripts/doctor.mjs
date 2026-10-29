@@ -19,12 +19,24 @@ export function compareVersions(a, b) {
   return Math.sign(Number(pre(b)) - Number(pre(a)));
 }
 
-// "~" is the home dir, "%VAR%" an environment variable; null when the variable is not set.
+// "~" is the home dir, "%VAR%" an environment variable; null when the variable is not set (or empty).
 function expand(cmd, sys) {
   const home = cmd.startsWith('~/') ? join(sys.home, cmd.slice(2)) : cmd;
   const vars = [...home.matchAll(/%(\w+)%/g)].map((m) => m[1]);
-  return vars.some((v) => sys.env[v] === undefined) ? null : home.replace(/%(\w+)%/g, (_, v) => sys.env[v]);
+  return vars.some((v) => !sys.env[v]) ? null : home.replace(/%(\w+)%/g, (_, v) => sys.env[v]);
 }
+
+// The Claude config folder and its .claude.json: CLAUDE_CONFIG_DIR when set (always from sys.env), else under the home dir.
+const configDir = (sys) => sys.env.CLAUDE_CONFIG_DIR || join(sys.home, '.claude');
+const claudeJson = (sys) => (sys.env.CLAUDE_CONFIG_DIR ? join(sys.env.CLAUDE_CONFIG_DIR, '.claude.json') : join(sys.home, '.claude.json'));
+
+// A value read from the environment or from a file enters a printed command only inside single quotes, where nothing is code.
+// PowerShell also treats the typographic single quotes as quotes, so those are doubled too.
+const quote = (value, platform) => (platform === 'windows' ? `'${value.replace(/['‘’‚‛]/g, '$&$&')}'` : `'${value.replaceAll("'", "'\\''")}'`);
+const asArgument = (value, platform) => (/^[\w.@-]+$/.test(value) ? value : quote(value, platform));
+
+// {slot} in a registry command: one pass, so a substituted value is never read as a slot itself.
+const fill = (commands, slots) => commands.map((c) => c.replace(/\{(\w+)\}/g, (m, k) => (k in slots ? slots[k] : m)));
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -54,13 +66,22 @@ const detectors = {
     }
     return null;
   },
+  // spec.id is one plugin; spec.name is the plugin under any marketplace (<name>@<marketplace>), one instance for each.
   async plugin(spec, sys) {
-    const raw = await sys.readFile(join(sys.home, '.claude', 'plugins', 'installed_plugins.json'));
-    const entry = raw && JSON.parse(raw).plugins?.[spec.id]?.[0];
-    return entry ? { version: entry.version ?? null } : null;
+    const raw = await sys.readFile(join(configDir(sys), 'plugins', 'installed_plugins.json'));
+    if (!raw) return null;
+    const plugins = JSON.parse(raw).plugins;
+    if (spec.id) {
+      const entry = plugins?.[spec.id]?.[0];
+      return entry ? { version: entry.version ?? null } : null;
+    }
+    const instances = Object.entries(plugins ?? {})
+      .filter(([id, entries]) => id.startsWith(spec.name + '@') && id.length > spec.name.length + 1 && entries?.[0])
+      .map(([id, [entry]]) => ({ id, version: entry.version ?? null }));
+    return instances.length ? { version: instances[0].version, instances } : null;
   },
   async skill(spec, sys) {
-    const dir = join(sys.home, '.claude', 'skills', spec.name);
+    const dir = join(configDir(sys), 'skills', spec.name);
     const content = await sys.readFile(join(dir, 'SKILL.md'));
     if (content === null) return null;
     const fromFile = spec.versionFile && (await sys.readFile(join(dir, spec.versionFile)));
@@ -68,7 +89,7 @@ const detectors = {
     return { version, content };
   },
   async mcp(spec, sys) {
-    const raw = await sys.readFile(join(sys.home, '.claude.json'));
+    const raw = await sys.readFile(claudeJson(sys));
     if (!raw) return null;
     const cfg = JSON.parse(raw);
     const scopes = [cfg, ...Object.values(cfg.projects ?? {})];
@@ -122,24 +143,47 @@ const attempt = async (fn) => {
 // A shortcut list holds for every platform.
 const forPlatform = (m, platform) => (Array.isArray(m) ? m : m?.[platform]);
 
+// Slots of the printed commands: {claudeDir} is the Claude config folder; each variable of whenEnv is its (quoted) value.
+const slotsFor = (c, sys, platform) => ({
+  claudeDir: sys.env.CLAUDE_CONFIG_DIR ? quote(sys.env.CLAUDE_CONFIG_DIR, platform) : '"$HOME/.claude"',
+  ...Object.fromEntries(Object.keys(c.whenEnv ?? {}).filter((k) => sys.env[k]).map((k) => [k, quote(sys.env[k], platform)])),
+});
+
 // The detector that found the component may bring its own update command (pip, uv tool, loose skill...).
-const withCommand = (c, r, platform, origin) => {
-  const command = r.status === 'missing' ? c.install[platform] : r.status === 'outdated' ? forPlatform(origin?.update, platform) ?? c.update[platform] : null;
-  const requires = command ? forPlatform(origin?.requires ?? c.requires, platform) ?? [] : [];
+// With a variable of whenEnv set (AI_MEMORY_BIN), the commands are the ones for that variable, never the default location.
+const withCommand = (c, r, platform, origin, sys) => {
+  const slots = slotsFor(c, sys, platform);
+  const own = c.whenEnv?.[Object.keys(c.whenEnv).find((k) => sys.env[k])] ?? c;
+  const list = r.status === 'missing' ? own.install[platform] : r.status === 'outdated' ? forPlatform(origin?.update, platform) ?? own.update[platform] : null;
+  const command = list && fill(list, slots);
+  const requires = command ? forPlatform(origin?.requires ?? own.requires, platform) ?? [] : [];
   const notes = r.status === 'outdated' ? forPlatform(c.afterUpdate, platform) : null;
   return { ...r, command, requires, ...(notes?.length && { notes }) };
 };
+
+// A plugin found under several marketplaces: one row each, updated through the marketplace it came from (never a missing one).
+function instancesResult(c, r, found, latest, platform, sys) {
+  const instances = found.instances.map((i) => ({ ...i, status: isCurrent(i.version, latest.version) ? 'ok' : 'outdated' }));
+  const stale = instances.filter((i) => i.status === 'outdated');
+  const notes = stale.length ? forPlatform(c.afterUpdate, platform) : null;
+  const command = stale.length ? stale.flatMap((i) => fill(forPlatform(found.origin.update, platform), { id: asArgument(i.id, platform) })) : null;
+  return {
+    ...r, instances, installedVersion: (stale[0] ?? instances[0]).version, status: stale.length ? 'outdated' : 'ok', command,
+    requires: command ? forPlatform(found.origin.requires ?? c.requires, platform) ?? [] : [], ...(notes?.length && { notes }),
+  };
+}
 
 async function checkComponent(c, sys, platform) {
   const r = { ...meta(c), installed: false, installedVersion: null, latestVersion: null };
   const [found, detectError] = await attempt(() => detect(c.installed, sys));
   if (detectError) return { ...r, status: 'unknown', error: detectError, command: null };
   const [latest, latestError] = await attempt(() => finders[c.latest.method](c.latest, sys));
-  if (!found) return withCommand(c, { ...r, status: 'missing', latestVersion: latest?.version ?? null, ...(latestError && { error: latestError }) }, platform);
+  if (!found) return withCommand(c, { ...r, status: 'missing', latestVersion: latest?.version ?? null, ...(latestError && { error: latestError }) }, platform, undefined, sys);
   r.installed = true;
   r.installedVersion = found.version;
   if (latestError) return { ...r, status: 'unknown', error: latestError, command: null };
   r.latestVersion = latest.version;
+  if (found.instances) return instancesResult(c, r, found, latest, platform, sys);
   if (found.version === null && found.content != null && c.latest.content) {
     const [remote] = await attempt(() => sys.fetchText(rawUrl(c.latest.repo, latest.ref, c.latest.content.path)));
     if (remote !== null && normalize(remote) === normalize(found.content)) {
@@ -147,7 +191,7 @@ async function checkComponent(c, sys, platform) {
       r.versionSource = 'content';
     }
   }
-  return withCommand(c, { ...r, status: isCurrent(r.installedVersion, latest.version) ? 'ok' : 'outdated' }, platform, found.origin);
+  return withCommand(c, { ...r, status: isCurrent(r.installedVersion, latest.version) ? 'ok' : 'outdated' }, platform, found.origin, sys);
 }
 
 // A component with sameAs is a registration of another one (an MCP server of a CLI): same version, same latest.
@@ -155,11 +199,11 @@ async function followOwner(c, owner, sys, platform) {
   const r = { ...meta(c), installed: false, installedVersion: null, latestVersion: owner.latestVersion };
   const [found, detectError] = await attempt(() => detect(c.installed, sys));
   if (detectError) return { ...r, status: 'unknown', error: detectError, command: null };
-  if (!found) return withCommand(c, { ...r, status: 'missing' }, platform);
+  if (!found) return withCommand(c, { ...r, status: 'missing' }, platform, undefined, sys);
   // Registered without its owner: the registration cannot work until the owner is installed, so the fix is the owner's.
   const orphan = owner.status === 'missing';
   const next = { ...r, installed: true, installedVersion: owner.installedVersion, status: orphan ? 'outdated' : owner.status, ...(owner.error && { error: owner.error }) };
-  return orphan ? { ...next, command: owner.command, requires: owner.requires } : withCommand(c, next, platform);
+  return orphan ? { ...next, command: owner.command, requires: owner.requires } : withCommand(c, next, platform, undefined, sys);
 }
 
 export async function runDoctor(registry, sys) {
@@ -175,6 +219,7 @@ function formatText(report) {
   for (const c of report.components) {
     const installed = c.installed ? `installed ${c.installedVersion ?? 'version unknown'}${c.versionSource ? ` (by ${c.versionSource})` : ''}` : 'not installed';
     lines.push(`[${c.status}] ${c.name} (${c.type}) - ${installed} - latest ${c.latestVersion ?? 'unknown'}`);
+    for (const i of c.instances ?? []) lines.push(`    ${i.id} ${i.version ?? 'version unknown'} (${i.status})`);
     if (c.error) lines.push(`    error: ${c.error}`);
     if (c.requires?.length) lines.push(`    requires: ${c.requires.join(', ')}`);
     for (const cmd of c.command ?? []) lines.push(`    run: ${cmd}`);
