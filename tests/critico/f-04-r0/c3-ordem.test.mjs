@@ -1,33 +1,33 @@
 // F-04 critério 3: a ordem dos passos numerados da skill é verificar a máquina, entrevista, perguntas de setup, hooks, geração,
-// painel, bootstrap. Oráculo: os títulos `## N.` extraídos e comparados com a lista literal (PERGUNTA 4: o contrato dá a lista
-// em português e a skill está em inglês; até à resposta, cada título é reconhecido por um padrão bilingue em helpers.ORDER).
+// painel, bootstrap. Oráculo: os títulos `## N.` extraídos e comparados com a lista literal (resposta 4 do orquestrador na #5).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ORDER, steps, skillText, prose } from './helpers.mjs';
+import { TITLES, steps, step, skillText, prose } from './helpers.mjs';
 
-test('C3: há exatamente 7 passos `## N.`, numerados de 1 a 7 sem saltos', () => {
-  const s = steps();
-  assert.deepEqual(s.map((x) => x.n), [1, 2, 3, 4, 5, 6, 7], 'títulos: ' + s.map((x) => `${x.n}. ${x.title}`).join(' | '));
+test('C3: os títulos `## N.` da skill são exatamente os 7 da lista literal, numerados de 1 a 7, por esta ordem', () => {
+  const lidos = steps().map((x) => `${x.n}. ${x.title}`);
+  assert.deepEqual(lidos, TITLES.map((t, i) => `${i + 1}. ${t}`));
 });
 
-test('C3: os títulos seguem a ordem do contrato, e cada título só corresponde ao seu passo', () => {
-  const s = steps();
-  const lidos = s.map((x) => ORDER.filter(([, re]) => re.test(x.title)).map(([nome]) => nome));
-  const esperado = ORDER.map(([nome]) => [nome]);
-  assert.deepEqual(lidos, esperado, 'títulos: ' + s.map((x) => `${x.n}. ${x.title}`).join(' | '));
+test('C3: «### Translate the documents» e «### Check» ficam dentro do passo 5', () => {
+  const g = step(TITLES[4]);
+  assert.ok(g, 'sem o passo ' + TITLES[4]);
+  for (const sub of ['### Translate the documents', '### Check']) assert.match(g.body, new RegExp('^' + sub + '\\s*$', 'm'), `${sub} não está dentro de «${TITLES[4]}»`);
 });
 
-test('C3: o passo dos hooks existe já, como lugar reservado (o F-13 escreve as perguntas)', () => {
-  const h = steps().find((x) => ORDER[3][1].test(x.title));
-  assert.ok(h, 'sem passo de hooks');
-  assert.ok(h.body.replace(/^## .*$/m, '').trim().length > 0, 'o passo dos hooks está vazio: diz ao orquestrador o que fazer nele');
+test('C3: o passo 4 não está vazio e diz que os hooks só se instalam com o sim do utilizador', () => {
+  const h = step(TITLES[3]);
+  assert.ok(h, 'sem o passo ' + TITLES[3]);
+  const corpo = h.body.replace(/^## .*$/m, '').trim();
+  assert.ok(corpo.length > 0, 'o passo dos hooks está vazio');
+  assert.match(corpo, /\byes\b/i, 'o passo dos hooks não diz que se instalam só com o sim (yes) do utilizador');
 });
 
 // As referências cruzadas do texto a passos da própria skill continuam a apontar para o passo certo depois da renumeração.
 // Só as formas que o texto de hoje usa; uma redação diferente não é verificada aqui (não é alarme).
 test('C3: as referências «step N» da skill apontam para o passo certo depois da renumeração', () => {
-  const t = prose(skillText());
-  const idx = (k) => steps().find((x) => ORDER[k][1].test(x.title))?.n;
+  const t = prose(skillText()).replace(/\s+/g, ' ');
+  const n = (k) => k + 1; // os passos são os de TITLES, numerados pela ordem (o primeiro teste deste ficheiro verifica)
   const casos = [
     [/language the user chooses in step (\d+)/i, 2, 'a língua escolhe-se nas perguntas de setup'],
     [/so step (\d+) translates/i, 4, 'a tradução é feita no passo da geração'],
@@ -36,7 +36,7 @@ test('C3: as referências «step N» da skill apontam para o passo certo depois 
   const errado = [];
   for (const [re, k, porque] of casos) {
     const m = t.match(re);
-    if (m && +m[1] !== idx(k)) errado.push(`«${m[0]}»: ${porque}, que é o passo ${idx(k)}`);
+    if (m && +m[1] !== n(k)) errado.push(`«${m[0]}»: ${porque}, que é o passo ${n(k)}`);
   }
   assert.deepEqual(errado, []);
 });

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { ROLES, PONTE, loadPonte, loadCorpus, generated, generate, skillText, steps, ORDER } from './helpers.mjs';
+import { ROLES, PONTE, loadPonte, loadCorpus, generated, generate, step, TITLES } from './helpers.mjs';
 
 const CASOS = () => [...loadCorpus(), ...generated(404, 12)];
 
@@ -23,15 +23,18 @@ test('C4: o forge.json de cada projeto (corpus + gerados) grava a razão de cada
   assert.deepEqual(errado, []);
 });
 
-// PERGUNTA 1: a ponte tests/ponte/f-04.mjs (ver helpers.mjs)
-test('C4: existe a ponte tests/ponte/f-04.mjs, que não lê as razões por si', () => {
-  assert.ok(existsSync(PONTE), 'falta tests/ponte/f-04.mjs (PERGUNTA 1): o corpo de notes/n0001 não tem uma origem verificável');
+// Resposta 1: a ponte tests/ponte/f-04.mjs só reexporta o produtor do pacote (ver helpers.mjs)
+test('C4: existe a ponte tests/ponte/f-04.mjs, e ela só reexporta do pacote', () => {
+  assert.ok(existsSync(PONTE), 'falta tests/ponte/f-04.mjs (resposta 1): o corpo de notes/n0001 não tem uma origem verificável');
   const src = readFileSync(PONTE, 'utf8');
-  for (const proibido of ['forge.json', 'reason', 'models']) assert.ok(!src.includes(proibido), `a ponte menciona «${proibido}»: tem de ler a nota do pacote, não reconstruí-la`);
+  for (const proibido of ['forge.json', 'reason', 'models']) assert.ok(!src.includes(proibido), `a ponte menciona «${proibido}»: tem de reexportar a nota do pacote, não reconstruí-la`);
+  const origens = [...src.matchAll(/\b(?:from|import)\s*\(?\s*(['"])(.+?)\1/g)].map((m) => m[2]);
+  assert.ok(origens.length > 0, 'a ponte não importa nem reexporta nada do pacote');
+  assert.deepEqual(origens.filter((o) => !/^(\.\.\/)+scripts\/[\w.-]+\.m?js$/.test(o)), [], 'a ponte importa de fora de scripts/ do pacote');
 });
 
 test('C4: a nota notes/n0001 de cada projeto é do tipo `decisao` e o corpo tem a razão de cada papel, à letra', async () => {
-  assert.ok(existsSync(PONTE), 'falta tests/ponte/f-04.mjs (PERGUNTA 1)');
+  assert.ok(existsSync(PONTE), 'falta tests/ponte/f-04.mjs (resposta 1)');
   const { notaDecisao } = await loadPonte();
   assert.equal(typeof notaDecisao, 'function', 'a ponte não exporta notaDecisao(dest)');
   const errado = [];
@@ -49,7 +52,7 @@ test('C4: a nota notes/n0001 de cada projeto é do tipo `decisao` e o corpo tem 
 });
 
 test('C4: a nota de um projeto não traz as razões de outro (a ponte lê o projeto de `dest`)', async () => {
-  assert.ok(existsSync(PONTE), 'falta tests/ponte/f-04.mjs (PERGUNTA 1)');
+  assert.ok(existsSync(PONTE), 'falta tests/ponte/f-04.mjs (resposta 1)');
   const { notaDecisao } = await loadPonte();
   const [a, b] = generated(808, 2);
   const pa = await generate(a.value), pb = await generate(b.value);
@@ -61,9 +64,9 @@ test('C4: a nota de um projeto não traz as razões de outro (a ponte lê o proj
 });
 
 test('C4: o passo do painel manda semear notes/n0001 como `decisao` com a razão de cada papel', () => {
-  const painel = steps().find((x) => ORDER[5][1].test(x.title));
-  const onde = painel ? painel.body : skillText();
-  const linha = onde.split('\n').find((l) => l.includes('notes/n0001'));
+  const painel = step(TITLES[5]);
+  assert.ok(painel, 'sem o passo ' + TITLES[5]);
+  const linha = painel.body.split('\n').find((l) => l.includes('notes/n0001'));
   assert.ok(linha, 'a skill não manda semear notes/n0001 no passo do painel');
   assert.ok(/decisao/.test(linha), 'a linha de notes/n0001 não diz kind `decisao`: ' + linha);
   assert.ok(/reason|razão|razões/i.test(linha), 'a linha de notes/n0001 não diz que o corpo leva a razão de cada papel: ' + linha);

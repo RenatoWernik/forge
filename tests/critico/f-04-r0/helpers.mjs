@@ -3,12 +3,12 @@
 // para <pasta>/home e TMP, TEMP e TMPDIR para <pasta>/tmp (também nos processos filhos). Tudo o que os ataques criam fica dentro
 // dela, e ela é apagada no after() e, de reserva, no exit. Nenhum ataque invoca um modelo.
 //
-// Leitura do contrato que estes ataques assumem (cada ponto em aberto é uma PERGUNTA na #5):
-//   - a skill é skills/new-project/SKILL.md; os passos são os títulos `## N. <título>` fora dos blocos de código;
-//   - PERGUNTA 1: a nota `notes/n0001` sai de forma determinística do pacote, e o dev escreve na Ronda 0 a ponte
-//     tests/ponte/f-04.mjs (ver PONTE abaixo) para os ataques não fixarem nomes nem formatos;
-//   - PERGUNTA 2/3/4: os oráculos literais em aberto (frase de proibição, instrução da certeza, títulos dos passos) estão
-//     escritos como padrões bilingues (inglês ou português) e assinalados em cada ataque.
+// Leitura do contrato que estes ataques assumem, com as respostas do orquestrador às 4 PERGUNTAS (comentário 6499894197 na #5,
+// citadas como «resposta N»):
+//   - a skill é skills/new-project/SKILL.md, em inglês; os passos são os títulos `## N. <título>` fora dos blocos de código;
+//   - resposta 1: a nota `notes/n0001` sai de um produtor determinístico do pacote (a partir do forge.json do projeto), e o
+//     dev escreve na Ronda 0 a ponte tests/ponte/f-04.mjs, que só reexporta (ver PONTE abaixo);
+//   - respostas 2, 3 e 4: a frase de proibição, a frase da certeza, a regra de paragem e os 7 títulos são literais em inglês.
 import { after } from 'node:test';
 import { mkdtempSync, mkdirSync, rmSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -60,8 +60,6 @@ export const steps = (t = skillText()) => {
     return { n: +m[1], title: m[2], body: p.slice(m.index, next) };
   });
 };
-// As frases de um texto: divide no fim de frase e nas quebras de parágrafo ou de item de lista
-export const sentences = (t) => t.split(/(?<=[.!?;])\s+(?=[A-Z«"`*(])|\n\s*\n|\n(?=\s*(?:[-*]|\d+\.)\s)/).map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
 
 // As tabelas Markdown do texto, como listas de linhas de células (sem a linha separadora)
 export const tables = (t) => {
@@ -78,17 +76,12 @@ export const tables = (t) => {
 };
 export const cell = (c) => c.replace(/`/g, '').replace(/\*\*/g, '').trim();
 
-// Os 7 passos do critério 3, pela ordem, com o padrão (inglês ou português) que identifica cada título. PERGUNTA 4.
-export const ORDER = [
-  ['verificar a máquina', /machine|máquina/i],
-  ['entrevista', /interview|entrevista/i],
-  ['perguntas de setup', /setup/i],
-  ['hooks', /hooks?\b/i],
-  ['geração', /generat|geraç|gerar/i],
-  ['painel', /panel|painel/i],
-  ['bootstrap', /bootstrap/i],
-];
-export const interview = (t = skillText()) => steps(t).find((s) => ORDER[1][1].test(s.title));
+// Os 7 títulos do critério 3, exatos e por esta ordem (resposta 4 do orquestrador na #5)
+export const TITLES = ['Check the machine', 'Interview', 'Ask the setup questions', 'Install the protection hooks', 'Generate the files', 'Publish and seed the panel', 'Run the bootstrap'];
+export const step = (title, t = skillText()) => steps(t).find((s) => s.title === title);
+export const interview = (t = skillText()) => step(TITLES[1], t);
+// Espaços colapsados: uma frase literal pode quebrar a linha no Markdown
+export const flat = (s) => s.replace(/\s+/g, ' ');
 
 // ---------- respostas ----------
 export const loadCorpus = (kind = 'answers') => {
@@ -124,11 +117,11 @@ export const generate = async (answers) => {
   return { dest, fj: readJson(join(dest, '.claude/forge.json')) };
 };
 
-// ---------- PONTE (PERGUNTA 1) ----------
-// O contrato não fixa de onde vem o corpo da nota notes/n0001. Para os ataques não fixarem nomes, o dev escreve na Ronda 0
-// tests/ponte/f-04.mjs, que só importa do pacote e adapta a forma, e exporta:
-//   notaDecisao(dest) -> Promise<{ kind, body, ... }>  o documento notes/n0001 que a skill manda semear, tal como o pacote o
-//                                                      produz para o projeto gerado em `dest` pelo scaffold do pacote.
-// A ponte não pode ler as razões por si: o texto dela não menciona `forge.json`, `reason` nem `models` (c4 verifica).
+// ---------- PONTE (resposta 1) ----------
+// O dev escreve na Ronda 0 tests/ponte/f-04.mjs, que só reexporta do pacote, e exporta:
+//   notaDecisao(dest) -> { kind, body, ... } ou a sua Promise   o documento notes/n0001 que a skill manda semear, tal como o
+//                                                              produtor do pacote o faz para o projeto gerado em `dest`.
+// Só reexporta: os imports e exports dela vêm todos de scripts/ do pacote, não importa node:fs nem outro módulo do node, e o
+// texto não menciona `forge.json`, `reason` nem `models` (c4 verifica).
 export const PONTE = join(ROOT, 'tests/ponte/f-04.mjs');
 export const loadPonte = () => import(pathToFileURL(PONTE).href);

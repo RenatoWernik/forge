@@ -2,7 +2,7 @@
 // padrão medido, e tem uma frase que proíbe escolher o modelo sem o sim do utilizador. Oráculo: a tabela e a frase literais.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ROLES, interview, sentences, skillText, tables, cell } from './helpers.mjs';
+import { ROLES, interview, skillText, tables, cell, flat } from './helpers.mjs';
 
 // A tabela do contrato (issue #5, critério 2), papel → modelo e esforço, à letra
 const PADRAO = { developer: 'Haiku xhigh', developerUi: 'Opus high', critic: 'Opus high', tester: 'Haiku xhigh', aux: 'Opus 5.5 high' };
@@ -40,11 +40,8 @@ test('C2: o passo da entrevista manda propor o modo e, para cada papel, um model
   assert.ok(/reason|razão|razões/i.test(b), 'a proposta não fala da razão de cada papel');
 });
 
-// PERGUNTA 2: o contrato fala de «a frase literal», mas não a escreve. Até à resposta, o ataque exige uma frase que junte a
-// proibição, o modelo, a escolha e o sim do utilizador (em inglês ou em português).
-test('C2: uma frase proíbe escolher o modelo sem o sim do utilizador', () => {
-  const ss = sentences(skillText());
-  const hit = ss.find((s) => /\b(never|nunca|no model|nenhum modelo|não)\b/i.test(s) && /\bmodel|modelo/i.test(s)
-    && /choos|chose|pick|escolh/i.test(s) && /\b(yes|sim)\b/i.test(s));
-  assert.ok(hit, 'nenhuma frase proíbe escolher o modelo sem o «sim» (yes) do utilizador');
+// Resposta 2 do orquestrador na #5: a frase literal
+const PROIBICAO = 'Never choose a model for the user: propose it with its reason and write it to the answers only after the user says yes.';
+test('C2: a skill tem a frase literal que proíbe escolher o modelo sem o sim do utilizador', () => {
+  assert.ok(flat(skillText()).includes(PROIBICAO), 'falta a frase: ' + PROIBICAO);
 });
