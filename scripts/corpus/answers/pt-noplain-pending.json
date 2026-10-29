@@ -1,0 +1,24 @@
+{
+  "projectName": "Clube do Livro",
+  "language": "Portuguese (Brazil)",
+  "models": {
+    "developer": {
+      "model": "sonnet",
+      "effort": "high"
+    },
+    "critic": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "aux": {
+      "model": "sonnet",
+      "effort": "medium"
+    }
+  },
+  "script": "sh",
+  "plainStyle": false,
+  "memory": {
+    "workspace": "clube",
+    "project": "livro"
+  }
+}

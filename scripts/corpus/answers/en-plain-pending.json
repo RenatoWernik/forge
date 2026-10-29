@@ -1,0 +1,27 @@
+{
+  "projectName": "Northwind Orders",
+  "language": "English",
+  "models": {
+    "developer": {
+      "model": "haiku",
+      "effort": "xhigh",
+      "label": "Haiku 5.5"
+    },
+    "critic": {
+      "model": "opus",
+      "effort": "max",
+      "label": "Opus 5.5",
+      "match": "opus"
+    },
+    "aux": {
+      "model": "haiku",
+      "effort": "low"
+    }
+  },
+  "script": "ps",
+  "plainStyle": true,
+  "memory": {
+    "workspace": "northwind",
+    "project": "orders"
+  }
+}

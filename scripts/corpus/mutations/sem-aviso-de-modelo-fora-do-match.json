@@ -1,0 +1,7 @@
+{
+  "base": "en-noplain-pending",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "if (!modelOk('developer', build))",
+  "replace": "if (false)",
+  "line": "build: a declared model outside the request gives a WARNING and shows in models"
+}

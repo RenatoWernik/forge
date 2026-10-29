@@ -1,0 +1,25 @@
+{
+  "projectName": "Loja Aurora",
+  "language": "Portuguese (Brazil)",
+  "models": {
+    "developer": {
+      "model": "sonnet",
+      "effort": "high"
+    },
+    "critic": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "aux": {
+      "model": "sonnet",
+      "effort": "medium"
+    }
+  },
+  "script": "sh",
+  "plainStyle": true,
+  "dashboardUrl": "https://claude.ai/artifact/AbC123_x-y",
+  "memory": {
+    "workspace": "aurora",
+    "project": "loja"
+  }
+}

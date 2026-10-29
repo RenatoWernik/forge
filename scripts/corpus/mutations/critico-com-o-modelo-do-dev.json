@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "model: R.critic.model, effort: R.critic.effort, schema: VERDICT",
+  "replace": "model: R.developer.model, effort: R.critic.effort, schema: VERDICT",
+  "line": "build: roles use the models and effort from forge.json (developer, critic, aux); no other model"
+}
