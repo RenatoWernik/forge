@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { COMPAT, IDS, VERIFIED, entries, readJson, registry, stripV, surfaceNames, strayUrls, strings, personalHits } from './helpers.mjs';
+import { COMPAT, IDS, VERIFIED, entries, readJson, registry, stripV, surfaceNames, strayUrls, strings, personalHits, GAUNTLET_FORK } from './helpers.mjs';
 
 const compat = () => {
   assert.ok(existsSync(COMPAT), 'falta compat.json na raiz do pacote');
@@ -30,12 +30,12 @@ test('C1 (P1): uma só forma — components é um objeto indexado pelo id; cada 
   assert.deepEqual(Object.keys(c).filter((k) => k !== 'components' && !k.startsWith('$')), [], 'chaves de topo fora da forma fixada');
 });
 
-test('C1: o verifiedWith de cada entrada é o do contrato (uv 0.13.6, gauntlet-loop 9b1975a, ai-memory 3.2.10, ponytail 5.3.3, specify-cli 1.2.5, sdd 2.1.0, mattpocock 1.3.2, graphifyy 0.9.97)', () => {
+test('C1: o verifiedWith de cada entrada é o do contrato (uv 0.13.6, gauntlet-loop fc6b2fc do fork, ai-memory 3.2.10, ponytail 5.3.3, specify-cli 1.2.5, sdd 2.1.0, mattpocock 1.3.2, graphifyy 0.9.97)', () => {
   const e = entries(compat());
   const errados = [];
   for (const id of IDS) {
     const v = e[id]?.verifiedWith;
-    const ok = id === 'gauntlet-loop' ? typeof v === 'string' && /^9b1975a[0-9a-f]{0,33}$/.test(v) : stripV(v) === VERIFIED[id];
+    const ok = id === 'gauntlet-loop' ? typeof v === 'string' && /^fc6b2fc[0-9a-f]{0,33}$/.test(v) : stripV(v) === VERIFIED[id];
     if (!ok) errados.push(`${id}: ${JSON.stringify(v)} (esperado ${VERIFIED[id]})`);
   }
   assert.deepEqual(errados, []);
@@ -43,10 +43,11 @@ test('C1: o verifiedWith de cada entrada é o do contrato (uv 0.13.6, gauntlet-l
 
 // P7: o URL de origem é o campo próprio `source` de cada entrada, um só URL do repositório da componente, na tag ou no sha do
 // verifiedWith (nunca main, master ou HEAD). O sdd não tem tags: o sha verificado é eba9606.
-const ref = (id) => (id === 'gauntlet-loop' ? '9b1975a' : id === 'sdd' ? 'eba9606' : null);
+const ref = (id) => (id === 'gauntlet-loop' ? 'fc6b2fc' : id === 'sdd' ? 'eba9606' : null);
 test('C1 (P7): cada uma das 10 entradas tem `source`, um só URL https no repositório da componente e na tag ou no sha verificados', () => {
   const e = entries(compat());
   const src = Object.fromEntries(registry().components.map((c) => [c.id, c.source.replace(/^https:\/\/github\.com\//, '').toLowerCase()]));
+  src['gauntlet-loop'] = GAUNTLET_FORK.toLowerCase(); // emenda: sempre o fork, qualquer que seja o registo
   const falhas = [];
   for (const id of IDS) {
     const u = e[id]?.source;

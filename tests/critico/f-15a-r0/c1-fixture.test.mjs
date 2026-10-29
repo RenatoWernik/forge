@@ -19,7 +19,7 @@ const FONTES = [
   ['github/spec-kit', 'v1.2.5', 'src/specify_cli/command_init.py'],
   ['Graphify-Labs/graphify', 'v0.9.97', 'graphify/__main__.py'],
   ['akitaonrails/ai-memory', 'v3.2.10', ''],
-  ['robonuggets/gauntlet-loop', '9b1975a', 'SKILL.md'],
+  ['RenatoWernik/gauntlet-loop', 'fc6b2fc', 'SKILL.md'], // emenda: o fork do responsável
   ['SpillwaveSolutions/sdd-skill', 'eba9606', 'skill.md'],
 ];
 const casa = (u, [repo, ref, path]) => {
@@ -48,4 +48,9 @@ test('reprova sempre: a fixture não tem caminhos da máquina, dados pessoais ne
 test('controlo do oráculo de higiene: um caminho pessoal ou um token plantados numa fixture são apanhados', () => {
   const plantados = ['{"u":"C:\\\\Users\\\\fulano\\\\x"}', '{"u":"/home/fulano/x"}', '{"t":"gh' + 'p_' + 'A'.repeat(36) + '"}', '{"h":{"authorization":"x"}}'];
   for (const p of plantados) assert.ok(personalHits(p).length > 0, 'o oráculo não apanhou ' + p);
+});
+
+test('emenda: a fixture regista o gauntlet-loop do fork e nunca do original robonuggets', () => {
+  const { urls } = fixture();
+  assert.deepEqual(urls.filter((u) => /robonuggets/i.test(u)), []);
 });

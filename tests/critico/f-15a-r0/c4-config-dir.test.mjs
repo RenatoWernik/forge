@@ -95,7 +95,7 @@ for (const [platform] of PLATFORMS) {
 
 // Ensaio real (shell desta plataforma, git local, sem rede): com e sem a variável, o ficheiro aparece no sítio certo
 const CASOS = [
-  ['gauntlet-loop', 'https://github.com/robonuggets/gauntlet-loop', gauntletRepo, ['SKILL.md']],
+  ['gauntlet-loop', 'https://github.com/RenatoWernik/gauntlet-loop', gauntletRepo, ['SKILL.md']], // emenda: o fork
   ['sdd', 'https://github.com/SpillwaveSolutions/sdd-skill', sddRepo, ['SKILL.md', 'skill.json', 'README.md', 'references', 'scripts']],
   ['ponytail', 'https://github.com/DietrichGebert/ponytail', ponytailRepo, ['SKILL.md']],
 ];

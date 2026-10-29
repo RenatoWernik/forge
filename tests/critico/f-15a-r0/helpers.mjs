@@ -71,7 +71,7 @@ export const edit = (dir, rel, f) => writeFileSync(join(dir, rel), f(existsSync(
 export const IDS = ['uv', 'gauntlet-loop', 'ai-memory', 'ai-memory-mcp', 'ponytail', 'spec-kit', 'sdd', 'mattpocock-skills', 'graphify', 'graphify-skill'];
 // verifiedWith do contrato. ai-memory-mcp e graphify-skill herdam do dono (sameAs ai-memory; latest pypi graphifyy): PERGUNTA 2.
 export const VERIFIED = {
-  uv: '0.13.6', 'gauntlet-loop': '9b1975a', 'ai-memory': '3.2.10', 'ai-memory-mcp': '3.2.10', ponytail: '5.3.3',
+  uv: '0.13.6', 'gauntlet-loop': 'fc6b2fc', 'ai-memory': '3.2.10', 'ai-memory-mcp': '3.2.10', ponytail: '5.3.3',
   'spec-kit': '1.2.5', sdd: '2.1.0', 'mattpocock-skills': '1.3.2', graphify: '0.9.97', 'graphify-skill': '0.9.97',
 };
 export const stripV = (v) => String(v ?? '').replace(/^v/i, '');
@@ -147,7 +147,7 @@ export const forbiddenOnly = (root = ROOT) => {
 export const ALVO = { 'mattpocock-skills': ['mattpocock-skills', 'skills'], 'spec-kit': ['spec-kit', 'skills'], 'spec-kit-flags': ['spec-kit', 'commands'], ponytail: ['ponytail', 'skills'], graphify: ['graphify', 'commands'], 'ai-memory': ['ai-memory', 'commands'] };
 
 // ---------- doctor com sys falso ----------
-export function fakeSys({ platform = 'win32', home = '/h', exec = {}, files = {}, urls = {}, env = {}, reads, calls } = {}) {
+export function fakeSys({ platform = 'win32', home = '/h', exec = {}, files = {}, urls = {}, env = {}, reads, calls, fetched } = {}) {
   return {
     platform, home, env,
     async exec(cmd, args) {
@@ -158,6 +158,7 @@ export function fakeSys({ platform = 'win32', home = '/h', exec = {}, files = {}
     },
     async readFile(path) { reads?.push(path); return path in files ? files[path] : null; },
     async fetchText(url) {
+      fetched?.push(url);
       if (url in urls) return urls[url];
       throw new Error('HTTP 404 ' + url);
     },
@@ -166,15 +167,18 @@ export function fakeSys({ platform = 'win32', home = '/h', exec = {}, files = {}
 export const REL = (repo, tag) => ['https://api.github.com/repos/' + repo + '/releases/latest', JSON.stringify({ tag_name: tag })];
 export const RAW = (repo, ref, path) => `https://raw.githubusercontent.com/${repo}/${ref}/${path}`;
 export const PYPI = (pkg, v) => ['https://pypi.org/pypi/' + pkg + '/json', JSON.stringify({ info: { version: v } })];
-export const HEADSHA = '9b1975a0000000000000000000000000000c0de1';
+// Emenda do F-15a (#38, 2026-10-29): o gauntlet-loop vem do fork do responsável, no commit fc6b2fc; o robonuggets é só o original
+export const GAUNTLET_FORK = 'RenatoWernik/gauntlet-loop';
+export const GAUNTLET_UPSTREAM = 'robonuggets/gauntlet-loop';
+export const HEADSHA = 'fc6b2fc604ff37fdf4da67ed76980e6af1722629';
 // Todas as fontes de versão do registo real, nas versões verificadas (sem rede)
 export const LATEST_URLS = (extra = {}) => ({
   ...Object.fromEntries([
     REL('astral-sh/uv', 'v0.13.6'), REL('akitaonrails/ai-memory', 'v3.2.10'), REL('DietrichGebert/ponytail', 'v5.3.3'), REL('mattpocock/skills', 'v1.3.2'),
     PYPI('specify-cli', '1.2.5'), PYPI('graphifyy', '0.9.97'),
   ]),
-  'https://api.github.com/repos/robonuggets/gauntlet-loop/commits/HEAD': JSON.stringify({ sha: HEADSHA }),
-  [RAW('robonuggets/gauntlet-loop', HEADSHA, '.claude/skills/gauntlet-loop/SKILL.md')]: 'gauntlet upstream',
+  ['https://api.github.com/repos/' + GAUNTLET_FORK + '/commits/HEAD']: JSON.stringify({ sha: HEADSHA }),
+  [RAW(GAUNTLET_FORK, HEADSHA, '.claude/skills/gauntlet-loop/SKILL.md')]: 'gauntlet do fork',
   [RAW('SpillwaveSolutions/sdd-skill', 'HEAD', 'skill.md')]: '---\nname: sdd\nversion: 2.1.0\n---\n# SDD',
   [RAW('DietrichGebert/ponytail', 'v5.3.3', 'skills/ponytail/SKILL.md')]: 'ponytail upstream',
   ...extra,
@@ -220,7 +224,8 @@ export const PERSONAL = [
   /\bgh[pousr]_[A-Za-z0-9]{20,}/, /github_pat_[A-Za-z0-9_]{20,}/, /\bbearer\s+[A-Za-z0-9._-]{10,}/i, /"authorization"\s*:/i, /\btoken_pepper\b/i,
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /[\w.+-]+@(?!example\.)[\w-]+\.(com|pt|br|org|net|io)\b/i,
 ];
-export const personalHits = (text) => PERSONAL.filter((re) => re.test(text)).map(String);
+// Única exceção (emenda): o slug público do fork do gauntlet-loop, decidido pelo responsável. Qualquer outra ocorrência continua a reprovar.
+export const personalHits = (text) => { const t = text.replace(/renatowernik\/gauntlet-loop/gi, ''); return PERSONAL.filter((re) => re.test(t)).map(String); };
 
 // ---------- ensaio real de um comando de skill (só git local, sem rede) ----------
 export const git = (cwd, ...a) => spawnSync('git', ['-c', 'user.name=critico', '-c', 'user.email=critico@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.autocrlf=false', ...a], { cwd, encoding: 'utf8', env: sandboxEnv() });
