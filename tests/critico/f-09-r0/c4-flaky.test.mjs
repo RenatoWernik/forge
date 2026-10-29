@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BATCH, MODES, runWf, batchArgs, pieces, fakeImpl, declared, batchOf, classesOf, verdictOf, pairs, show, rng, genBatch, expected } from './helpers.mjs';
-import { FLAKY_CASES } from './corpus.mjs';
+import { FLAKY_CASES, FAIL } from './corpus.mjs';
 
 const result = (run) => ({ classes: classesOf(run.out), regs: pairs(run.out), verdict: verdictOf(run) });
 
@@ -70,7 +70,7 @@ test('C4 controlo do oráculo: o tester falso declara as falhas e a prova na mai
   assert.deepEqual(d.runs.map((x) => x.failures.length), [0, 1, 0, 0, 0]);
   assert.deepEqual(d.isolated.map((x) => x.passed), [true]);
   assert.deepEqual(d.main, []);
-  assert.deepEqual(declared(FLAKY_CASES[2][1]).main.map((x) => x.results), [[false, false]]);
-  assert.deepEqual(declared(FLAKY_CASES[8][1]).main.map((x) => x.results), [[true, false, true]]);
+  assert.deepEqual(declared([FAIL.coreEstavelMainFalha]).main.map((x) => x.results), [[false, false]]);
+  assert.deepEqual(declared([FAIL.sempreMainIntermitente]).main.map((x) => x.results), [[true, false, true]]);
   assert.equal(pieces(3).flatMap((p) => p.owns).some((f) => FLAKY_CASES[0][1][0].files.includes(f)), false, 'o caso 1 toca num ficheiro do lote');
 });

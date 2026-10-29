@@ -227,7 +227,7 @@ export const MODELS = () => ({
   tester: { model: 'haiku', effort: 'medium', label: 'Tester 4.0', reason: 'the batch suite is mechanical work' },
   aux: { model: 'sonnet', effort: 'low', reason: 'panel records only' },
 });
-export const ANSWERS = (over = {}) => ({ projectName: 'Acme Billing', language: 'English', mode: 'rigorous', models: MODELS(), memory: { workspace: 'acme', project: 'billing' }, ...over });
+export const ANSWERS = (over = {}) => ({ projectName: 'Acme Billing', repo: 'acme/billing', language: 'English', mode: 'rigorous', models: MODELS(), memory: { workspace: 'acme', project: 'billing' }, ...over });
 
 const LINE_PT = 'Esta parte descreve o que o agente faz para cada peça, com o teste e a evidência que não podem faltar.';
 const NATURAL = { '## Step 8': '## Etapa 8', '## 5. Checkpoint script': '## 5. Script do checkpoint', '## 1. Roles and models': '## 1. Funções e modelos' };
@@ -237,7 +237,7 @@ export const translatePt = (text) => {
     if (/^\s*```/.test(l)) { fence = !fence; return l; }
     if (fence || !l.trim() || /^[|\s:-]+$/.test(l)) return l;
     if (l.startsWith('#')) return NATURAL[l] ?? l.replace(/^(#{2,} )(\d+\. )?.*$/, '$1$2Seção');
-    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + LINE_PT + ' ' + (l.match(/`[^`]*`/g) ?? []).join(' ');
+    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + LINE_PT + (l.includes('Verifies:') ? ' Verifica: ' : ' ') + (l.match(/`[^`]*`/g) ?? []).join(' ');
   }).join('\n');
 };
 export const generate = async (answers) => {
@@ -245,7 +245,7 @@ export const generate = async (answers) => {
   const dest = tmp('proj');
   await scaffold(answers, { dest });
   const fj = readJson(join(dest, '.claude/forge.json'));
-  if (/^pt/i.test(fj.langTag)) for (const rel of ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) if (existsSync(join(dest, rel))) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
+  if (/^pt/i.test(fj.langTag)) for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) if (existsSync(join(dest, rel))) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   return { dest, fj };
 };
 export const check = (cwd, args = []) => {

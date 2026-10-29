@@ -15,6 +15,7 @@ const core = 'tests/core.test.mjs > soma', coreF = ['tests/core.test.mjs', 'src/
 const F = {
   coreIntermitente: { test: core, files: coreF, suite: [2], isolated: true, cls: 'c', owners: [] },
   aIntermitente: { test: 'tests/pa.test.mjs > exporta', files: ['tests/pa.test.mjs', 'src/pa.js'], suite: [1], isolated: true, cls: 'a', owners: ['pa'] },
+  coreIntermitenteFalhaIsolado: { test: core, files: coreF, suite: [1], isolated: false, cls: 'a', owners: [] },
   coreEstavelMainFalha: { test: core, files: coreF, suite: [1, 2], isolated: false, main: 'all', cls: 'b', owners: [] },
   coreEstavelMainPassa: { test: core, files: coreF, suite: [1, 2], isolated: false, main: 'none', cls: 'a', owners: [] },
   coreEstavelSemMain: { test: core, files: coreF, suite: [1, 2], isolated: false, cls: 'a', owners: [] },
@@ -38,6 +39,7 @@ export const FAIL = F;
 // verificado: só há b)
 export const FLAKY_CASES = [
   ['1 intermitente fora do diff → c, passa', [F.coreIntermitente], { classes: { [core]: 'c' }, regs: [], verdict: 'pass' }],
+  ['1c intermitente fora do diff que falha isolado, sem prova na main → a, falha', [F.coreIntermitenteFalhaIsolado], { classes: { [core]: 'a' }, regs: null, verdict: 'fail' }],
   ['2 intermitente no diff → a de pa, falha', [F.aIntermitente], { classes: { 'tests/pa.test.mjs > exporta': 'a' }, regs: ['pa|tests/pa.test.mjs > exporta'], verdict: 'fail' }],
   ['3 estável fora do diff, falha igual na main → b', [F.coreEstavelMainFalha], { classes: { [core]: 'b' }, regs: [], verdict: null }],
   ['3 estável fora do diff, não falha na main → a, falha', [F.coreEstavelMainPassa], { classes: { [core]: 'a' }, regs: null, verdict: 'fail' }],
