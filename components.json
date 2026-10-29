@@ -134,26 +134,6 @@
       }
     },
     {
-      "id": "claude-mem",
-      "name": "Claude-mem plugin",
-      "type": "plugin",
-      "group": "claude-mem",
-      "source": "https://github.com/thedotmack/claude-mem",
-      "installDocs": "https://github.com/thedotmack/claude-mem#readme",
-      "installed": [{ "method": "plugin", "id": "claude-mem@thedotmack" }],
-      "latest": { "method": "github-release", "repo": "thedotmack/claude-mem" },
-      "install": {
-        "windows": ["claude plugin marketplace add thedotmack/claude-mem", "claude plugin install claude-mem@thedotmack"],
-        "macos": ["claude plugin marketplace add thedotmack/claude-mem", "claude plugin install claude-mem@thedotmack"],
-        "linux": ["claude plugin marketplace add thedotmack/claude-mem", "claude plugin install claude-mem@thedotmack"]
-      },
-      "update": {
-        "windows": ["claude plugin update claude-mem@thedotmack"],
-        "macos": ["claude plugin update claude-mem@thedotmack"],
-        "linux": ["claude plugin update claude-mem@thedotmack"]
-      }
-    },
-    {
       "id": "ponytail",
       "name": "Ponytail plugin",
       "type": "plugin",

@@ -251,6 +251,30 @@ test('the generated check.cjs passes with no FAIL, in English and in Portuguese,
   }
 });
 
+test('the --env check names the machine and project tools that remain, with nothing from claude-mem', async () => {
+  const dest = await tmp();
+  await scaffold(answers(), { dest });
+  // no tool on PATH and no reachable ai-memory server: only the line names are read, nothing real is called
+  const home = await tmp();
+  const env = { ...process.env, PATH: '', Path: '', AI_MEMORY_URL: 'http://127.0.0.1:9', HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: home };
+  const r = spawnSync(process.execPath, ['.claude/check.cjs', '--env'], { cwd: dest, encoding: 'utf8', env });
+  const names = r.stdout.split(/\r?\n/).filter((l) => /^(ok {4}|FAIL {2}|info {2})/.test(l)).map((l) => l.slice(6).split(':')[0]);
+  for (const tool of ['ai-memory', 'Spec-Kit', 'Matt Pocock', 'Graphify', 'git', 'CP0']) assert.ok(names.includes(tool), `${tool} missing in: ${names}`);
+  assert.doesNotMatch(r.stdout, /claude.?mem|37777/i);
+});
+
+test('the panel seed and the FRAMEWORK.md table list exactly the 7 framework keys, in English and in Portuguese', async () => {
+  const KEYS = ['gauntlet', 'ai-memory', 'ponytail', 'sdd', 'tdd', 'mattpocock', 'graphify'];
+  for (const language of ['English', 'Portuguese (Brazil)']) {
+    const dest = await tmp();
+    await scaffold(answers({ language }), { dest });
+    const panel = await read(dest, '.claude/dashboard/panel.html');
+    assert.deepEqual([...panel.match(/const FW_DEFAULT = (\[.*\]);/)[1].matchAll(/\["([\w-]+)","/g)].map((m) => m[1]), KEYS, language);
+    const row = (await read(dest, 'FRAMEWORK.md')).split('\n').find((l) => l.startsWith('| `meta` | `framework` |'));
+    assert.deepEqual(row.split('`key`: ')[1].replace(/\s*\|\s*$/, '').split(', '), KEYS, language);
+  }
+});
+
 // Stand-in for the translation step of the new-project skill: prose outside code fences and backticks becomes one sentence of the target language per line
 // (list markers, table bars, code and backtick spans stay), headings are renamed freely. Unmapped headings become a generic word: no heading text is special.
 const LINE = {

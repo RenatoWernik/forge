@@ -17,7 +17,7 @@ const PANEL_PT = {
   subtitle: 'Painel ao vivo dos agentes do projeto', connecting: 'conectando...', live: 'ao vivo',
   noData: 'sem conexão com os dados', lost: 'conexão perdida, recarregue a página', updated: 'atualizado',
   summary: 'Resumo', running: 'Executando', queued: 'Na fila', piecesWon: 'Peças vencidas', problem: 'Com problema', rounds: 'Rodadas de crítica', currentCp: 'Checkpoint atual',
-  sddPhase: 'Fase SDD', frameworkNote: '8 peças, do passo 0 ao último',
+  sddPhase: 'Fase SDD', frameworkNote: '7 peças, do passo 0 ao último',
   ph_constituicao: 'Constituição', ph_especificar: 'Especificar', ph_clarificar: 'Clarificar', ph_planejar: 'Planejar', ph_tarefas: 'Tarefas', ph_implementar: 'Implementar', ph_entregue: 'Entregue',
   fwWaiting: 'aguardando o primeiro dado', st_ativo: 'ativo', st_pausado: 'pausado', st_erro: 'erro', st_ocioso: 'ocioso',
   cpDone: '{done}/{total} concluídos', cpEmpty: 'Os checkpoints aparecem aqui assim que o plano for aprovado. Cada um passa pelo Gauntlet Ponytail antes de fechar.', pending: 'pendente',

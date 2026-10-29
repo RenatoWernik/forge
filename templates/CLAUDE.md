@@ -1,6 +1,6 @@
 # {{PROJECT_NAME}}
 
-This project runs on a fixed framework: gauntlet loop, AI Memory, Claude-mem, Ponytail, SDD (Spec-Kit), TDD, the Matt Pocock skills and Graphify. Orchestrator: read [FRAMEWORK.md](./FRAMEWORK.md) in full. Developer and critic of the workflows: this file and the prompt are enough, do not open FRAMEWORK.md (invariant 2 has the one exception). Open sessions at the project root. Validate the workflows with `node .claude/check.cjs` (FAIL = fix before going on); add `--env` to validate the machine and project setup too. While `BOOTSTRAP.md` is at the root, CP0 is open: the orchestrator runs it before any feature.
+This project runs on a fixed framework: gauntlet loop, AI Memory, Ponytail, SDD (Spec-Kit), TDD, the Matt Pocock skills and Graphify. Orchestrator: read [FRAMEWORK.md](./FRAMEWORK.md) in full. Developer and critic of the workflows: this file and the prompt are enough, do not open FRAMEWORK.md (invariant 2 has the one exception). Open sessions at the project root. Validate the workflows with `node .claude/check.cjs` (FAIL = fix before going on); add `--env` to validate the machine and project setup too. While `BOOTSTRAP.md` is at the root, CP0 is open: the orchestrator runs it before any feature.
 
 ## Terms
 
@@ -18,7 +18,7 @@ This project runs on a fixed framework: gauntlet loop, AI Memory, Claude-mem, Po
 3. **Gauntlet.** A piece wins when the critic picks ours blind against the bar, the tests pass in the critic's own run and there is no blocking error; no exit by number of rounds, only the user says stop. Stuck piece: at round 6 (`escalateAfter`) a question goes to the user and the loop goes on. Verifies: `node .claude/check.cjs`, the lines `build: wins in round 9`, `winning needs everything together` and `build: "stuck" question`.
 4. **TDD.** Red before the code, green after, one vertical slice at a time, only at the `plan.md` seams. The expected value comes from a literal or from the spec, never recomputed the way the code does. Evidence is the command plus the literal output. Verifies: the critic reruns the red and green commands (`node .claude/check.cjs`, line `the critic gets what the developer declared`).
 5. **Ponytail full.** Before writing, climb the ladder of the `ponytail` skill. Every checkpoint goes through a separate Ponytail gauntlet with its own agents (`n/a` when the diff has no production code). Verifies: `node .claude/check.cjs`, line `approving needs everything together`; the ledger of `ponytail:` comments of the checkpoint has no line without a cap and an upgrade trigger (command in FRAMEWORK.md section 5, step 3).
-6. **Consult before touching.** Orchestrator: ai-memory (`memory_*`), claude-mem (`search`, `timeline`, `get_observations`, `get_tool_uses`) and graphify (`query`, `affected`). Developer: `memory_query` and graphify (`query`, `affected`), as its prompt says. Critic: graph and code only, never memory. Claude-mem is the orchestrator's alone. MCP tools load with ToolSearch `select:<name>`. Verifies: `node .claude/check.cjs`, line `the critic is told not to consult memory`, which also covers the developer (`memory_query` and graphify).
+6. **Consult before touching.** Orchestrator: ai-memory (`memory_*`) and graphify (`query`, `affected`). Developer: `memory_query` and graphify (`query`, `affected`), as its prompt says. Critic: graph and code only, never memory. MCP tools load with ToolSearch `select:<name>`. Verifies: `node .claude/check.cjs`, line `the critic is told not to consult memory`, which also covers the developer (`memory_query` and graphify).
 7. **Live panel.** Every agent records start, progress, end and error with `ArtifactData`, in the cycle its prompt gives; if the panel fails, say so and keep working. Verifies: `node .claude/check.cjs`, the `panel:` lines; live, the agent in `agents/` leaves `running` and closes as `done` or `failed`.
 8. **Closed checkpoint** = pieces won blind, Ponytail approved (or `n/a`), full suite green in the orchestrator's own run, graph and memory updated, panel closed and the user's approval in chat. Verifies: `git tag --list "cp-*"` shows `cp-N`.
 9. **Only the user authorizes** an action with an effect outside the piece's files (git, install, remove, credential, global configuration, sending to third parties): ask in chat and wait for the yes. Verifies: the panel has a `pergunta` note naming the action, its body ends with the user's answer and the UTC time of the yes, and that time is earlier than the `t` of the event that records the action (FRAMEWORK.md section 6, step 5).
@@ -28,7 +28,7 @@ This project runs on a fixed framework: gauntlet loop, AI Memory, Claude-mem, Po
 
 The user's `~/.claude/CLAUDE.md` still applies; where it conflicts with this file, this file wins in this project. A global rule the user switches off for this project is recorded here, with the ai-memory page of the decision. Lessons, rules and decisions go to ai-memory (only the orchestrator writes there).
 
-Code navigation, by question: relations and callers, `graphify query` and `graphify affected` (when `graphify-out/` exists); symbols of a file, `smart_outline`, `smart_unfold` and `smart_search` (they read code, not memory: allowed to developer and critic); a known excerpt, Read with offset and limit; exact text, Grep.
+Code navigation, by question: relations and callers, `graphify query` and `graphify affected` (when `graphify-out/` exists); a known excerpt, Read with offset and limit; symbols and exact text, Grep.
 
 ## Where things are
 
@@ -39,7 +39,6 @@ Code navigation, by question: relations and callers, `graphify query` and `graph
 | Checkpoint script, tool table, panel protocol, memory scopes, permissions | FRAMEWORK.md sections 5, 2, 6, 7 and 8 |
 | Panel (live CRM) | {{DASHBOARD_URL}} (ToolSearch `select:ArtifactData`); page code in `.claude/dashboard/panel.html` |
 | ai-memory scope | `workspace:"{{MEM_WORKSPACE}}"`, `project:"{{MEM_PROJECT}}"` in every `memory_*` call |
-| claude-mem project | the name of the project folder, in its original case |
 
 ## Style
 

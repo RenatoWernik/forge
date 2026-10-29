@@ -13,7 +13,7 @@ forge packages one framework as two skills:
 
 A generated project contains: `CLAUDE.md` (invariants and glossary, loaded by every agent), `FRAMEWORK.md` (the orchestrator manual), `BOOTSTRAP.md` (the one-time setup checklist, called CP0), the workflows `gauntlet-build` and `gauntlet-ponytail`, `.claude/check.cjs` (validates all of it), `.claude/forge.json` (your models and language), the panel page, `.ai-memory.toml`, `.gitignore` and `.graphifyignore`. The generated files are in English; the panel texts, notes, docs and commits use the language you pick at setup.
 
-## The 8 components
+## The 7 components
 
 forge does not bundle these tools. It links each one to its official source, compares your installed copy with the latest public release, and installs or updates from that source after your yes.
 
@@ -21,12 +21,11 @@ forge does not bundle these tools. It links each one to its official source, com
 |---|---|---|---|
 | 1 | Gauntlet loop | Builder and blind critic loop until the work beats the bar | [robonuggets/gauntlet-loop](https://github.com/robonuggets/gauntlet-loop) |
 | 2 | AI Memory | Long-term memory, decisions and the baton between sessions | [akitaonrails/ai-memory](https://github.com/akitaonrails/ai-memory) |
-| 3 | Claude-mem | Search over what was done or tried in earlier sessions | [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) |
-| 4 | Ponytail | Cuts excess code; runs as its own gauntlet per checkpoint | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) |
-| 5 | SDD | Spec-driven development: the Spec-Kit CLI plus the `sdd` guide skill | [github/spec-kit](https://github.com/github/spec-kit), [SpillwaveSolutions/sdd-skill](https://github.com/SpillwaveSolutions/sdd-skill) |
-| 6 | TDD | Red before code, green after, one vertical slice at a time | [mattpocock/skills](https://github.com/mattpocock/skills) (`tdd`) |
-| 7 | Matt Pocock skills | Grilling, domain modeling, diagnosing bugs, research and more | [mattpocock/skills](https://github.com/mattpocock/skills) |
-| 8 | Graphify | Knowledge graph of the code and docs (`query`, `path`, `affected`) | [Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify) |
+| 3 | Ponytail | Cuts excess code; runs as its own gauntlet per checkpoint | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) |
+| 4 | SDD | Spec-driven development: the Spec-Kit CLI plus the `sdd` guide skill | [github/spec-kit](https://github.com/github/spec-kit), [SpillwaveSolutions/sdd-skill](https://github.com/SpillwaveSolutions/sdd-skill) |
+| 5 | TDD | Red before code, green after, one vertical slice at a time | [mattpocock/skills](https://github.com/mattpocock/skills) (`tdd`) |
+| 6 | Matt Pocock skills | Grilling, domain modeling, diagnosing bugs, research and more | [mattpocock/skills](https://github.com/mattpocock/skills) |
+| 7 | Graphify | Knowledge graph of the code and docs (`query`, `path`, `affected`) | [Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify) |
 
 The Spec-Kit and Graphify command line tools also need [uv](https://docs.astral.sh/uv/getting-started/installation/), which forge checks first. Each tool keeps its own license.
 
