@@ -1,6 +1,6 @@
 // F-07 critério 3: o gauntlet-attacks lança um crítico por peça, com o modelo e o esforço de models.critic; o prompt aponta para o
 // brief da Ronda −1 e para a issue (`gh issue view <issue> --json body,comments`); devolve {id, attacks[], failingOnBase, gaps[]},
-// com cada ataque em { id, file, guard?: true } (resposta 7 do orquestrador).
+// com cada ataque em { id, file, guard?: true, passesOnBase } (respostas 7 e 8 do orquestrador) e o failingOnBase calculado.
 // Oráculo: a simulação (runtime falso, sem modelos), com modelos de sonda distintos por papel. Dois modos, uma e três peças.
 // Depende do F-06: só o teste «C3 brief» (o caminho e o ficheiro do brief da Ronda −1 vêm do F-06; até lá, o teste exige um
 // ficheiro existente em templates/.claude/briefs/ e o ajuste fica para quando o F-06 entrar na main). Os outros não dependem.
@@ -55,12 +55,33 @@ for (const mode of MODES) {
   });
 }
 
-test('C3: o failingOnBase devolvido é o do crítico (false também chega ao orquestrador)', async () => {
-  const x = await run([PIECES[0]], 'rigorous', { failingOnBase: false });
-  const r = resultsOf(x.out).find((y) => y?.id === 'pa');
-  assert.ok(r, 'sem resultado: ' + JSON.stringify(x.out)?.slice(0, 300));
-  assert.equal(r.failingOnBase, false);
-});
+// Resposta 8: o failingOnBase é calculado pelo workflow a partir do passesOnBase de cada ataque (true se e só se todos os ataques
+// sem guard têm passesOnBase false); o booleano do crítico não é aceite. Oráculo: tabela fechada de casos, cada um com o booleano
+// do crítico a mentir (o contrário do valor certo) e a dizer a verdade.
+const CALC = [
+  ['um ataque, falha na base; a guarda passa', ['a1', 'g1'], [], true],
+  ['um ataque, já passa na base', ['a1', 'g1'], ['a1'], false],
+  ['dois ataques, um já passa', ['a1', 'a2', 'g1'], ['a2'], false],
+  ['dois ataques, ambos falham; a guarda passa', ['a1', 'a2', 'g1'], [], true],
+  ['dois ataques, ambos falham; a guarda também falha', ['a1', 'a2', 'g1'], [], true, { g1: false }],
+  ['sem guarda, ambos já passam', ['a1', 'a2'], ['a1', 'a2'], false],
+];
+for (const mode of MODES) {
+  test(`C3 cálculo (${mode}): o failingOnBase devolvido é o calculado dos passesOnBase sem guard, nunca o booleano do crítico`, async () => {
+    const wrong = [];
+    for (const [label, list, pass, want, over = {}] of CALC) {
+      const a = atks('pa', list, pass).map((x) => (x.id.split('-')[1] in over ? { ...x, passesOnBase: over[x.id.split('-')[1]] } : x));
+      for (const claim of [!want, want]) {
+        const x = await run([PIECES[0]], mode, { failingOnBase: claim, atksOf: { pa: a } });
+        const r = resultsOf(x.out).find((y) => y?.id === 'pa');
+        if (!r) wrong.push(`${label} (crítico diz ${claim}): sem resultado; ${String(x.err?.message ?? '')}`);
+        else if (r.failingOnBase !== want) wrong.push(`${label} (crítico diz ${claim}): failingOnBase ${r.failingOnBase}, devia ser ${want}`);
+        else if (JSON.stringify(normAtks(r.attacks)) !== JSON.stringify(normAtks(a))) wrong.push(`${label}: os ataques (com passesOnBase) não chegam como o crítico os deu`);
+      }
+    }
+    assert.deepEqual(wrong, []);
+  });
+}
 
 test('C3: com uma só peça, um só crítico; com a mesma entrada, as mesmas chamadas (retoma)', async () => {
   const [a, b] = [await run([PIECES[1]]), await run([PIECES[1]])];

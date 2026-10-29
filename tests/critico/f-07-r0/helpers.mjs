@@ -20,8 +20,10 @@
 //   - resposta 7: cada ataque em `attacks` é { id, file, guard?: true }; o failingOnBase conta só os ataques sem guard; a peça
 //     bloqueada leva `blocked: { reason, ... }`: { reason: "failingOnBase", attacks: [ids não-guarda que já passam na base] } e,
 //     para as outras causas, a mesma forma; lacunas e falta de resultado (critério 4: ambos «gaps») dão { reason: "gaps" };
-//   - PERGUNTA 8: de onde vem, por ataque, o estado na base (que ataques já passam): os ataques só exigem que blocked.attacks seja
-//     uma lista de ids não-guarda da peça;
+//   - resposta 8: cada ataque é { id, file, guard?: true, passesOnBase: boolean }, com o passesOnBase do crítico que os correu na
+//     base; o failingOnBase da peça é calculado pelo workflow (true se e só se todos os ataques sem guard têm passesOnBase false) e
+//     o booleano do crítico não é aceite; blocked.attacks = os ids sem guard com passesOnBase true; um ataque sem guard e sem
+//     passesOnBase dá blocked { reason: "gaps" };
 //   - o crítico da Ronda −1 responde no schema com os mesmos nomes do retorno (attacks, failingOnBase, gaps); o runtime falso
 //     preenche qualquer outro campo obrigatório do schema pelo tipo;
 //   - recusa = zero agent() e o texto do erro (ou do retorno) nomeia o campo como caminho: `issue`, `criteria[1].command`,
@@ -131,12 +133,14 @@ export const baseArgs = (pieces, over = {}) => ({
 // PERGUNTA 2: onde o resultado da Ronda −1 entra no gauntlet-build. Só aqui.
 export const comR0 = (args, results) => ({ ...args, attacks: results });
 // A mesma leitura em código-fonte, para a mutação que salta a Ronda −1 (c7): dá a cada peça um resultado limpo
-export const R0_BYPASS = "if (args && Array.isArray(args.pieces)) args = { ...args, attacks: args.pieces.map(p => ({ id: p && p.id, attacks: [{ id: 'x', file: 'x.test.mjs' }], failingOnBase: true, gaps: [] })) }";
-// Os ataques de uma peça (resposta 7): um normal e uma guarda
-export const atks = (id) => [{ id: `${id}-a1`, file: `tests/critico/${id}-r0/a1.test.mjs` }, { id: `${id}-g1`, file: `tests/critico/${id}-r0/g1.test.mjs`, guard: true }];
+export const R0_BYPASS = "if (args && Array.isArray(args.pieces)) args = { ...args, attacks: args.pieces.map(p => ({ id: p && p.id, attacks: [{ id: 'x', file: 'x.test.mjs', passesOnBase: false }], failingOnBase: true, gaps: [] })) }";
+// Os ataques de uma peça (respostas 7 e 8): por defeito, um normal que falha na base e uma guarda que já passa nela.
+// pass: ids (sufixos a1, a2, g1) com passesOnBase true; extra: ataques a acrescentar.
+export const atk = (id, s, over = {}) => ({ id: `${id}-${s}`, file: `tests/critico/${id}-r0/${s}.test.mjs`, ...(s.startsWith('g') ? { guard: true } : {}), passesOnBase: s.startsWith('g'), ...over });
+export const atks = (id, list = ['a1', 'g1'], pass = []) => list.map((s) => atk(id, s, pass.includes(s) ? { passesOnBase: true } : {}));
 export const r0 = (id, gaps = [], over = {}) => ({ id, attacks: atks(id), failingOnBase: true, gaps, ...over });
-// Forma normalizada de uma lista de ataques (id, file, guard booleano), para comparar entre realms e sem depender da ordem das chaves
-export const normAtks = (xs) => (Array.isArray(xs) ? Array.from(xs, (a) => ({ id: a?.id, file: a?.file, guard: a?.guard === true })) : xs);
+// Forma normalizada de uma lista de ataques, para comparar entre realms e sem depender da ordem das chaves
+export const normAtks = (xs) => (Array.isArray(xs) ? Array.from(xs, (a) => ({ id: a?.id, file: a?.file, guard: a?.guard === true, passesOnBase: a?.passesOnBase })) : xs);
 
 // Uma chamada pertence a uma peça quando o prompt traz o objetivo, o título ou o número da issue dela
 export const belongs = (c, p) => c.prompt.includes(p.objective) || c.prompt.includes(p.title) || new RegExp(`(?<!\\d)${p.issue}(?!\\d)`).test(c.prompt);
@@ -144,13 +148,14 @@ export const belongs = (c, p) => c.prompt.includes(p.objective) || c.prompt.incl
 // Resposta falsa dos agentes. gapsOf: id → lacunas que o crítico da Ronda −1 devolve. O crítico do build escolhe sempre a nossa
 // versão na 1.ª ronda (como o `win` do check.cjs), para o loop sem limite de hoje acabar.
 // models: os papéis do forge.json (por defeito, as sondas); cada papel reconhece-se pelo par modelo/esforço.
-export const fakeImpl = ({ pieces = [], gapsOf = {}, failingOnBase = true, models = PROBE } = {}) => (prompt, opts) => {
+// atksOf: id → os ataques que o crítico da Ronda −1 devolve; failingOnBase: o booleano que o crítico declara (o workflow não o aceita)
+export const fakeImpl = ({ pieces = [], gapsOf = {}, failingOnBase = true, atksOf = {}, models = PROBE } = {}) => (prompt, opts) => {
   const is = (r) => opts.model === models[r].model && opts.effort === models[r].effort;
   const role = ['critic', 'developer', 'developerUi'].find(is);
   const model = role ? `${models[role].model} ${models[role].label || models[role].model}` : String(opts.model);
   if (role === 'critic' && !/^A: /m.test(prompt)) { // crítico da Ronda −1 (o do build recebe os candidatos A e B)
     const p = pieces.find((x) => new RegExp(`(?<!\\d)${x.issue}(?!\\d)`).test(prompt)) || pieces.find((x) => prompt.includes(x.objective)) || {};
-    return fromSchema(opts.schema, { attacks: atks(p.id), failingOnBase, gaps: gapsOf[p.id] ?? [], model });
+    return fromSchema(opts.schema, { attacks: atksOf[p.id] ?? atks(p.id), failingOnBase, gaps: gapsOf[p.id] ?? [], model });
   }
   if (role === 'critic') {
     const ours = /^A: .*src\/a\.js/m.test(prompt) ? 'A' : 'B';
