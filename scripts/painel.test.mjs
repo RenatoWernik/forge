@@ -210,7 +210,7 @@ test('o scaffold gera um painel.json inicial válido, com o projeto, o modo e ze
   const dest = join(tmp(), 'p');
   await scaffold({
     projectName: 'Ação Ünï 2', language: 'English', memory: { workspace: 'acme', project: 'billing' },
-    mode: 'rigorous',
+    mode: 'rigorous', repo: 'acme/billing',
     models: {
       developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
       developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
@@ -253,7 +253,7 @@ test('o CLI do scaffold diz «kept» para o painel preservado e «replaced» só
   const dest = join(tmp(), 'p');
   const answers = join(tmp(), 'answers.json'); // developerUi, tester and the reasons only come through --answers (F-03)
   writeFileSync(answers, JSON.stringify({ models: Object.fromEntries(['developer', 'developerUi', 'critic', 'tester', 'aux'].map((r) => [r, { model: 'sonnet', effort: 'high', reason: 'test' }])) }));
-  const flags = ['--answers', answers, '--mode', 'rigorous', '--name', 'Acme', '--language', 'English', '--developer', 'sonnet:high', '--critic', 'opus:high', '--aux', 'sonnet:medium', '--workspace', 'acme', '--project', 'billing', '--dest', dest];
+  const flags = ['--answers', answers, '--mode', 'rigorous', '--repo', 'acme/billing', '--name', 'Acme', '--language', 'English', '--developer', 'sonnet:high', '--critic', 'opus:high', '--aux', 'sonnet:medium', '--workspace', 'acme', '--project', 'billing', '--dest', dest];
   await main(flags, () => {});
   const out = [];
   assert.equal(await main([...flags, '--force'], (m) => out.push(m)), 0);
@@ -267,7 +267,7 @@ test('scaffold com force não apaga os tickets de um painel.json em uso; o leito
   const dest = join(tmp(), 'p');
   const respostas = {
     projectName: 'Acme', language: 'English', memory: { workspace: 'acme', project: 'billing' },
-    mode: 'rigorous',
+    mode: 'rigorous', repo: 'acme/billing',
     models: {
       developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
       developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
