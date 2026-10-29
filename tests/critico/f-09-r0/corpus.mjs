@@ -17,6 +17,7 @@ const F = {
   aIntermitente: { test: 'tests/pa.test.mjs > exporta', files: ['tests/pa.test.mjs', 'src/pa.js'], suite: [1], isolated: true, cls: 'a', owners: ['pa'] },
   coreIntermitenteFalhaIsolado: { test: core, files: coreF, suite: [1], isolated: false, cls: 'a', owners: [] },
   coreEstavelMainFalha: { test: core, files: coreF, suite: [1, 2], isolated: false, main: 'all', cls: 'b', owners: [] },
+  coreEstavelMainIntermitente: { test: core, files: coreF, suite: [1, 2], isolated: false, main: 'some', cls: 'c', owners: [] },
   coreEstavelMainPassa: { test: core, files: coreF, suite: [1, 2], isolated: false, main: 'none', cls: 'a', owners: [] },
   coreEstavelSemMain: { test: core, files: coreF, suite: [1, 2], isolated: false, cls: 'a', owners: [] },
   bEstavel: { test: 'tests/pb.test.mjs > le', files: ['tests/pb.test.mjs', 'src/pb.js'], suite: [1, 2], isolated: false, cls: 'a', owners: ['pb'] },
@@ -35,20 +36,23 @@ const F = {
 };
 export const FAIL = F;
 
-// Critério 4 (+ R3, R6): expect = classes por teste, regressões peça|teste (null = a peça não é verificada) e veredito (null = não
-// verificado: só há b)
+// Critério 4 (+ R3, R6 e as 2 lacunas fechadas): expect = classes por teste, regressões peça|teste (null = a peça não é verificada)
+// e veredito
 export const FLAKY_CASES = [
   ['1 intermitente fora do diff → c, passa', [F.coreIntermitente], { classes: { [core]: 'c' }, regs: [], verdict: 'pass' }],
   ['1c intermitente fora do diff que falha isolado, sem prova na main → a, falha', [F.coreIntermitenteFalhaIsolado], { classes: { [core]: 'a' }, regs: null, verdict: 'fail' }],
   ['2 intermitente no diff → a de pa, falha', [F.aIntermitente], { classes: { 'tests/pa.test.mjs > exporta': 'a' }, regs: ['pa|tests/pa.test.mjs > exporta'], verdict: 'fail' }],
-  ['3 estável fora do diff, falha igual na main → b', [F.coreEstavelMainFalha], { classes: { [core]: 'b' }, regs: [], verdict: null }],
+  ['3 estável fora do diff, falha igual na main → b, passa (lacuna 2)', [F.coreEstavelMainFalha], { classes: { [core]: 'b' }, regs: [], verdict: 'pass' }],
+  ['3 estável fora do diff, intermitente na main → c, passa (lacuna 1)', [F.coreEstavelMainIntermitente], { classes: { [core]: 'c' }, regs: [], verdict: 'pass' }],
   ['3 estável fora do diff, não falha na main → a, falha', [F.coreEstavelMainPassa], { classes: { [core]: 'a' }, regs: null, verdict: 'fail' }],
   ['3 estável fora do diff, sem prova na main → a, falha', [F.coreEstavelSemMain], { classes: { [core]: 'a' }, regs: null, verdict: 'fail' }],
   ['4 estável no diff → a de pb, falha', [F.bEstavel], { classes: { 'tests/pb.test.mjs > le': 'a' }, regs: ['pb|tests/pb.test.mjs > le'], verdict: 'fail' }],
   ['2b intermitente que toca num ficheiro de pa (pelo diff) → a de pa', [F.coreTocaA], { classes: { 'tests/core.test.mjs > usa pa': 'a' }, regs: ['pa|tests/core.test.mjs > usa pa'], verdict: 'fail' }],
   ['1b intermitente fora do diff no E2E → c, passa', [F.e2eIntermitente], { classes: { 'tests/e2e/home.spec.ts > abre': 'c' }, regs: [], verdict: 'pass' }],
   ['R6 falha sempre no lote, passa isolado, intermitente na main → c, passa', [F.sempreMainIntermitente], { classes: { 'tests/e2e/fila.spec.ts > vista': 'c' }, regs: [], verdict: 'pass' }],
-  ['R6 falha sempre no lote, passa isolado, falha sempre na main → b', [F.sempreMainFalha], { classes: { 'tests/e2e/fila.spec.ts > vista': 'b' }, regs: [], verdict: null }],
+  ['R6 falha sempre no lote, passa isolado, falha sempre na main → b, passa (lacuna 2)', [F.sempreMainFalha], { classes: { 'tests/e2e/fila.spec.ts > vista': 'b' }, regs: [], verdict: 'pass' }],
+  ['lacuna 2: duas falhas b provadas na main e um c, sem nenhuma a → passa', [F.coreEstavelMainFalha, F.sempreMainFalha, F.e2eIntermitente], { classes: { [core]: 'b', 'tests/e2e/fila.spec.ts > vista': 'b', 'tests/e2e/home.spec.ts > abre': 'c' }, regs: [], verdict: 'pass' }],
+  ['lacuna 2: uma b provada na main ao lado de uma a de pb → falha', [F.coreEstavelMainFalha, F.bEstavel], { classes: { [core]: 'b', 'tests/pb.test.mjs > le': 'a' }, regs: ['pb|tests/pb.test.mjs > le'], verdict: 'fail' }],
   ['R6 falha sempre no lote, passa isolado, nunca falha na main → a, falha', [F.sempreMainPassa], { classes: { 'tests/e2e/fila.spec.ts > vista': 'a' }, regs: null, verdict: 'fail' }],
   ['R6 falha sempre no lote, passa isolado, sem prova na main → a, falha', [F.sempreSemMain], { classes: { 'tests/e2e/fila.spec.ts > vista': 'a' }, regs: null, verdict: 'fail' }],
 ];

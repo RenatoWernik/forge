@@ -2,7 +2,8 @@
 // declarados (falhas por execução, ficheiros tocados, repetição isolada, prova na main), nunca dos rótulos do tester. Só c não
 // reprova o lote. Oráculo: FLAKY_CASES (corpus.mjs), os 4 casos do contrato (o 3.º partido pela prova na main: falha igual → b,
 // não falha → a, sem prova → a), 2 variantes («pelo diff» e no E2E) e os 4 casos da R6 (falha em todas as execuções e passa
-// isolado: c, b ou a conforme a main). Cada caso corre com o tester a dizer a verdade e a mentir nos rótulos (class, flaky, piece,
+// isolado: c, b ou a conforme a main) e as 2 lacunas fechadas pelo orquestrador (estável fora do diff com a main intermitente → c;
+// só b provadas e nenhuma a → pass). Cada caso corre com o tester a dizer a verdade e a mentir nos rótulos (class, flaky, piece,
 // batch, regressions, verdict, passed).
 // Propriedade: 200 lotes gerados com a semente 20261029 (gerador genBatch, nos dois modos; inclui testes que tocam em 2 peças), com a
 // classe da função classFor (a regra escrita na LEITURA DO CONTRATO de helpers.mjs).

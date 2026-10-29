@@ -24,9 +24,10 @@
 //       fora do diff, passa isolado, falha só em algumas execuções → c;
 //       fora do diff, passa isolado, falha em TODAS as execuções → c se a main é intermitente, b se a main falha sempre, a se a main
 //       nunca falha ou não há prova na main;
-//       fora do diff, falha isolado → b se a main falha sempre; a se a main nunca falha ou não há prova. (Falha isolado e main
-//       intermitente: o contrato não fixa; fica fora do corpus e do gerador.)
-//     O veredito é `fail` quando há uma falha a (ou faltam execuções); só c → `pass`. Com b e sem a, o veredito não é verificado;
+//       fora do diff, falha isolado → b se a main falha sempre; c se a main é intermitente (lacuna 1, fechada pelo orquestrador:
+//       obriga à issue flaky e não bloqueia); a se a main nunca falha ou não há prova.
+//     O veredito é `fail` quando há uma falha a (ou faltam execuções); sem nenhuma a → `pass`, também com b provadas na main
+//     (lacuna 2, fechada pelo orquestrador);
 //   - recusa (critério 1) = zero agent() e nenhum retorno com `batch` (erro lançado ou retorno de recusa).
 // Os papéis reconhecem-se pelo modelo e pelo esforço (modelos de sonda distintos), nunca pelas etiquetas, que são internas.
 // Dependência do F-08: só a simulação partilhada do check.cjs (risco 2 da spec): os ataques que correm o check.cjs num projeto
@@ -191,7 +192,7 @@ export const classFor = ({ owners, isolated, all, main }) => {
   if (owners.length) return 'a';
   if (isolated && !all) return 'c';
   if (isolated) return main === 'some' ? 'c' : main === 'all' ? 'b' : 'a';
-  return main === 'all' ? 'b' : main === 'some' ? null : 'a';
+  return main === 'all' ? 'b' : main === 'some' ? 'c' : 'a';
 };
 // Um lote aleatório: testes dentro (de 1 ou 2 peças), a tocar num ficheiro de uma peça, ou fora do diff; com ou sem prova na main.
 export const genBatch = (r, mode) => {
@@ -212,11 +213,11 @@ export const genBatch = (r, mode) => {
   }
   return { ps, failures };
 };
-// O que o contrato manda: classes por teste, pares peça|teste das regressões atribuíveis, veredito (null = não verificado: há b sem a)
+// O que o contrato manda: classes por teste, pares peça|teste das regressões atribuíveis e veredito
 export const expected = (failures) => {
   const classes = Object.fromEntries(failures.map((f) => [f.test, f.cls]));
   const regs = failures.filter((f) => f.cls === 'a').flatMap((f) => f.owners.map((o) => `${o}|${f.test}`)).sort();
-  const verdict = failures.some((f) => f.cls === 'a') ? 'fail' : failures.some((f) => f.cls === 'b') ? null : 'pass';
+  const verdict = failures.some((f) => f.cls === 'a') ? 'fail' : 'pass';
   return { classes, regs, verdict };
 };
 // ---------- Projetos gerados (como os helpers do F-03 e do F-07) ----------
