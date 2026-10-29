@@ -61,7 +61,8 @@ test(`tempo: o corpus (scripts/corpus.test.mjs) passa e corre em menos de ${CORP
   assert.ok(s < CORPUS_S, `o corpus demorou ${s} s`);
 });
 
-test('âmbito: em relação à origin/main, dos ataques já fundidos só os helpers.mjs podem mudar', () => {
+const branch = git('rev-parse', '--abbrev-ref', 'HEAD').stdout.trim();
+test('âmbito: em relação à origin/main, dos ataques já fundidos só os helpers.mjs podem mudar', { skip: branch !== 'f-06-briefs' && 'só no ramo f-06-briefs' }, () => {
   const mb = git('merge-base', 'HEAD', 'origin/main');
   assert.equal(mb.status, 0, 'sem merge-base com origin/main: ' + mb.stderr);
   const changed = git('diff', '--name-only', mb.stdout.trim(), '--', ...prior().map((d) => 'tests/critico/' + d)).stdout.split(/\r?\n/).filter(Boolean);
