@@ -1,0 +1,7 @@
+{
+  "base": "pt-plain-pending",
+  "file": ".claude/workflows/gauntlet-ponytail.js",
+  "find": "painel/estado",
+  "replace": "painel/outro",
+  "line": "panel: same data: FRAMEWORK.md and every panel agent of both workflows say that whoever writes .checkpoints/painel.json writes its exact copy in painel/estado right after it, in the same step"
+}

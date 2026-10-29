@@ -249,6 +249,10 @@ async function chk(name, f) {
   const L = r.calls.map(c => c.opts.label), i2 = L.findIndex(l => l.includes(':u2:'))
   await chk('ponytail: one unit at a time (nothing of u1 after u2 starts)', () => i2 > 0 && L.slice(i2).every(l => !l.includes(':u1:')))
   await chk('panel: the seed of both workflows records pieces.checkpoint as text (a numeric 0 vanishes from the panel)', () => [seedB, r.calls[0].prompt].every(s => s.includes('"checkpoint":"1"') && !/"checkpoint":[^"]/.test(s)))
+  // FRAMEWORK.md section 6: whoever writes painel.json writes its exact copy in painel/estado right after it, in the same step (the panel page reads only that copy)
+  const sameData = t => /painel\.json[\s\S]{0,400}painel\/estado/.test(t)
+  const panelCalls = f => seen[f].flatMap(x => x.calls).filter(c => c.opts.label.startsWith('panel:'))
+  await chk('panel: same data: FRAMEWORK.md and every panel agent of both workflows say that whoever writes .checkpoints/painel.json writes its exact copy in painel/estado right after it, in the same step', () => (!has('FRAMEWORK.md') || sameData(fs.readFileSync('FRAMEWORK.md', 'utf8'))) && ['gauntlet-build.js', 'gauntlet-ponytail.js'].every(f => panelCalls(f).length > 0 && panelCalls(f).every(c => sameData(c.prompt))))
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const rec = (role, m) => new RegExp(`"role":"${role}","loop":"\\w+","model":"${esc(label(m))}","effort":"${esc(m.effort)}"`)
   const [dv, ct, pB, pC] = [[...devs, ...pd], [...crit, ...pc], rec('builder', D), rec('critic', C)]

@@ -98,6 +98,17 @@ test('bar: edits to a workflow and to FRAMEWORK.md come back as a patch that git
   for (const rel of [wf, 'FRAMEWORK.md', 'CLAUDE.md', '.claude/dashboard/panel.html']) assert.equal(await read(again, rel), await read(dir, rel), rel);
 });
 
+test('the reader embedded in panel.html goes back to its marker: an edit of the page comes back as a patch, and a project with another reader version carries no reader into the template', async () => {
+  const dir = await project();
+  const rel = '.claude/dashboard/panel.html';
+  await edit(dir, rel, 'h1 { font-size: 1.6rem;', 'h1 { font-size: 1.7rem;');
+  await edit(dir, rel, 'export const MODOS', '// a reader from an older forge\nexport const MODOS'); // the embedded reader is not this package's any more
+  const { patch, files } = await sync(dir, PKG);
+  assert.deepEqual(files, [rel]);
+  const copy = await applied(patch);
+  assert.equal(await read(copy, rel), (await template(rel)).replace('h1 { font-size: 1.6rem;', 'h1 { font-size: 1.7rem;'));
+});
+
 test('a project nobody edited gives an empty patch, whatever the setup answers were', async () => {
   const variants = [
     {},
