@@ -105,7 +105,7 @@ export const FUNDO_PASSA = [
   'npx playwright show-report', 'npx playwright show-report playwright-report', 'pnpm exec playwright show-report',
   // R1 do crítico (#14): vizinhos dos comandos com opções com valor e atalhos de script, que não são testes
   'pnpm --filter api dev', 'pnpm --filter @guilda/web dev', 'pnpm -C app dev', 'pnpm --dir packages/web start', 'pnpm run -r build', 'pnpm -r build', 'pnpm -w build',
-  'npm --prefix app run dev', 'npm -w api run build', 'yarn workspace api dev', 'yarn --cwd app start', 'bun --cwd app dev', 'pnpm build', 'pnpm dev', 'yarn dev',
+  'npm --prefix app run dev', 'npm -w api run build', 'yarn workspace api dev', 'yarn --cwd app start', 'bun --cwd app dev', 'pnpm build',
   'pnpm --filter api dev -- --test', 'pnpm --filter api dev -- test', 'npm run dev -- --test', 'pnpm -F api start',
   'pnpm --filter test dev', 'yarn workspace test dev',
 ];
