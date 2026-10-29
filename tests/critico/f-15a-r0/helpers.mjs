@@ -86,8 +86,8 @@ export const strings = (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? 
 export const isUrl = (s) => /^https?:\/\//i.test(s);
 const listOf = (e, k) => (Array.isArray(e?.surface?.[k]) ? e.surface[k].filter((s) => typeof s === 'string' && !isUrl(s)) : []);
 export const surfaceNames = (e, bucket) => (bucket ? listOf(e, bucket) : [...listOf(e, 'skills'), ...listOf(e, 'commands')]);
-// URLs fora do campo `source` (e fora de `notes`): na forma fixada (P7) não pode haver nenhum
-export const strayUrls = (e) => strings(Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k !== 'notes' && k !== 'source'))).filter(isUrl);
+// URLs fora do campo `source` (e fora de `notes` e de `pristine`, resposta P4 da #39): na forma fixada (P7) não pode haver nenhum
+export const strayUrls = (e) => strings(Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k !== 'notes' && k !== 'source' && k !== 'pristine'))).filter(isUrl);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const hasName = (e, n, bucket) => surfaceNames(e, bucket).some((s) => s === n || new RegExp(`[:\\-./ ]${esc(n)}$`).test(s));
 

@@ -122,11 +122,14 @@ test('the gauntlet-loop, a fork, records the original repository and the commit 
 });
 
 test('the notes of every entry are a map from a version to a warning; the ai-memory 3.0.0 one tells about the migration and the backup', () => {
-  for (const [id, e] of Object.entries(compat)) for (const [k, v] of Object.entries(e.notes ?? {})) assert.ok(/^\d+\.\d+\.\d+$/.test(k) && typeof v === 'string' && v, `${id} ${k}`);
+  // A note is a text, or { text, requiresBackup }: with requiresBackup, an update across that version needs the user's backup (F-15b).
+  const text = (v) => (typeof v === 'string' ? v : v?.text);
+  for (const [id, e] of Object.entries(compat)) for (const [k, v] of Object.entries(e.notes ?? {})) assert.ok(/^\d+\.\d+\.\d+$/.test(k) && typeof text(v) === 'string' && text(v) && (typeof v === 'string' || typeof v.requiresBackup === 'boolean'), `${id} ${k}`);
   const note = compat['ai-memory'].notes['3.0.0'];
-  assert.match(note, /migrat/i);
-  assert.match(note, /backup/i);
-  assert.match(note, /docs\/upgrading-to-3\.0\.md/);
+  assert.equal(note.requiresBackup, true);
+  assert.match(note.text, /migrat/i);
+  assert.match(note.text, /backup/i);
+  assert.match(note.text, /docs\/upgrading-to-3\.0\.md/);
 });
 
 test('no template path was skipped: the scan reads every file under templates/', () => {

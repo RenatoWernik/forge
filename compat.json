@@ -1,5 +1,5 @@
 {
-  "$comment": "What forge's integration was last verified against (decision D1: no pins, the doctor still compares with the newest release; this only records the tested version). verifiedWith is the version or sha tested; source is the upstream at that tag or sha; surface lists the skill names (skills) and the subcommands and flags (commands) that templates/** and check.cjs use, checked by scripts/compat.test.mjs against scripts/fixtures/compat/surface-2026-10-29.json; notes maps a version to a warning shown when updating across it; upstream (only the gauntlet-loop, a fork) is the original repository and the commit the fork was taken from.",
+  "$comment": "What forge's integration was last verified against (decision D1: no pins, the doctor still compares with the newest release; this only records the tested version). verifiedWith is the version or sha tested; source is the upstream at that tag or sha; surface lists the skill names (skills) and the subcommands and flags (commands) that templates/** and check.cjs use, checked by scripts/compat.test.mjs against scripts/fixtures/compat/surface-2026-10-29.json; notes maps a version to a warning shown when updating across it (a text, or { text, requiresBackup: true }: updating across it needs the user to confirm a backup); pristine (only the skills that forge installs by copy) maps each file under <config>/skills to the sha256 of every published version, with the content normalized to LF and trimmed, and its tag or sha and URL: a local file that matches none is customized and is not touched without --overwrite; upstream (only the gauntlet-loop, a fork) is the original repository and the commit the fork was taken from.",
   "components": {
     "uv": {
       "verifiedWith": "0.13.6",
@@ -10,6 +10,12 @@
       "verifiedWith": "fc6b2fc",
       "source": "https://github.com/RenatoWernik/gauntlet-loop/tree/fc6b2fc",
       "upstream": { "repo": "robonuggets/gauntlet-loop", "base": "9b1975a" },
+      "pristine": {
+        "gauntlet-loop/SKILL.md": [
+          { "ref": "fc6b2fc", "sha256": "7ee54fa150c6eb1af07e7069e7fafcaceb00b71ca346cd4f2a5a988918e496b9", "url": "https://raw.githubusercontent.com/RenatoWernik/gauntlet-loop/fc6b2fc/.claude/skills/gauntlet-loop/SKILL.md" },
+          { "ref": "9b1975a", "sha256": "e3653566c6c1fa3125c0a3c48586367dc76ab62c18b5cf5e9d449d067fde8638", "url": "https://raw.githubusercontent.com/robonuggets/gauntlet-loop/9b1975a/.claude/skills/gauntlet-loop/SKILL.md" }
+        ]
+      },
       "surface": { "skills": ["gauntlet-loop"], "commands": [] }
     },
     "ai-memory": {
@@ -17,7 +23,10 @@
       "source": "https://github.com/akitaonrails/ai-memory/tree/v3.2.10",
       "surface": { "skills": [], "commands": ["ai-memory backup", "ai-memory hook", "ai-memory install-mcp", "ai-memory pending-writes", "ai-memory read-page", "ai-memory status"] },
       "notes": {
-        "3.0.0": "Major: the database is migrated on first start, and going back needs a backup and the 2.x binary. Take a backup (`ai-memory backup`) before updating across 3.0.0, and read docs/upgrading-to-3.0.md first."
+        "3.0.0": {
+          "requiresBackup": true,
+          "text": "Major: the database is migrated on first start, and going back needs a backup and the 2.x binary. Take a backup (`ai-memory backup`) before updating across 3.0.0, and read docs/upgrading-to-3.0.md first."
+        }
       }
     },
     "ai-memory-mcp": {
@@ -28,6 +37,32 @@
     "ponytail": {
       "verifiedWith": "5.3.3",
       "source": "https://github.com/DietrichGebert/ponytail/tree/v5.3.3",
+      "pristine": {
+        "ponytail/SKILL.md": [
+          { "ref": "v5.3.3", "sha256": "54ba3851a4ea7100c371a3550ddef1a311b7c2c3bdb8c513db2a5e9fa64ecd70", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v5.3.3/skills/ponytail/SKILL.md" },
+          { "ref": "v4.10.0", "sha256": "4d004a7499245e5a1131b6a5489cf504952d60090776df86ef6fa135f1443a65", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v4.10.0/skills/ponytail/SKILL.md" }
+        ],
+        "ponytail-audit/SKILL.md": [
+          { "ref": "v5.3.3", "sha256": "10eaedd92a34194d0dc0a7d81e0368bcc9e713315db7c9e1db185f72d9f25473", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v5.3.3/skills/ponytail-audit/SKILL.md" },
+          { "ref": "v4.10.0", "sha256": "b06b385a9bf8437de41c898974938ca670d0708c3e943d414a593c9763371bfc", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v4.10.0/skills/ponytail-audit/SKILL.md" }
+        ],
+        "ponytail-debt/SKILL.md": [
+          { "ref": "v5.3.3", "sha256": "688de7b5be11e7a8a7ec894dcb2232e92442dd129ba1a83f918ab428ff5e3978", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v5.3.3/skills/ponytail-debt/SKILL.md" },
+          { "ref": "v4.10.0", "sha256": "5d037963e9305b740187d2d411c9d3ae09315536cd2629f6e921f32afbbcf274", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v4.10.0/skills/ponytail-debt/SKILL.md" }
+        ],
+        "ponytail-gain/SKILL.md": [
+          { "ref": "v5.3.3", "sha256": "5f5cfdfba67502441f131c5420a654058b7139c15d3d25bf16276553b8f5f295", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v5.3.3/skills/ponytail-gain/SKILL.md" },
+          { "ref": "v4.10.0", "sha256": "27de97458122f640d290dfc72a111a803530d85fdfc8c7542d1b23f55579ef1e", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v4.10.0/skills/ponytail-gain/SKILL.md" }
+        ],
+        "ponytail-help/SKILL.md": [
+          { "ref": "v5.3.3", "sha256": "f68337ee993f626eec941d474ebf9f22c63191b650ebb39022b73b076ce3e7f6", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v5.3.3/skills/ponytail-help/SKILL.md" },
+          { "ref": "v4.10.0", "sha256": "5b0ba3957c1c43dd1e6bf0fdcbac0cdf35b80f48edc63fbe412ff45d3471202f", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v4.10.0/skills/ponytail-help/SKILL.md" }
+        ],
+        "ponytail-review/SKILL.md": [
+          { "ref": "v5.3.3", "sha256": "125036d590f6de8f416b06209124778b8b5c0f0d5c6312d8bf6985e01b89d862", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v5.3.3/skills/ponytail-review/SKILL.md" },
+          { "ref": "v4.10.0", "sha256": "c94db41b601856b79a9b391f0e33de3cbbcf2426515e51bf5b69ab5f3069a504", "url": "https://raw.githubusercontent.com/DietrichGebert/ponytail/v4.10.0/skills/ponytail-review/SKILL.md" }
+        ]
+      },
       "surface": { "skills": ["ponytail", "ponytail-audit", "ponytail-debt", "ponytail-review"], "commands": [] }
     },
     "spec-kit": {
@@ -41,6 +76,12 @@
     "sdd": {
       "verifiedWith": "2.1.0",
       "source": "https://github.com/SpillwaveSolutions/sdd-skill/tree/eba9606",
+      "pristine": {
+        "sdd/SKILL.md": [
+          { "ref": "eba9606", "sha256": "907acd1f19f9d697fc2f9a813ed0fed1656d336a302cafbd77bd86ec2f18f0c1", "url": "https://raw.githubusercontent.com/SpillwaveSolutions/sdd-skill/eba9606/skill.md" },
+          { "ref": "0ec5955", "sha256": "9718c918657007c19ed0588365051acbc9b162f38648a79ec693c5b92d595f4c", "url": "https://raw.githubusercontent.com/SpillwaveSolutions/sdd-skill/0ec5955/skill.md" }
+        ]
+      },
       "surface": { "skills": ["sdd"], "commands": [] }
     },
     "mattpocock-skills": {
