@@ -9,11 +9,9 @@
 //       regression   suite 2× and E2E 3× | suite 2× and E2E 3×
 //       blind        two orders | one order, a tie passes
 //       never relax  secrets, security, data loss, false alarms or charges, regressions | o mesmo (ou «same»/«idem»)
-//   - mutações: o mode do forge.json fora da tabela (en e pt) e a coluna do próprio modo renomeada no cabeçalho (en, os dois modos).
+//   - mutação: a coluna do modo do projeto renomeada no cabeçalho da tabela (en nos dois modos; pt no projeto já «traduzido»).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { join } from 'node:path';
-import { readFileSync, writeFileSync } from 'node:fs';
 import { COMBOS, ANSWERS, ANSWERS_PT, generate, check, lineState, fails, edit } from './helpers.mjs';
 
 const cells = (row) => row.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.replace(/[`*]/g, '').trim());
@@ -61,20 +59,12 @@ for (const [name, answers] of COMBOS) {
   });
 }
 
-for (const [name, answers] of [['en', ANSWERS()], ['pt', ANSWERS_PT({ mode: 'accelerated' })]]) {
-  test(`C3 mutação (${name}): um mode do forge.json sem coluna na tabela («turbo») faz falhar a linha «mode»`, async () => {
+// Um mode fora de rigorous e accelerated já faz falhar a linha forge.json (F-03), que para o check antes das outras linhas; o
+// caso que só a linha «mode» apanha é a tabela sem a coluna do modo do projeto.
+for (const [lang, mode, answers] of [['en', 'rigorous', ANSWERS({ mode: 'rigorous' })], ['en', 'accelerated', ANSWERS({ mode: 'accelerated' })], ['pt', 'accelerated', ANSWERS_PT({ mode: 'accelerated' })]]) {
+  const word = mode;
+  test(`C3 mutação (${lang}, ${mode}): a coluna «${word}» renomeada no cabeçalho da tabela faz falhar a linha «mode»`, async () => {
     const { dest } = await generate(answers);
-    const f = join(dest, '.claude/forge.json');
-    writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(f, 'utf8')), mode: 'turbo' }, null, 2));
-    const r = check(dest);
-    assert.equal(lineState(r.out, 'mode'), 'FAIL', fails(r.out));
-    assert.equal(r.status, 1);
-  });
-}
-
-for (const [mode, word] of [['rigorous', 'rigorous'], ['accelerated', 'accelerated']]) {
-  test(`C3 mutação (en, ${mode}): a coluna «${word}» renomeada no cabeçalho da tabela faz falhar a linha «mode»`, async () => {
-    const { dest } = await generate(ANSWERS({ mode }));
     edit(dest, 'FRAMEWORK.md', (text) => {
       const t = modeTable(text);
       if (!t) throw new Error('não há tabela dos modos (pré-condição)');
