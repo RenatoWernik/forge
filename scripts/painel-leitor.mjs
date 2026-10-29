@@ -63,7 +63,8 @@ const falha = (erro) => ({ erro, contagens: null, agentes: [] });
 
 // texto: the content of painel.json (a leading BOM is accepted); mtimes: { <checkpoint file name>: mtime in ms }; agora: ms.
 // Never throws: a missing, truncated or invalid painel.json gives { erro, contagens: null, agentes: [] }, never partial data.
-export function ler(texto, mtimes = {}, agora) {
+export function ler(texto, mtimes, agora) {
+  mtimes ??= {};
   if (!isStr(texto)) return falha('painel.json is missing');
   let o;
   try { o = JSON.parse(texto.replace(/^﻿/, '')); } catch (e) { return falha(`painel.json is not valid JSON: ${e.message}`); }
