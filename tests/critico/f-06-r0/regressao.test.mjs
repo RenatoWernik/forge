@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { ROOT, sandboxEnv } from './helpers.mjs';
+import { ROOT, sandboxEnv, REAL_ENV } from './helpers.mjs';
 
 // Número de test() de topo por ficheiro em e083b6a
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
@@ -27,9 +27,9 @@ const REQUIRED = ['f-01-r0', 'f-02-r0', 'f-03-r0', 'f-10-r0'];
 const CORPUS_S = 60, F02_S = 540;
 const prior = () => readdirSync(join(ROOT, 'tests/critico')).filter((d) => d !== 'f-06-r0' && /-r0$/.test(d)).sort();
 const NESTED = 'scripts/\\*\\.test\\.mjs|continuam verdes';
-const runTests = (args, timeout = 520000) => {
+const runTests = (args, timeout = 520000, env = sandboxEnv()) => {
   const t0 = Date.now();
-  const r = spawnSync(process.execPath, ['--test', '--test-concurrency=2', '--test-reporter=tap', ...args], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout });
+  const r = spawnSync(process.execPath, ['--test', '--test-concurrency=2', '--test-reporter=tap', ...args], { cwd: ROOT, encoding: 'utf8', env, timeout });
   const out = (r.stdout || '') + (r.stderr || '');
   return { status: r.status, signal: r.signal, ms: Date.now() - t0, out, pass: +(out.match(/^# pass (\d+)/m) || [])[1], fail: +(out.match(/^# fail (\d+)/m) || [])[1] };
 };
@@ -76,7 +76,8 @@ test('regressão: as pastas dos ataques já fundidos (f-01, f-02, f-03, f-10) ex
 // também tem de correr em menos de 540 s (resposta 6); o timeout de 530 s de cada pasta já o garante.
 for (const d of prior()) {
   test(`regressão: ${d} continua verde${d === 'f-02-r0' ? ` e corre em menos de ${F02_S} s` : ''}`, (t) => {
-    const r = runTests([`--test-skip-pattern=${NESTED}`, `tests/critico/${d}/*.test.mjs`], 530000);
+    // o f-12-r0 abre o Chrome e gere o próprio ambiente: não se sobrepõem HOME, USERPROFILE nem TMP
+    const r = runTests([`--test-skip-pattern=${NESTED}`, `tests/critico/${d}/*.test.mjs`], 530000, d === 'f-12-r0' ? REAL_ENV : undefined);
     t.diagnostic(`${d}: ${Math.round(r.ms / 1000)} s`);
     assert.equal(r.status, 0, failures(r));
     assert.equal(r.fail, 0, failures(r));

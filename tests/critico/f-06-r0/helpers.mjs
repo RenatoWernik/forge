@@ -22,6 +22,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
+// O ambiente real, antes de o sandbox o trocar: os ataques de página do F-12 gerem o ambiente deles (Chrome com o USERPROFILE real)
+export const REAL_ENV = (() => { const env = { ...process.env }; delete env.NODE_TEST_CONTEXT; return env; })();
 const WORK = mkdtempSync(join(tmpdir(), 'critico-f06-'));
 const HOME = join(WORK, 'home'), TMP = join(WORK, 'tmp');
 mkdirSync(HOME); mkdirSync(TMP);
