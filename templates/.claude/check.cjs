@@ -322,7 +322,7 @@ async function chk(name, f) {
     await chk('render: with forge.json unchanged, --render changes nothing and says so; after forge.json changes (developer probe-dev, xhigh), --render rewrites the model and effort in the workflow meta, the check is green in both configurations and a second --render changes nothing again', () => trip(({ run, wfText, tmp }) => {
       const [dev, same] = [{ model: 'probe-dev', effort: 'xhigh', label: 'Probe Dev 9.9', reason: 'probe' }, run('--render')]
       const first = run()
-      fs.writeFileSync(path.join(tmp, '.claude/forge.json'), JSON.stringify({ ...FJ, models: { ...F, developer: dev } }))
+      fs.writeFileSync(path.join(tmp, '.claude/forge.json'), JSON.stringify({ ...FJ, mode: FJ.mode === 'rigorous' ? 'accelerated' : 'rigorous', models: { ...F, developer: dev, developerUi: { ...dev, label: 'Probe UI 9.9' }, tester: { ...dev, label: 'Probe Tester 9.9' } } })) // the other roles and the mode change too: the check stays green, and no meta text of them is written until a workflow shows them
       const [again, second, after, third] = [run('--render'), run(), wfText(), run('--render')]
       return same.code === 0 && /nothing to render/.test(same.text) && !/^rendered/m.test(same.text) && first.code === 0
         && again.code === 0 && /^rendered/m.test(again.text) && after.every(t => t.includes('Probe Dev 9.9 xhigh') && !t.includes(label(D) + ' ' + D.effort + ' builds') && !t.includes(label(D) + ' ' + D.effort + ' cuts'))
