@@ -9,7 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { validar, ler } from './painel-leitor.mjs';
 import { aplicar, bloqueio } from './painel.mjs';
-import { scaffold, LEITOR_NO_PROJETO } from './scaffold.mjs';
+import { scaffold, main, LEITOR_NO_PROJETO } from './scaffold.mjs';
 
 const CLI = fileURLToPath(new URL('./painel.mjs', import.meta.url));
 const MIN = 60000, AGORA = Date.UTC(2026, 9, 29, 12, 0, 0);
@@ -217,6 +217,41 @@ test('o scaffold gera um painel.json inicial válido, com o projeto, o modo e ze
   assert.deepEqual(JSON.parse(raw), { versao: 1, projeto: 'Ação Ünï 2', modo: 'rigoroso', tickets: [], agentes: [] });
   assert.equal(ler(raw, {}, AGORA).percentagem, 0);
   assert.ok(readFileSync(join(dest, LEITOR_NO_PROJETO)).equals(readFileSync(new URL('./painel-leitor.mjs', import.meta.url))));
+});
+
+test('redefinir um ticket ou um agente existente conserva os seus campos extra (2 por item) e é idempotente', () => {
+  const o = base();
+  Object.assign(o.tickets[0], { nota: 'n «1»', etiquetas: ['a', { b: null }] });
+  Object.assign(o.agentes[0], { titulo: 'Lote 2', cor: { r: 1 } });
+  Object.assign(o.agentes[1], { titulo: 'Crítico', cor: 'x' });
+  const { file } = painelTmp(o);
+  const passos = [
+    ['ticket', { id: 'T-01', issue: '99', titulo: 'novo', estado: 'dev', rondas: '5' }],
+    ['agente', { nome: 'dev-t03', papel: 'tester', ticket: 'T-01', modelo: 'haiku', checkpoint: 'x.md' }], // without porta: the porta goes, the extras stay
+    ['agente', { nome: 'critico-t03', papel: 'dev', ticket: 'T-02', modelo: 'opus', checkpoint: 'y.md', porta: '4000' }],
+  ];
+  for (const [k, args] of passos) {
+    aplicar(file, k, args);
+    const uma = readFileSync(file);
+    aplicar(file, k, args);
+    assert.ok(readFileSync(file).equals(uma));
+  }
+  const d = JSON.parse(readFileSync(file, 'utf8'));
+  assert.deepEqual(d.tickets[0], { id: 'T-01', issue: 99, titulo: 'novo', estado: 'dev', rondas: 5, nota: 'n «1»', etiquetas: ['a', { b: null }] });
+  assert.deepEqual(d.agentes[0], { nome: 'dev-t03', papel: 'tester', ticket: 'T-01', modelo: 'haiku', checkpoint: 'x.md', titulo: 'Lote 2', cor: { r: 1 } });
+  assert.deepEqual(d.agentes[1], { nome: 'critico-t03', papel: 'dev', ticket: 'T-02', modelo: 'opus', checkpoint: 'y.md', porta: 4000, titulo: 'Crítico', cor: 'x' });
+});
+
+test('o CLI do scaffold diz «kept» para o painel preservado e «replaced» só para o que foi mesmo substituído', async () => {
+  const dest = join(tmp(), 'p');
+  const flags = ['--name', 'Acme', '--language', 'English', '--developer', 'sonnet:high', '--critic', 'opus:high', '--aux', 'sonnet:medium', '--workspace', 'acme', '--project', 'billing', '--dest', dest];
+  await main(flags, () => {});
+  const out = [];
+  assert.equal(await main([...flags, '--force'], (m) => out.push(m)), 0);
+  const msg = out.join('\n');
+  assert.match(msg, /existing files \(kept\): \.checkpoints\/painel\.json/);
+  assert.doesNotMatch(msg, /\(replaced\): .*painel\.json/);
+  assert.match(msg, /\(replaced\): .*\.claude\/painel-leitor\.mjs/);
 });
 
 test('scaffold com force não apaga os tickets de um painel.json em uso; o leitor aceita mtimes null', async () => {

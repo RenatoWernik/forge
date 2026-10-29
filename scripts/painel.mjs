@@ -16,14 +16,22 @@ const num = (s) => (/^-?\d+$/.test(s) ? Number(s) : s); // anything else stays t
 
 export const bloqueio = (file) => `${file}.lock`;
 
+const CAMPOS_TICKET = ['id', 'issue', 'titulo', 'estado', 'rondas'];
+const CAMPOS_AGENTE = ['nome', 'papel', 'ticket', 'modelo', 'checkpoint', 'porta'];
+
 // the key=value pairs each command accepts, as the object it defines
 const OPS = {
-  ticket: { chaves: ['id', 'issue', 'titulo', 'estado', 'rondas'], aplica: (o, a) => poe(o.tickets, 'id', { id: a.id, issue: num(a.issue), titulo: a.titulo, estado: a.estado, rondas: num(a.rondas) }) },
-  agente: { chaves: ['nome', 'papel', 'ticket', 'modelo', 'checkpoint', 'porta'], aplica: (o, a) => poe(o.agentes, 'nome', { nome: a.nome, papel: a.papel, ticket: a.ticket, modelo: a.modelo, checkpoint: a.checkpoint, ...(a.porta !== undefined && { porta: num(a.porta) }) }) },
+  ticket: { chaves: CAMPOS_TICKET, aplica: (o, a) => poe(o.tickets, 'id', CAMPOS_TICKET, { id: a.id, issue: num(a.issue), titulo: a.titulo, estado: a.estado, rondas: num(a.rondas) }) },
+  agente: { chaves: CAMPOS_AGENTE, aplica: (o, a) => poe(o.agentes, 'nome', CAMPOS_AGENTE, { nome: a.nome, papel: a.papel, ticket: a.ticket, modelo: a.modelo, checkpoint: a.checkpoint, ...(a.porta !== undefined && { porta: num(a.porta) }) }) },
   'remover-agente': { chaves: ['nome'], aplica: (o, a) => { o.agentes = o.agentes.filter((x) => x.nome !== a.nome); } },
   objetivo: { chaves: ['texto'], aplica: (o, a) => { o.objetivo = a.texto; } },
 };
-const poe = (lista, k, x) => { const i = lista.findIndex((y) => y[k] === x[k]); i < 0 ? lista.push(x) : (lista[i] = x); };
+// Defines the item: creates it, or replaces its schema fields and keeps the extra fields it already had (forward compatibility).
+const poe = (lista, k, campos, x) => {
+  const i = lista.findIndex((y) => y[k] === x[k]);
+  if (i < 0) return lista.push(x);
+  lista[i] = { ...x, ...Object.fromEntries(Object.entries(lista[i]).filter(([c]) => !campos.includes(c))) };
+};
 
 function bloquear(lock) {
   const fim = Date.now() + LOCK_MS;

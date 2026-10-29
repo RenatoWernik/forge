@@ -234,8 +234,11 @@ export async function main(argv, write) {
       plainStyle: v['no-plain-style'] ? false : base.plainStyle,
     };
     const { files, conflicts } = await scaffold(answers, { dest, dryRun: v['dry-run'], force: v.force });
+    const kept = v['dry-run'] ? [] : conflicts.filter((f) => f === PAINEL); // a real run keeps the board
+    const replaced = conflicts.filter((f) => !kept.includes(f));
     write([`forge scaffold${v['dry-run'] ? ' (dry run, nothing written)' : ''}: ${files.length} files in ${dest}`, ...files.map((f) => `  ${f}`),
-      ...(conflicts.length ? [`existing files${v['dry-run'] ? ' (a real run needs --force)' : ' (replaced)'}: ${conflicts.join(', ')}`] : [])].join('\n'));
+      ...(replaced.length ? [`existing files${v['dry-run'] ? ' (a real run needs --force)' : ' (replaced)'}: ${replaced.join(', ')}`] : []),
+      ...(kept.length ? [`existing files (kept): ${kept.join(', ')}`] : [])].join('\n'));
     return 0;
   } catch (e) {
     write(`${e.message}\n${USAGE}`);
