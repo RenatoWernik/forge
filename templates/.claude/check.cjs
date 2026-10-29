@@ -176,11 +176,11 @@ async function chk(name, f) {
   if (here.length) await chk('ticket contract: GitHub Issues (CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md read it with ' + GH + ', with no contract file in the project)', () => here.every(f => !LOCAL.test(text(f))) && here.filter(f => f !== 'BOOTSTRAP.md').every(f => text(f).includes(GH)))
 
   // briefs: the 4 role briefs of .claude/briefs/. Each has what every brief has (the hook warning in its first 5 lines, the operating rules, the contract in the issue, the rule of the real sessions)
-  // and the clauses of its role. A rule is [what the FAIL line says, literals that survive a translation (code spans), English prose patterns]: in English both are read, in another language
+  // and the clauses of its role. A rule is [what the FAIL line says, literals that survive a translation (code spans), English prose patterns, true when only the first 5 lines are read]: in English both are read, in another language
   // only the literals, because the prose is the translator's. The FAIL line names the brief and the rule that is missing.
   // ponytail: the prose of another language is not read, upgrade: add the patterns of a language here when a translation of the briefs is checked by words
   const BRIEF_ALL = [
-    ['hook warning in the first 5 lines', ['CONTEXT WARNING', 'CONTEXT CRITICAL'], [/orchestrator/i, /\b(never|not|no)\b[^\n]{0,80}\b(stop|halt|pause)/i]],
+    ['hook warning in the first 5 lines', ['CONTEXT WARNING', 'CONTEXT CRITICAL'], [/orchestrator/i, /\b(never|not|no)\b[^\n]{0,80}\b(stop|halt|pause)/i], true],
     ['kill by PID rule (never by name)', ['taskkill /IM', 'killall', 'pkill'], [/\bPID\b/]],
     ['foreground tests rule (never in the background)', ['run_in_background'], [/foreground/i, /\b9\s*min(utes)?\b|\b540\s*s\b/i]],
     ['checkpoint rule (after each step)', ['.checkpoints/'], [/after (each|every)\s+(step|stage)/i]],
@@ -224,7 +224,7 @@ async function chk(name, f) {
     const f = '.claude/briefs/' + b + '.md'
     if (!has(f)) return [b + '.md: the file is missing']
     const all = fs.readFileSync(f, 'utf8'), top = all.split(/\r?\n/).slice(0, 5).join('\n')
-    const miss = [...BRIEF_ALL, ...BRIEF_ROLE[b]].filter(([what, lits, res]) => { const s = what.startsWith('hook') ? top : all; return !lits.every(l => s.includes(l)) || (en && !res.every(re => re.test(s))) }).map(r => r[0])
+    const miss = [...BRIEF_ALL, ...BRIEF_ROLE[b]].filter(([, lits, res, onTop]) => { const s = onTop ? top : all; return !lits.every(l => s.includes(l)) || (en && !res.every(re => re.test(s))) }).map(r => r[0])
     return miss.length ? [b + '.md: ' + miss.join(', ')] : []
   })
   await chk('briefs (' + (lacks.length ? 'not ok: ' + lacks.join('; ') : 'the 4 role briefs of .claude/briefs/') + ')', () => !lacks.length)
