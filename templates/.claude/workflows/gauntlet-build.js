@@ -42,8 +42,10 @@ const cap = (s, n, what) => {
   return `${s.slice(0, n)} [cut: +${s.length - n} characters]`
 }
 // Panel agent: the workflow result does not depend on it, but a failure (no "ok") goes to the log().
+// Every panel agent also gets the same-data rule of FRAMEWORK.md, section 6 (the panel page reads that copy).
+const SAME_DATA = 'Same data: if you write .checkpoints/painel.json, then in the same step, right after it, "set" painel/estado with exactly the object of that file (nothing added, removed or changed) and then painel/vida, as FRAMEWORK.md section 6 says.'
 const aux = async (prompt, label, ph) => {
-  const r = await agent(prompt, { label, phase: ph, model: R.aux.model, effort: R.aux.effort })
+  const r = await agent(prompt + '\n' + SAME_DATA, { label, phase: ph, model: R.aux.model, effort: R.aux.effort })
   if (!/^ok\b/i.test(String(r).trim())) log(`WARNING ${label}: the panel did not confirm (${String(r).slice(0, 100)})`)
 }
 

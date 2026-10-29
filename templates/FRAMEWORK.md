@@ -224,6 +224,9 @@ URL: {{DASHBOARD_URL}}. Tool `ArtifactData` (ToolSearch `select:ArtifactData`). 
 | `events` | `{agentId}-a` start, `-z` end, `-v` verdict; `o-cp{N}-{slug}` for the orchestrator | `t, who, kind, loop, text` | `kind`: ok, fail, decision, info |
 | `notes` | `nNNNN` (orchestrator, 4 sequential digits); `{agentId}-n`; `cp{N}-{piece}-travada` (Ponytail: `cp{N}-pt-{unit}-travada`) | `t, kind, title, body` | `kind`: decisao, risco, pergunta, info, erro |
 | `inbox` | created by the page | `t, text, status, reply` | `status`: novo, lido |
+| `painel` | `estado`; `vida` | `estado`: the exact object of `.checkpoints/painel.json`; `vida`: `t, agentes` (`{<nome>: {minutos, vida}}`) | `vida`: a começar, ativo, sem sinal, parado? |
+
+Whoever writes `.checkpoints/painel.json` writes, in the same step and right after it, its exact copy in `painel/estado` (`set` with the object of the file: nothing added, removed or changed), and then `painel/vida` (`set` with `t` = now and, for each agent, the `minutos` and `vida` that `ler()` of `.claude/painel-leitor.mjs` gives for the mtime of its `.checkpoints/<checkpoint>`). The page draws the tickets and agents from these two documents with that same reader and never writes them.
 
 The orchestrator writes `meta/*`, `checkpoints/cp{N}` (creates `{n, title, status:"planejado", ponytail:"pendente"}` and closes it), `notes/nNNNN`, `events/o-...`, `pieces` only as `failed`, and marks the `inbox` as `lido`. The workflows and their agents write the rest according to the seed and `panel()`, including the switch of `checkpoints/cp{N}.status` to `ativo` (build) and of `ponytail` to `rodando` (Ponytail); `verdict`, `gap` and `events/-v` come from the workflow's panel agent, never from the critic. Exception: a standalone loop you conduct, without a workflow (ids `m-...`): the critic writes `verdict` and `gap` on its own agent and on `pieces/<id>`.
 
