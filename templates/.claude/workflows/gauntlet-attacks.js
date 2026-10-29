@@ -100,7 +100,7 @@ async function attack(p) {
   if (!modelOk(v)) log(`WARNING ${p.id}: the Round -1 critic declared model "${v.model}", expected ${R.critic.label}`)
   const attacks = Array.isArray(v.attacks) ? v.attacks : []
   const plain = attacks.filter(a => a && a.guard !== true)
-  return { id: p.id, attacks, failingOnBase: plain.length > 0 && plain.every(a => a.passesOnBase === false), gaps: v.gaps }
+  return { id: p.id, attacks, failingOnBase: plain.length > 0 && plain.every(a => a.passesOnBase === false), gaps: Array.isArray(v.gaps) ? v.gaps : ['gaps missing from the answer'] }
 }
 
 phase('Attacks')
