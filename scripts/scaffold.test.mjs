@@ -108,6 +108,16 @@ test('mode, the 5 roles and their reasons are validated all at once, naming each
   assert.deepEqual(saved.models.developer, { model: 'sonnet', effort: 'max', label: 'Lab', reason: answers().models.developer.reason });
 });
 
+test('the answers example documented in skills/new-project/SKILL.md passes the scaffold without errors', async () => {
+  const skill = await readFile(fileURLToPath(new URL('../skills/new-project/SKILL.md', import.meta.url)), 'utf8');
+  const example = JSON.parse(skill.slice(skill.indexOf('Write the answers as JSON')).match(/```json\r?\n([\s\S]*?)\r?\n```/)[1]);
+  const dest = await tmp();
+  const { files } = await scaffold(example, { dest, dryRun: true });
+  assert.ok(files.includes('.claude/forge.json'));
+  assert.deepEqual(Object.keys(example.models), ['developer', 'developerUi', 'critic', 'tester', 'aux']);
+  assert.deepEqual(await readdir(dest), []);
+});
+
 test('an existing file is never overwritten without force; a dry run reports the conflict', async () => {
   const dest = await tmp();
   await writeFile(join(dest, 'CLAUDE.md'), 'mine\n');

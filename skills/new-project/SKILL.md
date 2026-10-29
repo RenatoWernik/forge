@@ -39,19 +39,22 @@ Ask in chat, in this order, waiting for the answers. You may propose a value, bu
 
 1. **Project name.** Suggest the folder name.
 2. **Language** of the documents, panel texts, notes and commits (for example English or Portuguese (Brazil)). Suggest the language the user writes in.
-3. **Models and effort** for three roles: the developer (builds with TDD), the critic (judges blind, fresh context, ideally the strongest model available) and the auxiliaries (panel agent and readers). For each: a model alias or ID accepted by the `Workflow` tool (for example `sonnet`, `opus`, `haiku`, or a full model ID) and an effort (`low`, `medium`, `high`, `xhigh` or `max`). Optionally a display label and a `match` regex the model ID must satisfy (default: the model itself).
-4. **ai-memory scope**: a workspace and a project name (letters, digits, dot, dash, underscore). Suggest a slug of the project name for the project.
-5. **Shell for the Spec Kit scripts**: `sh` (macOS, Linux, Git Bash) or `ps` (PowerShell). Suggest `sh` when `bash` is on the PATH, else `ps`.
-6. **Plain style**: forbid dashes, arrows and emoji in CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md (the checker enforces it). Suggest yes.
-7. **Global rules to switch off** for this project, if the user has global `~/.claude/CLAUDE.md` rules that conflict with the framework. Optional; if any, you will record them in the `## User global rules` section of CLAUDE.md after generation.
+3. **Mode**: `rigorous` (the full process: the critic's attacks before the code, several rounds, the full regression once per batch) or `accelerated` (fewer rounds, less quality margin, security never relaxes). Suggest `rigorous`.
+4. **Models and effort** for five roles: the developer (builds logic and server code with TDD), the UI developer (`developerUi`: builds the rich interface), the critic (judges blind, fresh context, ideally the strongest model available), the tester (runs the batch suite and the end-to-end checks) and the auxiliaries (panel agent and readers). For each: a model alias or ID accepted by the `Workflow` tool (for example `sonnet`, `opus`, `haiku`, or a full model ID), an effort (`low`, `medium`, `high`, `xhigh` or `max`) and a `reason`: one line on why this model and effort (propose one, the user may edit it; it is required). Optionally a display label and a `match` regex the model ID must satisfy (default: the model itself). Defaults to propose for the two new roles: `developerUi` on `opus` with `high` ("rich UI work needs a strong model"), `tester` on `haiku` with `high` ("the batch suite is mechanical work"). The full interview comes with a later release; here, ask for these five and nothing more.
+5. **ai-memory scope**: a workspace and a project name (letters, digits, dot, dash, underscore). Suggest a slug of the project name for the project.
+6. **Shell for the Spec Kit scripts**: `sh` (macOS, Linux, Git Bash) or `ps` (PowerShell). Suggest `sh` when `bash` is on the PATH, else `ps`.
+7. **Plain style**: forbid dashes, arrows and emoji in CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md (the checker enforces it). Suggest yes.
+8. **Global rules to switch off** for this project, if the user has global `~/.claude/CLAUDE.md` rules that conflict with the framework. Optional; if any, you will record them in the `## User global rules` section of CLAUDE.md after generation.
 
 For a language other than English or Portuguese, also translate the panel page: take the values of the `EN` object in `${CLAUDE_PLUGIN_ROOT}/templates/.claude/dashboard/panel.html`, translate them keeping the keys, the `{n}`-style placeholders and the separators between words, and pass the result as `panelStrings`, with a BCP 47 `langTag`. Identifiers such as `ganhou`, `pergunta` or `ativo` are never translated.
 
 Write the answers as JSON to a file in the operating system's temp folder (not in the project):
 
 ```json
-{"projectName":"...","language":"...","models":{"developer":{"model":"...","effort":"..."},"critic":{"model":"...","effort":"..."},"aux":{"model":"...","effort":"..."}},"memory":{"workspace":"...","project":"..."},"script":"sh","plainStyle":true}
+{"projectName":"My Project","language":"English","mode":"rigorous","models":{"developer":{"model":"sonnet","effort":"high","reason":"logic and server code"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"high","reason":"the batch suite is mechanical work"},"aux":{"model":"sonnet","effort":"medium","reason":"the panel only records"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
 ```
+
+The values above are an example: replace every one with the user's answers. `mode` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role.
 
 ## 3. Generate the files
 
@@ -62,7 +65,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --d
 node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --dest .
 ```
 
-It writes `CLAUDE.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the models you asked for), `.claude/check.cjs`, both workflows and `.claude/dashboard/panel.html`. It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
+It writes `CLAUDE.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the mode, the five roles with their reasons and the escalation rules), `.claude/check.cjs`, both workflows and `.claude/dashboard/panel.html`. It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
 
 ### Translate the documents
 
