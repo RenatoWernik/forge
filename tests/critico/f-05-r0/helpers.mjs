@@ -3,7 +3,7 @@
 // para <pasta>/home e TMP, TEMP e TMPDIR para <pasta>/tmp (também nos processos filhos). Tudo o que os ataques criam fica dentro
 // dela, e ela é apagada no after() e, de reserva, no exit.
 //
-// Leitura do contrato que estes ataques assumem (as PERGUNTAS na #6 dizem onde é leitura minha):
+// Leitura do contrato que estes ataques assumem (confirmada pelas respostas do orquestrador às PERGUNTAS na #6):
 //   - «o CLAUDE.md gerado» e «o FRAMEWORK.md gerado» = a saída do scaffold (inglês, antes da tradução da skill). Os literais são
 //     verificados aí, nas duas línguas do corpus. As linhas do check.cjs são verificadas no projeto já «traduzido» com o mesmo
 //     substituto do scripts/corpus.test.mjs (e083b6a), aplicado também ao AGENTS.md.

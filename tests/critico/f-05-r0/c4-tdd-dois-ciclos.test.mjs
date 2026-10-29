@@ -1,7 +1,7 @@
 // F-05 critério 4: o FRAMEWORK.md descreve a Ronda −1 como «TDD em dois ciclos»: o ciclo de aceitação, de fora, com os ataques do
 // crítico; o ciclo de dentro, com a skill `tdd` (uma seam, um teste, vermelho e depois verde). Cita a skill `tdd` e explica porque
 // é que isto não é o «fatiar na horizontal» que a skill proíbe.
-// Oráculo: as frases-chave literais, na versão inglesa do template (leitura minha, PERGUNTA 1 na #6), todas na mesma secção do
+// Oráculo: as frases-chave literais, na versão inglesa do template (resposta 1 do orquestrador na #6), todas na mesma secção do
 // FRAMEWORK.md gerado (do título anterior ao seguinte) que contém «TDD in two loops», o mesmo título do invariante 5 do CLAUDE.md.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

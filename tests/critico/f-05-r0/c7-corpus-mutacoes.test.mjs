@@ -4,7 +4,8 @@
 //   critério 1: uma mutação da linha «invariants»
 //   critério 2: duas da linha «AGENTS.md mirrors CLAUDE.md», uma com file CLAUDE.md e outra com file AGENTS.md
 //   critério 3: uma da linha «mode»
-//   critério 5: «contrato num ficheiro local»: uma com file FRAMEWORK.md cujo find contém `gh issue view`
+//   critério 5: «contrato num ficheiro local»: uma da linha «ticket contract: GitHub Issues» (resposta 4 do orquestrador na #6),
+//               com file FRAMEWORK.md
 //   critério 6: uma da linha «language» com file AGENTS.md e base em português
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +20,7 @@ test('C7: o corpus de mutações tem as mutações dos critérios 1, 2, 3, 5 e 6
     ['critério 2: mirror, file CLAUDE.md', (m) => starts(m.line, 'AGENTS.md mirrors CLAUDE.md') && m.file === 'CLAUDE.md'],
     ['critério 2: mirror, file AGENTS.md', (m) => starts(m.line, 'AGENTS.md mirrors CLAUDE.md') && m.file === 'AGENTS.md'],
     ['critério 3: mode', (m) => starts(m.line, 'mode')],
-    ['critério 5: contrato num ficheiro local', (m) => m.file === 'FRAMEWORK.md' && String(m.find).includes('gh issue view')],
+    ['critério 5: contrato num ficheiro local', (m) => starts(m.line, 'ticket contract: GitHub Issues') && m.file === 'FRAMEWORK.md'],
     ['critério 6: language, AGENTS.md, base pt', (m) => starts(m.line, 'language') && m.file === 'AGENTS.md' && /^pt/.test(m.base)],
   ];
   assert.deepEqual(want.filter(([, ok]) => !ms.some(ok)).map(([k]) => k), [], 'mutações em falta no corpus');

@@ -1,9 +1,8 @@
 // F-05, adenda do orquestrador (seguimento #20):
-//   1. o FRAMEWORK.md §2 deixa de proibir /make-plan e /learn-codebase (skills do claude-mem, que já saiu) e continua a proibir o
-//      que deve: os outros itens da lista «Do not use» de e083b6a ficam lá (leitura minha de «volta a proibir o que deve»,
-//      PERGUNTA 3 na #6);
+//   1. o FRAMEWORK.md §2 deixa de proibir /make-plan, /learn-codebase e /do (skills do claude-mem, que já saiu) e continua a
+//      proibir o que deve: os outros 11 itens da lista «Do not use» de e083b6a ficam lá (resposta 3 do orquestrador na #6);
 //   2. a nota «There is no step 7» do BOOTSTRAP.md diz a verdade: cada coisa que ela diz que cita os passos 8 e 9 cita-os mesmo.
-// Oráculo: (1) a ausência das duas skills no template e nos projetos gerados, mais a lista literal dos 11 itens que continuam
+// Oráculo: (1) a ausência das três skills no template e nos projetos gerados, mais a lista literal dos 11 itens que continuam
 // proibidos, procurados no bloco «Do not use» até ao título seguinte; (2) a nota existe e, para cada fonte que nomeia (`check.cjs`,
 // os workflows, as skills), essa fonte do pacote contém «step 8» ou «step 9».
 import { test } from 'node:test';
@@ -12,7 +11,7 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, COMBOS, generate } from './helpers.mjs';
 
-const GONE = [/make-plan/, /learn-codebase/];
+const GONE = [/make-plan/, /learn-codebase/, /(^|[\s`(])\/do(?=[\s`),.:;]|$)/m];
 const STILL = ['`sdd`', '`to-spec`', '`to-tickets`', '`triage`', '`wayfinder`', '`grill-with-docs`', '`grill-me`', '`/speckit-implement`', '`/implement`', '`specify workflow`', '`code-review`'];
 const doNotUse = (text) => {
   const lines = text.split(/\r?\n/);
@@ -22,13 +21,13 @@ const doNotUse = (text) => {
   return lines.slice(i, e).join('\n');
 };
 
-test('#20: o template FRAMEWORK.md não fala de /make-plan nem de /learn-codebase', () => {
+test('#20: o template FRAMEWORK.md não fala de /make-plan, /learn-codebase nem /do', () => {
   const fw = readFileSync(join(ROOT, 'templates/FRAMEWORK.md'), 'utf8');
   assert.deepEqual(GONE.filter((re) => re.test(fw)).map(String), []);
 });
 
 for (const [name, answers] of COMBOS) {
-  test(`#20 ${name}: o FRAMEWORK.md gerado não proíbe /make-plan nem /learn-codebase e continua a proibir os outros 11 itens`, async () => {
+  test(`#20 ${name}: o FRAMEWORK.md gerado não proíbe /make-plan, /learn-codebase nem /do e continua a proibir os outros 11 itens`, async () => {
     const { raw } = await generate(answers);
     const fw = raw['FRAMEWORK.md'];
     assert.deepEqual(GONE.filter((re) => re.test(fw)).map(String), [], 'ainda fala das skills do claude-mem');

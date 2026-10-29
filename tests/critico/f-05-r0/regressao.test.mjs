@@ -5,7 +5,7 @@
 //   node --test tests/critico/f-05-r0/regressao-ataques-c.test.mjs
 // Aqui: a suíte do pacote continua verde (com o corpus do F-02, que agora corre as mutações do F-05), nenhum ficheiro de teste perde
 // testes (referência: e083b6a, a main com o F-01, o F-02, o F-03 e o F-10) e, dos ataques já fundidos, só os helpers.mjs podem
-// mudar (PERGUNTA 5 na #6). Os filhos correm com o HOME e o TMP falsos do helpers.mjs.
+// mudar (resposta 5 do orquestrador na #6). Os filhos correm com o HOME e o TMP falsos do helpers.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
@@ -39,4 +39,25 @@ test('âmbito: em relação à origin/main, dos ataques já fundidos só os help
   assert.equal(mb.status, 0, 'sem merge-base com origin/main: ' + mb.stderr);
   const changed = git('diff', '--name-only', mb.stdout.trim(), '--', ...PRIOR.map((d) => 'tests/critico/' + d)).stdout.split(/\r?\n/).filter(Boolean);
   assert.deepEqual(changed.filter((f) => !f.endsWith('/helpers.mjs')), [], 'ficheiros dos ataques anteriores alterados');
+});
+
+// Resposta 5 do orquestrador na #6: os helpers.mjs dos ataques anteriores só mudam para acompanhar a forma dos documentos v3, e as
+// asserções ficam todas. Oráculo: por helpers.mjs, o número de chamadas assert(…)/assert.x(…) e de throw não desce em relação à
+// merge-base com a origin/main.
+const KINDS = { assert: /\bassert(?:\.\w+)?\(/g, throw: /\bthrow\b/g };
+test('âmbito: os helpers.mjs dos ataques já fundidos não perdem nenhuma asserção nem nenhum throw', () => {
+  const mb = git('merge-base', 'HEAD', 'origin/main').stdout.trim();
+  const lost = [];
+  for (const d of PRIOR) {
+    const rel = `tests/critico/${d}/helpers.mjs`;
+    const old = git('show', `${mb}:${rel}`);
+    if (old.status !== 0) continue;
+    assert.ok(existsSync(join(ROOT, rel)), rel + ' desapareceu');
+    const now = readFileSync(join(ROOT, rel), 'utf8');
+    for (const [k, re] of Object.entries(KINDS)) {
+      const [a, b] = [(old.stdout.match(re) || []).length, (now.match(re) || []).length];
+      if (b < a) lost.push(`${rel}: ${k} ${a} → ${b}`);
+    }
+  }
+  assert.deepEqual(lost, []);
 });

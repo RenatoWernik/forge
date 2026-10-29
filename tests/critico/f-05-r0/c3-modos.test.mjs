@@ -1,7 +1,7 @@
 // F-05 critério 3: o FRAMEWORK.md tem a tabela dos dois modos com os valores literais, e o check.cjs falha (linha «mode») quando o
 // mode do forge.json não tem coluna na tabela.
 // Oráculo:
-//   - a tabela do ticket, na versão inglesa do template (leitura minha dos literais, PERGUNTA 1 na #6): uma tabela Markdown cujo
+//   - a tabela do ticket, na versão inglesa do template (resposta 1 do orquestrador na #6): uma tabela Markdown cujo
 //     cabeçalho tem uma coluna «rigorous» e outra «accelerated» (os valores do mode do forge.json), e as 6 linhas com os valores:
 //       rounds       3 | 2
 //       tests        full suite 1× on the 1st delivery | area and Round −1 1×
