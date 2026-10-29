@@ -16,6 +16,19 @@ test('C1: o compat.json tem exatamente as 10 entradas, uma por componente do reg
   assert.deepEqual([...registry().components.map((c) => c.id)].sort(), [...IDS].sort(), 'o registo deixou de ter os 10 ids');
 });
 
+test('C1 (P1): uma só forma — components é um objeto indexado pelo id; cada entrada tem verifiedWith (texto) e surface.skills e surface.commands (arrays de strings)', () => {
+  const c = compat();
+  assert.ok(c.components && typeof c.components === 'object' && !Array.isArray(c.components), 'components tem de ser um objeto { <id>: {...} }');
+  const maus = [];
+  for (const [id, e] of Object.entries(c.components)) {
+    if (typeof e?.verifiedWith !== 'string' || !e.verifiedWith) maus.push(id + ': verifiedWith');
+    if (!e?.surface || typeof e.surface !== 'object' || Array.isArray(e.surface)) { maus.push(id + ': surface'); continue; }
+    for (const k of ['skills', 'commands']) if (!Array.isArray(e.surface[k]) || !e.surface[k].every((s) => typeof s === 'string')) maus.push(`${id}: surface.${k} não é um array de strings`);
+  }
+  assert.deepEqual(maus, []);
+  assert.deepEqual(Object.keys(c).filter((k) => k !== 'components' && !k.startsWith('$')), [], 'chaves de topo fora da forma fixada');
+});
+
 test('C1: o verifiedWith de cada entrada é o do contrato (uv 0.13.6, gauntlet-loop 9b1975a, ai-memory 3.2.10, ponytail 5.3.3, specify-cli 1.2.5, sdd 2.1.0, mattpocock 1.3.2, graphifyy 0.9.97)', () => {
   const e = entries(compat());
   const errados = [];
@@ -29,6 +42,7 @@ test('C1: o verifiedWith de cada entrada é o do contrato (uv 0.13.6, gauntlet-l
 
 // O URL de cada lista aponta para o repositório da componente, na tag ou no sha verificados (nunca main, master ou HEAD)
 const ref = (id) => (id === 'gauntlet-loop' ? '9b1975a' : id === 'sdd' ? 'eba9606' : null);
+// Os URLs são as strings https da entrada fora de `notes` (PERGUNTA 7: onde ficam na forma fixada)
 test('C1: cada surface com nomes traz o URL de origem, no repositório da componente e na tag ou no sha verificados', () => {
   const e = entries(compat());
   const src = Object.fromEntries(registry().components.map((c) => [c.id, c.source.replace(/^https:\/\/github\.com\//, '').toLowerCase()]));

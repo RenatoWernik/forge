@@ -4,11 +4,14 @@
 // sempre um `sys` falso (fonte das versões injetável), e os comandos impressos só correm depois de o URL do GitHub ser trocado
 // por um repositório git local criado no próprio teste (e só se não sobrar nenhum `http` no comando).
 //
-// FORMA DO compat.json (o contrato não a fixa; ver PERGUNTA 1 da Ronda −1). Os ataques aceitam:
-//   { components: [ { id, verifiedWith, surface, notes }, ... ] }  ou  { components: { <id>: {...} } }  ou  { <id>: {...} }
-// A `surface` de cada entrada é lida em profundidade: os nomes são as strings que não são URLs, e os URLs são as strings https.
-// Um nome N está na surface quando uma string é N ou termina em N depois de um separador (`:`, `-`, `.`, `/` ou espaço), de modo
+// FORMA DO compat.json (resposta P1 do orquestrador na #38, comentário 6503925940): UMA só forma,
+//   { "components": { "<id>": { "verifiedWith": "<versão>", "surface": { "skills": [...], "commands": [...] }, "notes": {...} } } }
+// Os nomes são as strings (não URL) de surface.skills (skills: mattpocock-skills:<x>, speckit-<x>, ponytail*) e de
+// surface.commands (subcomandos e flags: graphify <sub>, ai-memory <sub>, specify init --<flag>). Os URLs de origem são as
+// strings https da entrada fora de `notes` (onde ficam na forma fixada: PERGUNTA 7).
+// Um nome N está numa lista quando uma string é N ou termina em N depois de um separador (`:`, `-`, `.`, `/` ou espaço), de modo
 // que `converge`, `speckit-converge` e `/speckit.converge` contam todos como `converge`.
+// SECÇÕES PROIBIDAS (resposta P3): o que os templates citam só nas secções «Do not run» e «Do not use» fica FORA da surface.
 import { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync, rmSync } from 'node:fs';
@@ -72,18 +75,19 @@ export const VERIFIED = {
 };
 export const stripV = (v) => String(v ?? '').replace(/^v/i, '');
 
-// Mapa id → entrada, qualquer que seja a forma aceite (ver cabeçalho)
+// Mapa id → entrada, só na forma fixada (P1): compat.components é um objeto indexado pelo id
 export const entries = (compat) => {
-  const c = compat.components ?? compat;
-  if (Array.isArray(c)) return Object.fromEntries(c.map((e) => [e.id, e]));
-  return Object.fromEntries(Object.entries(c).filter(([k, v]) => !k.startsWith('$') && v && typeof v === 'object'));
+  const c = compat?.components;
+  assert.ok(c && typeof c === 'object' && !Array.isArray(c), 'forma do compat.json: falta o objeto "components" indexado pelo id (P1)');
+  return c;
 };
 export const strings = (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? v.flatMap(strings) : v && typeof v === 'object' ? Object.values(v).flatMap(strings) : []);
 export const isUrl = (s) => /^https?:\/\//i.test(s);
-export const surfaceNames = (e) => strings(e?.surface).filter((s) => !isUrl(s));
-export const surfaceUrls = (e) => strings(e?.surface).filter(isUrl);
+const listOf = (e, k) => (Array.isArray(e?.surface?.[k]) ? e.surface[k].filter((s) => typeof s === 'string' && !isUrl(s)) : []);
+export const surfaceNames = (e, bucket) => (bucket ? listOf(e, bucket) : [...listOf(e, 'skills'), ...listOf(e, 'commands')]);
+export const surfaceUrls = (e) => strings(Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k !== 'notes'))).filter(isUrl);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-export const hasName = (e, n) => surfaceNames(e).some((s) => s === n || new RegExp(`[:\\-./ ]${esc(n)}$`).test(s));
+export const hasName = (e, n, bucket) => surfaceNames(e, bucket).some((s) => s === n || new RegExp(`[:\\-./ ]${esc(n)}$`).test(s));
 
 // Percorre a surface e aplica f a cada array de strings (para as mutações). Devolve quantos arrays mudaram.
 export const mapSurfaceArrays = (node, f) => {
@@ -98,14 +102,26 @@ export const mapSurfaceArrays = (node, f) => {
   return n;
 };
 
-// ---------- nomes que os templates citam (regexes do crítico, só as formas inequívocas; PERGUNTAS 3 e 4) ----------
+// ---------- nomes que os templates citam (regexes do crítico, só as formas inequívocas; respostas P3 e P4) ----------
 export const templateFiles = (root = ROOT) => walk(join(root, 'templates')).map((abs) => [posix(relative(root, abs)), readFileSync(abs, 'utf8')]);
 const codeSpans = (text) => [...text.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]);
 const uniq = (a) => [...new Set(a)].sort();
-export const cited = (root = ROOT) => {
-  const files = templateFiles(root);
-  const all = files.map(([, t]) => t).join('\n');
-  const spans = files.flatMap(([, t]) => codeSpans(t));
+// Secção proibida: começa numa linha «Do not run» ou «Do not use» (depois de marcadores de lista, citação ou negrito) e continua
+// pelas linhas em branco e pelos itens de lista seguintes; acaba na primeira linha que não é nenhuma das duas (título, `---`, texto).
+const FORBIDDEN = /^\s*(?:[-*>]\s+|\d+\.\s+)?(?:\*\*|__)?do not (?:run|use)\b/i;
+export const splitForbidden = (text) => {
+  const keep = [], drop = [];
+  let inside = false;
+  for (const l of text.split(/\r?\n/)) {
+    if (FORBIDDEN.test(l)) inside = true;
+    else if (inside && !(l.trim() === '' || /^\s*[-*]\s+/.test(l))) inside = false;
+    (inside ? drop : keep).push(l);
+  }
+  return { keep: keep.join('\n'), drop: drop.join('\n') };
+};
+const extract = (texts) => {
+  const all = texts.join('\n');
+  const spans = texts.flatMap(codeSpans);
   return {
     'mattpocock-skills': uniq([...all.matchAll(/mattpocock-skills:([a-z0-9][a-z0-9-]*)/g)].map((m) => m[1])),
     'spec-kit': uniq([...all.matchAll(/speckit-([a-z][a-z-]*)/g)].map((m) => m[1]).filter((x) => x !== 'x')),
@@ -117,6 +133,16 @@ export const cited = (root = ROOT) => {
     'ai-memory': uniq([...spans.flatMap((s) => [...s.matchAll(/^ai-memory ([a-z][a-z-]*)/g)].map((m) => m[1])), ...[...all.matchAll(/\(\s*AIM\s*,\s*\[\s*'([a-z][a-z-]*)'/g)].map((m) => m[1])]),
   };
 };
+// Nomes citados fora das secções proibidas
+export const cited = (root = ROOT) => extract(templateFiles(root).map(([, t]) => splitForbidden(t).keep));
+// Nomes citados SÓ dentro das secções proibidas (ficam fora da surface, P3)
+export const forbiddenOnly = (root = ROOT) => {
+  const ok = cited(root);
+  const bad = extract(templateFiles(root).map(([, t]) => splitForbidden(t).drop));
+  return Object.fromEntries(Object.entries(bad).map(([k, v]) => [k, v.filter((n) => !ok[k].includes(n))]));
+};
+// Família de nomes → [componente, lista da surface]
+export const ALVO = { 'mattpocock-skills': ['mattpocock-skills', 'skills'], 'spec-kit': ['spec-kit', 'skills'], 'spec-kit-flags': ['spec-kit', 'commands'], ponytail: ['ponytail', 'skills'], graphify: ['graphify', 'commands'], 'ai-memory': ['ai-memory', 'commands'] };
 
 // ---------- doctor com sys falso ----------
 export function fakeSys({ platform = 'win32', home = '/h', exec = {}, files = {}, urls = {}, env = {}, reads, calls } = {}) {

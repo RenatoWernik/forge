@@ -4,13 +4,13 @@
 // F-15a critério 1 (superfície fechada): cada nome que templates/** cita existe na surface da componente certa, e a surface
 // não inventa nomes que o upstream (a fixture gravada) não tem. As regexes do crítico são independentes das do dev e só apanham
 // formas inequívocas (helpers.mjs › cited): mattpocock-skills:<x>, speckit-<x> (menos o marcador `speckit-x`), ponytail-<x>,
-// `graphify <sub>` e `ai-memory <sub>` em code spans e nas chamadas do check.cjs, e as flags dos code spans `specify init ...`.
+// `graphify <sub>` e `ai-memory <sub>` em code spans e nas chamadas do check.cjs, e as flags dos code spans `specify init ...`;
+// as skills ficam em surface.skills e os subcomandos e flags em surface.commands (P1). As secções «Do not run» e «Do not use»
+// não contam, e o que só elas citam fica FORA da surface (P3).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { COMPAT, FIXTURE, entries, readJson, cited, hasName, surfaceNames } from './helpers.mjs';
-
-const ALVO = { 'mattpocock-skills': 'mattpocock-skills', 'spec-kit': 'spec-kit', 'spec-kit-flags': 'spec-kit', ponytail: 'ponytail', graphify: 'graphify', 'ai-memory': 'ai-memory' };
+import { COMPAT, FIXTURE, ALVO, entries, readJson, cited, forbiddenOnly, hasName, surfaceNames } from './helpers.mjs';
 
 test('C1 (F-05): os templates citam nomes de todas as famílias (controlo das regexes do crítico)', () => {
   const c = cited();
@@ -18,13 +18,13 @@ test('C1 (F-05): os templates citam nomes de todas as famílias (controlo das re
   assert.ok(c['mattpocock-skills'].includes('tdd') && c['spec-kit'].includes('converge') && c.graphify.includes('query'), 'extração incompleta');
 });
 
-test('C1 (F-05): cada nome que templates/** cita existe na surface da componente certa', () => {
+test('C1 (F-05): cada nome que templates/** cita (fora das secções proibidas) existe na surface da componente certa, na lista certa (skills ou commands)', () => {
   assert.ok(existsSync(COMPAT), 'falta compat.json');
   const e = entries(readJson(COMPAT));
   const c = cited();
   const faltam = [];
-  for (const [k, id] of Object.entries(ALVO)) for (const n of c[k]) if (!hasName(e[id], n)) faltam.push(`${id} ← ${k === 'spec-kit-flags' ? 'specify init ' : ''}${n}`);
-  if (!hasName(e.ponytail, 'ponytail')) faltam.push('ponytail ← ponytail');
+  for (const [k, [id, lista]] of Object.entries(ALVO)) for (const n of c[k]) if (!hasName(e[id], n, lista)) faltam.push(`${id}.surface.${lista} ← ${k === 'spec-kit-flags' ? 'specify init ' : ''}${n}`);
+  if (!hasName(e.ponytail, 'ponytail', 'skills')) faltam.push('ponytail.surface.skills ← ponytail');
   assert.deepEqual(faltam, []);
 });
 
@@ -55,4 +55,18 @@ test('C1: a surface do mattpocock-skills não tem resolving-merge-conflicts e a 
   const e = entries(readJson(COMPAT));
   assert.ok(!hasName(e['mattpocock-skills'], 'resolving-merge-conflicts'), 'surface com uma skill removida na 1.3.0');
   assert.ok(!hasName(e['spec-kit'], 'taskstoissues'), 'surface com um comando que o forge não usa (obsoleto desde a 1.1.0)');
+});
+
+test('C1 (P3): o que os templates citam só nas secções «Do not run» e «Do not use» fica fora da surface', () => {
+  const e = entries(readJson(COMPAT));
+  const proibidos = forbiddenOnly();
+  const dentro = [];
+  for (const [k, [id]] of Object.entries(ALVO)) for (const n of proibidos[k]) if (hasName(e[id], n)) dentro.push(`${id} ← ${n}`);
+  assert.deepEqual(dentro, []);
+});
+
+test('controlo (P3): as secções proibidas dos templates de hoje citam nomes que o oráculo exclui (graphify extract, ai-memory init)', () => {
+  const p = forbiddenOnly();
+  assert.ok(p.graphify.includes('extract') && p['ai-memory'].includes('init'), 'a deteção das secções proibidas deixou de apanhar o «Do not run»: ' + JSON.stringify(p));
+  assert.ok(!cited().graphify.includes('extract'), 'graphify extract (só no «Do not run») entrou nos nomes citados');
 });

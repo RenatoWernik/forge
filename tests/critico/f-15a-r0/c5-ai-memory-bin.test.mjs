@@ -52,21 +52,41 @@ for (const [platform] of PLATFORMS) {
   });
 }
 
-test('C5 (win32) variável válida (MCP registado): nenhum missing, e nenhum comando do ai-memory nem do MCP propõe instalar ou extrair em %LOCALAPPDATA%', async () => {
-  const { by } = await run('win32', { AI_MEMORY_BIN: BIN }, { [BIN + ' --version']: 'ai-memory 2.3.2' });
-  for (const c of aim(by)) {
-    assert.notEqual(c.status, 'missing', c.id);
-    assert.deepEqual((c.command ?? []).filter((x) => /LOCALAPPDATA/i.test(x)), [], `${c.id} (${c.status}) propõe %LOCALAPPDATA% com AI_MEMORY_BIN definido`);
+// Resposta P5 (#38, comentário 6503925940): com AI_MEMORY_BIN DEFINIDO, o comando nunca propõe instalar nem correr nada em
+// %LOCALAPPDATA%; usa sempre o binário de AI_MEMORY_BIN. Lido à letra: vale também com a variável a apontar para um caminho
+// inexistente (o doctor segue pelos candidatos de hoje para DETETAR, mas os comandos não passam a usar %LOCALAPPDATA%).
+const CENARIOS = [
+  ['válida 2.3.2 (outdated)', BIN, { [BIN + ' --version']: 'ai-memory 2.3.2' }],
+  ['válida 3.2.10 (ok)', BIN, { [BIN + ' --version']: 'ai-memory 3.2.10' }],
+  ['inválida, PATH 2.0.0 (outdated)', 'D:\\nao existe\\ai-memory.exe', { 'ai-memory --version': 'ai-memory 2.0.0' }],
+  ['inválida e nada instalado (missing)', 'D:\\nao existe\\ai-memory.exe', {}],
+];
+test('C5 (win32, P5): com AI_MEMORY_BIN definido, nenhum comando do ai-memory nem do MCP usa %LOCALAPPDATA% (4 cenários × MCP registado ou por registar)', async () => {
+  const maus = [];
+  for (const [nome, bin, exec] of CENARIOS) {
+    for (const [mcp, files] of [['MCP registado', undefined], ['MCP por registar', {}]]) {
+      const { by } = await run('win32', { AI_MEMORY_BIN: bin }, exec, files);
+      for (const c of aim(by)) for (const x of c.command ?? []) if (/LOCALAPPDATA/i.test(x)) maus.push(`${nome}, ${mcp}: ${c.id} (${c.status}) → ${x.slice(0, 120)}`);
+    }
   }
+  assert.deepEqual(maus, []);
 });
 
-// PERGUNTA 5: o contrato diz «nem proposta de instalação em %LOCALAPPDATA%»; com o MCP por registar, o install-mcp de hoje corre
-// o binário de %LOCALAPPDATA%, que nesta máquina não existe. O crítico lê isto como dentro do critério 5.
-test('C5 (win32) variável válida (MCP por registar): o ai-memory não fica missing e o install do MCP não corre o binário de %LOCALAPPDATA%', async () => {
-  const { by } = await run('win32', { AI_MEMORY_BIN: BIN }, { [BIN + ' --version']: 'ai-memory 2.3.2' }, {});
-  assert.notEqual(by['ai-memory'].status, 'missing');
-  for (const c of aim(by)) assert.deepEqual((c.command ?? []).filter((x) => /LOCALAPPDATA/i.test(x)), [], `${c.id} (${c.status}) usa %LOCALAPPDATA% com AI_MEMORY_BIN definido`);
-});
+const usaBin = (x, bin) => x.includes('AI_MEMORY_BIN') || x.replace(/\\\\/g, '\\').includes(bin) || x.replace(/\\/g, '/').includes(bin.replace(/\\/g, '/'));
+for (const [platform] of PLATFORMS) {
+  test(`C5 (${platform}, P5): com AI_MEMORY_BIN válido, o update do ai-memory e o install-mcp do MCP usam o binário de AI_MEMORY_BIN`, async () => {
+    const maus = [];
+    const outdated = await run(platform, { AI_MEMORY_BIN: BIN }, { [BIN + ' --version']: 'ai-memory 2.3.2' });
+    const semMcp = await run(platform, { AI_MEMORY_BIN: BIN }, { [BIN + ' --version']: 'ai-memory 3.2.10' }, {});
+    const alvo = [outdated.by['ai-memory'], outdated.by['ai-memory-mcp'], semMcp.by['ai-memory-mcp']];
+    for (const c of alvo) {
+      if (!c.command?.length) { maus.push(`${c.id} (${c.status}) sem comando`); continue; }
+      if (!c.command.some((x) => usaBin(x, BIN))) maus.push(`${c.id} (${c.status}) não usa o AI_MEMORY_BIN: ${c.command.join(' | ').slice(0, 160)}`);
+    }
+    assert.equal(semMcp.by['ai-memory-mcp'].status, 'missing', 'controlo: MCP por registar tem de ficar missing');
+    assert.deepEqual(maus, []);
+  });
+}
 
 // AI_MEMORY_BIN hostil: o doctor nunca o passa a uma shell nem o parte em argumentos; os comandos impressos nunca o executam
 const PS = ["D:\\aim$(Write-Warning critico7f3)\\ai-memory.exe", "D:\\aim'; Write-Warning critico7f3; '\\ai-memory.exe", 'D:\\aim"; Write-Warning critico7f3; "\\ai-memory.exe', 'D:\\aim&Write-Warning critico7f3'];

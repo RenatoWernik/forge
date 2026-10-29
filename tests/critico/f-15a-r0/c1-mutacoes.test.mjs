@@ -35,6 +35,12 @@ const red = (nome, ...muts) => {
   const r = runNodeTest(dir, COMPAT_TEST);
   assert.notEqual(r.status, 0, `o compat.test.mjs aceitou a mutação: ${nome}\n` + r.out.slice(-1200));
 };
+const green = (nome, ...muts) => {
+  const dir = copyPackage();
+  for (const m of muts) m(dir);
+  const r = runNodeTest(dir, COMPAT_TEST);
+  assert.equal(r.status, 0, `o compat.test.mjs recusou uma mutação que tem de aceitar: ${nome}\n` + r.out.slice(-1200));
+};
 const tira = (alvo) => (arr) => arr.filter((s) => !(s === alvo || new RegExp(`[:\\-./ ]${alvo}$`).test(s)));
 
 test('M1 (contrato): um template que cita mattpocock-skills:resolving-merge-conflicts dá vermelho', () => {
@@ -98,12 +104,30 @@ test('M10: componente errada — mover grilling da surface do mattpocock-skills 
   }));
 });
 
+// P3: o que só as secções «Do not run» e «Do not use» citam não pode bloquear o teste (é proibido, não usado)
+const proibidas = (dir) => edit(dir, 'templates/FRAMEWORK.md', (t) => {
+  const ls = t.split('\n');
+  const run = ls.findIndex((l) => /^Do not run:/.test(l));
+  const use = ls.findIndex((l) => /^Do not use:/.test(l));
+  assert.ok(run >= 0 && use >= 0, 'o FRAMEWORK.md deixou de ter as secções «Do not run:» e «Do not use:»');
+  ls[run] = ls[run].replace(/\r?$/, '; `ai-memory frobnicate`; `graphify frobnicate`; `specify init --frobnicate`');
+  const item = ls.findIndex((l, i) => i > use && /^- /.test(l));
+  assert.ok(item > use, 'a secção «Do not use:» não tem itens');
+  ls.splice(item + 1, 0, '- `mattpocock-skills:frobnicate`, `/speckit-frobnicate`, `ponytail-frobnicate`: never.');
+  return ls.join('\n');
+});
+test('M12 (P3): nomes que só as secções «Do not run» e «Do not use» citam NÃO dão vermelho (o compat.test.mjs continua verde)', () => {
+  once();
+  green('nomes inexistentes só nas secções proibidas do FRAMEWORK.md', proibidas);
+});
+
+test('M13 (P3): o mesmo nome fora da secção proibida continua a dar vermelho', () => {
+  once();
+  red('nomes inexistentes nas secções proibidas e também num parágrafo normal', proibidas, append('templates/FRAMEWORK.md', 'Then run `graphify frobnicate .`.'));
+});
+
 test('M11: tirar uma entrada (graphify-skill) ou mudar um verifiedWith (mattpocock-skills 1.3.1) dá vermelho', () => {
   once();
-  red('sem graphify-skill', compatEdit((e, j) => {
-    const c = j.components ?? j;
-    if (Array.isArray(c)) c.splice(c.findIndex((x) => x.id === 'graphify-skill'), 1);
-    else delete c['graphify-skill'];
-  }));
+  red('sem graphify-skill', compatEdit((e) => { delete e['graphify-skill']; }));
   red('mattpocock verifiedWith 1.3.1', compatEdit((e) => { e['mattpocock-skills'].verifiedWith = String(e['mattpocock-skills'].verifiedWith).replace('1.3.2', '1.3.1'); }));
 });
