@@ -45,16 +45,20 @@ Ask in chat, in this order, waiting for the answers. You may propose a value, bu
 6. **Shell for the Spec Kit scripts**: `sh` (macOS, Linux, Git Bash) or `ps` (PowerShell). Suggest `sh` when `bash` is on the PATH, else `ps`.
 7. **Plain style**: forbid dashes, arrows and emoji in CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md (the checker enforces it). Suggest yes.
 8. **Global rules to switch off** for this project, if the user has global `~/.claude/CLAUDE.md` rules that conflict with the framework. Optional; if any, you will record them in the `## User global rules` section of CLAUDE.md after generation.
+9. **Protection hooks** (the `hooks` answers). Three hooks of this project's own `.claude/settings.json`, never of the global one. Ask one question per hook and wait for each yes or no; no answer is not a yes. Without the `hooks` key nothing is installed.
+   - `killByName`: block killing processes by name (`taskkill /IM`, `killall`, `pkill`, `Stop-Process -Name`), which also ends the processes of the other agents and of the user. Killing by PID stays allowed.
+   - `backgroundTests`: block test commands started with `run_in_background`, which leave agents waiting with nobody noticing. Tests run in the foreground, in blocks of up to 9 minutes.
+   - `idleWatch`: warn the orchestrator, on each prompt, when an agent active in `.checkpoints/painel.json` has written no checkpoint for 10 minutes.
 
 For a language other than English or Portuguese, also translate the panel page: take the values of the `EN` object in `${CLAUDE_PLUGIN_ROOT}/templates/.claude/dashboard/panel.html`, translate them keeping the keys, the `{n}`-style placeholders and the separators between words, and pass the result as `panelStrings`, with a BCP 47 `langTag`. Identifiers such as `ganhou`, `pergunta` or `ativo` are never translated.
 
 Write the answers as JSON to a file in the operating system's temp folder (not in the project):
 
 ```json
-{"projectName":"My Project","language":"English","mode":"rigorous","models":{"developer":{"model":"sonnet","effort":"high","reason":"logic and server code"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"sonnet","effort":"medium","reason":"the panel only records"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
+{"projectName":"My Project","language":"English","mode":"rigorous","models":{"developer":{"model":"sonnet","effort":"high","reason":"logic and server code"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"sonnet","effort":"medium","reason":"the panel only records"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true,"hooks":{"killByName":true,"backgroundTests":true,"idleWatch":false}}
 ```
 
-The values above are an example: replace every one with the user's answers. `mode` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role.
+The values above are an example: replace every one with the user's answers. `mode` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role. `hooks` is optional: leave it out unless the user answered question 9, and put `true` only on the hooks they said yes to.
 
 ## 3. Generate the files
 
@@ -65,7 +69,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --d
 node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --dest .
 ```
 
-It writes `CLAUDE.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the mode, the five roles with their reasons and the escalation rules), `.claude/check.cjs`, both workflows and `.claude/dashboard/panel.html`. It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
+It writes `CLAUDE.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the mode, the five roles with their reasons and the escalation rules), `.claude/check.cjs`, both workflows and `.claude/dashboard/panel.html`. With `hooks` answers it also writes the scripts of the hooks answered `true` to `.claude/hooks/` and joins their entries to the project's `.claude/settings.json`, keeping every other key and hook already there (an existing `settings.json` that is not valid JSON is never overwritten: it stops with exit code 1 and writes nothing). It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
 
 ### Translate the documents
 

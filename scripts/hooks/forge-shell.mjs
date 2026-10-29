@@ -78,7 +78,7 @@ export function statements(texto) {
 const PREFIXO = new Set(['sudo', 'doas', 'nohup', 'time', 'command', 'exec', 'env', 'nice', 'timeout', 'builtin', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', 'call']);
 const COM_VALOR = new Set(['-u', '-g', '-U']); // sudo options that take a value
 
-// the program a path or word names: no folder, no extension, lower case (C:\Windows\System32\taskkill.exe -> taskkill)
+// the program a path or word names: no folder, no extension, lower case (some\folder\taskkill.exe -> taskkill)
 export const nome = (s) => s.split(/[\\/]/).pop().toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, '');
 
 // a segment's tokens -> { name, args, tokens } without the prefixes (VAR=1, sudo, timeout 5, nohup, if ...), or null when nothing is left

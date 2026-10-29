@@ -29,6 +29,11 @@
       "reason": "the panel only records, it needs no deep reasoning"
     }
   },
+  "hooks": {
+    "killByName": true,
+    "backgroundTests": true,
+    "idleWatch": true
+  },
   "script": "sh",
   "plainStyle": true,
   "dashboardUrl": "https://claude.ai/artifact/AbC123_x-y",
