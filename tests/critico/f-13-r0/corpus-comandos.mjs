@@ -81,6 +81,13 @@ export const TESTES = [
   // resposta 3 do orquestrador (#14): jest, bun test, deno test, npm t, test:e2e e mocha também são comandos de teste
   'npx jest', 'npx jest --ci', 'jest', 'bun test', 'bun test src/', 'deno test', 'deno test -A', 'npm t', 'npm run test:e2e', 'pnpm run test:e2e',
   'npx mocha', 'mocha tests/',
+  // R1 do crítico (#14, 2026-10-29): atalho de script do pnpm e do yarn sem `run`, e opções com valor dos gestores antes do subcomando
+  'pnpm test:e2e', 'yarn test:e2e', 'pnpm test:unit', 'pnpm --filter @guilda/web test', 'pnpm --filter api test', 'pnpm -C app test',
+  'pnpm --dir packages/web test', 'pnpm run -r test', 'npm --prefix app test', 'npm -w api test', 'yarn workspace api test',
+  // a mesma classe: outras formas das mesmas opções
+  'pnpm -r test', 'pnpm -w test', 'npm test -w api', 'npm --workspace api test', 'pnpm --filter=api test', 'pnpm --dir=app test:e2e', 'yarn --cwd app test',
+  'yarn --cwd app test:unit', 'bun --cwd app test', 'pnpm -F api run test:e2e', 'npm --prefix app run test:e2e', 'pnpm --filter api exec vitest run',
+  'bun test:e2e', 'pnpm --filter "@guilda/web" test',
 ];
 
 // Critério 2. Em segundo plano (run_in_background true) têm de PASSAR: servidores, builds e comandos que só mencionam «test»
@@ -96,4 +103,9 @@ export const FUNDO_PASSA = [
   'npm run build', 'npm install', 'git fetch',
   // resposta 3 do orquestrador (#14): o show-report do Playwright é um servidor e passa
   'npx playwright show-report', 'npx playwright show-report playwright-report', 'pnpm exec playwright show-report',
+  // R1 do crítico (#14): vizinhos dos comandos com opções com valor e atalhos de script, que não são testes
+  'pnpm --filter api dev', 'pnpm --filter @guilda/web dev', 'pnpm -C app dev', 'pnpm --dir packages/web start', 'pnpm run -r build', 'pnpm -r build', 'pnpm -w build',
+  'npm --prefix app run dev', 'npm -w api run build', 'yarn workspace api dev', 'yarn --cwd app start', 'bun --cwd app dev', 'pnpm build', 'pnpm dev', 'yarn dev',
+  'pnpm --filter api dev -- --test', 'pnpm --filter api dev -- test', 'npm run dev -- --test', 'pnpm -F api start',
+  'pnpm --filter test dev', 'yarn workspace test dev',
 ];

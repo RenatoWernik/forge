@@ -8,6 +8,19 @@ const RAZAO = 'Blocked by forge: test commands do not run in the background, bec
 
 const semOpcoes = (args) => { const i = args.findIndex((t) => t.q || !t.s.startsWith('-')); return (i < 0 ? [] : args.slice(i)).map((t) => t.s); };
 const SCRIPT_DE_TESTE = /^test([:_-]|$)/; // test, test:e2e, test-unit
+// the options of each package manager that take a value (`pnpm --filter api test`): the value is not the subcommand. pnpm -w is a flag, so it is not here
+const COM_VALOR = { npm: ['--prefix', '-w', '--workspace'], pnpm: ['--filter', '-F', '--filter-prod', '--dir', '-C'], yarn: ['--cwd'], bun: ['--cwd', '--filter'] };
+// the words of a package manager call that are not options or option values (up to `--`): [run, test], [workspace, api, test]
+function posicionais(name, args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const t = args[i];
+    if (!t.q && t.s === '--') break;
+    if (!t.q && t.s.startsWith('-')) { if (COM_VALOR[name].includes(t.s)) i++; continue; }
+    out.push(t.s);
+  }
+  return out;
+}
 const PACOTES = new Set(['npm', 'pnpm', 'yarn', 'bun']);
 const LANCADORES = new Set(['npx', 'pnpx', 'bunx']);
 
@@ -29,9 +42,12 @@ function corredor(bin, args) {
 
 function eTeste({ name, args }) {
   if (PACOTES.has(name)) {
-    const [x, ...resto] = semOpcoes(args);
+    let pos = posicionais(name, args);
+    if (name === 'yarn' && pos[0] === 'workspace') pos = pos.slice(2); // yarn workspace api test
+    const [x, ...resto] = pos;
     if (['test', 't', 'tst'].includes(x)) return true; // npm test, npm t, pnpm test, yarn test, bun test
     if (x === 'run' || x === 'run-script') return SCRIPT_DE_TESTE.test(resto[0] ?? '');
+    if (name !== 'npm' && SCRIPT_DE_TESTE.test(x ?? '')) return true; // pnpm test:e2e, yarn test:unit: these run a script without `run` (npm does not)
     if (['exec', 'dlx', 'x'].includes(x)) return resto.length > 0 && corredor(resto[0], args.slice(args.findIndex((t) => t.s === resto[0]) + 1));
     return name !== 'npm' && x !== undefined && corredor(x, args.slice(args.findIndex((t) => t.s === x) + 1)); // pnpm vitest run, yarn playwright test
   }
