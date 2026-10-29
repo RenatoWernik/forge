@@ -6,7 +6,7 @@ description: >-
 
 # forge: new-project
 
-You are the orchestrator of a new project. This skill takes a folder from nothing to a project whose `node .claude/check.cjs` passes and whose CP0 (`BOOTSTRAP.md`) is running. Everything below happens in the current working directory, which must be the folder of the new project. Speak the user's language in chat. The generated project follows the language the user chooses in step 2: `CLAUDE.md`, `FRAMEWORK.md`, `BOOTSTRAP.md` and the panel come out in it (the templates are English, so step 3 translates the three documents), and so do notes and commits.
+You are the orchestrator of a new project. This skill takes a folder from nothing to a project whose `node .claude/check.cjs` passes and whose CP0 (`BOOTSTRAP.md`) is running. Everything below happens in the current working directory, which must be the folder of the new project. Speak the user's language in chat. The generated project follows the language the user chooses in step 2: `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md`, `BOOTSTRAP.md` and the panel come out in it (the templates are English, so step 3 translates the four documents), and so do notes and commits.
 
 Ground rules:
 
@@ -42,19 +42,20 @@ Ask in chat, in this order, waiting for the answers. You may propose a value, bu
 3. **Mode**: `rigorous` (the full process: the critic's attacks before the code, several rounds, the full regression once per batch) or `accelerated` (fewer rounds, less quality margin, security never relaxes). Suggest `rigorous`.
 4. **Models and effort** for five roles: the developer (builds logic and server code with TDD), the UI developer (`developerUi`: builds the rich interface), the critic (judges blind, fresh context, ideally the strongest model available), the tester (runs the batch suite and the end-to-end checks) and the auxiliaries (panel agent and readers). For each: a model alias or ID accepted by the `Workflow` tool (for example `sonnet`, `opus`, `haiku`, or a full model ID), an effort (`low`, `medium`, `high`, `xhigh` or `max`) and a `reason`: one line on why this model and effort (propose one, the user may edit it; it is required). Optionally a display label and a `match` regex the model ID must satisfy (default: the model itself). Defaults to propose for the two new roles: `developerUi` on `opus` with `high` ("rich UI work needs a strong model"), `tester` on `haiku` with `xhigh` ("the batch suite is mechanical work, and Haiku xhigh is the measured default"). The full interview comes with a later release; here, ask for these five and nothing more.
 5. **ai-memory scope**: a workspace and a project name (letters, digits, dot, dash, underscore). Suggest a slug of the project name for the project.
-6. **Shell for the Spec Kit scripts**: `sh` (macOS, Linux, Git Bash) or `ps` (PowerShell). Suggest `sh` when `bash` is on the PATH, else `ps`.
-7. **Plain style**: forbid dashes, arrows and emoji in CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md (the checker enforces it). Suggest yes.
-8. **Global rules to switch off** for this project, if the user has global `~/.claude/CLAUDE.md` rules that conflict with the framework. Optional; if any, you will record them in the `## User global rules` section of CLAUDE.md after generation.
+6. **GitHub repository** of the project as `owner/name` (for example `acme/billing`): the contract of every piece lives in its issues. The user's own account must be able to read and write issues there. Suggest the owner and the project slug when the user has no repository yet, and ask the user to create it.
+7. **Shell for the Spec Kit scripts**: `sh` (macOS, Linux, Git Bash) or `ps` (PowerShell). Suggest `sh` when `bash` is on the PATH, else `ps`.
+8. **Plain style**: forbid dashes, arrows and emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (the checker enforces it). Suggest yes.
+9. **Global rules to switch off** for this project, if the user has global `~/.claude/CLAUDE.md` rules that conflict with the framework. Optional; if any, you will record them in the `## User global rules` section of CLAUDE.md after generation.
 
 For a language other than English or Portuguese, also translate the panel page: take the values of the `EN` object in `${CLAUDE_PLUGIN_ROOT}/templates/.claude/dashboard/panel.html`, translate them keeping the keys, the `{n}`-style placeholders and the separators between words, and pass the result as `panelStrings`, with a BCP 47 `langTag`. Identifiers such as `ganhou`, `pergunta` or `ativo` are never translated.
 
 Write the answers as JSON to a file in the operating system's temp folder (not in the project):
 
 ```json
-{"projectName":"My Project","language":"English","mode":"rigorous","models":{"developer":{"model":"sonnet","effort":"high","reason":"logic and server code"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"sonnet","effort":"medium","reason":"the panel only records"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
+{"projectName":"My Project","language":"English","mode":"rigorous","repo":"my-owner/my-project","models":{"developer":{"model":"sonnet","effort":"high","reason":"logic and server code"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"sonnet","effort":"medium","reason":"the panel only records"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
 ```
 
-The values above are an example: replace every one with the user's answers. `mode` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role.
+The values above are an example: replace every one with the user's answers. `mode`, `repo` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role.
 
 ## 3. Generate the files
 
@@ -65,21 +66,21 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --d
 node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --dest .
 ```
 
-It writes `CLAUDE.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the mode, the five roles with their reasons and the escalation rules), `.claude/check.cjs`, both workflows and `.claude/dashboard/panel.html`. It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
+It writes `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the mode, the five roles with their reasons and the escalation rules), `.claude/check.cjs`, both workflows and `.claude/dashboard/panel.html`. It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
 
 ### Translate the documents
 
-Skip this when the language is English (any variant). Otherwise `.claude/forge.json` now holds the language and the three documents are still English: translate them, you and no other agent, right now, before the check and before anything else reads them.
+Skip this when the language is English (any variant). Otherwise `.claude/forge.json` now holds the language and the four documents are still English: translate them, you and no other agent, right now, before the check and before anything else reads them.
 
 1. Keep the English originals for comparison: run the same generation into a folder outside the project, `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --dest "<temp folder>/en"`. Delete it at the end of the step.
-2. Translate `CLAUDE.md`, `FRAMEWORK.md` and `BOOTSTRAP.md` in place, one file at a time, into the language of `forge.json`, and write each whole file (no half-translated file may stay). Translate every sentence of prose, heading, table cell and list item, into the natural wording of the language (headings are yours to word, no heading text is fixed); translating only the headings leaves the language check red, and inside the `json` blocks only the string values of `title`, `goal`, `bar` and `context`.
+2. Translate `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md` and `BOOTSTRAP.md` in place (the 12 invariants of `AGENTS.md` are the same text as those of `CLAUDE.md`: translate them once and write the same lines in both, byte for byte), one file at a time, into the language of `forge.json`, and write each whole file (no half-translated file may stay). Translate every sentence of prose, heading, table cell and list item, into the natural wording of the language (headings are yours to word, no heading text is fixed); translating only the headings leaves the language check red, and inside the `json` blocks only the string values of `title`, `goal`, `bar` and `context`.
 3. Never translate, character for character: anything between backticks (commands, flags, paths, tool and skill names, `check.cjs` line names, quoted in the invariants as `Verifies:` lines, and file names); every other part of the `json`, `toml` and `bash` blocks (keys, ids, model names, URLs, the args); link targets; the values the panel and workflows read (`ganhou`, `perdeu`, `pergunta`, `decisao`, `risco`, `ativo`, `pausado`, `ocioso`, `erro`, `planejado`, `concluido`, `falhou`); the tag `cp-N`, `CP0`, ids such as `T###`, and the numbers of invariants and sections. Do not add, drop, merge or reorder headings, table rows, list items or code blocks.
 4. Plain style: if `plainStyle` is true in `forge.json`, the translation has no dash (en or em), arrow or emoji either; use a comma, colon or period where the language would use one.
-5. Compare each file with its original in the `en` folder: same headings in the same order, same tables and code blocks, same inline code spans, same invariants 1 to 10. Fix any difference before going on.
+5. Compare each file with its original in the `en` folder: same headings in the same order, same tables and code blocks, same inline code spans, same invariants 1 to 12, the same lines in `CLAUDE.md` and `AGENTS.md`. Fix any difference before going on.
 
 ### Check
 
-Run `node .claude/check.cjs`. Its `language` line reads the language from `.claude/forge.json` and measures the words of each document's prose (code blocks, backtick spans and links left out): it fails while a document still reads as English (or, for Portuguese, not yet as Portuguese), whatever its headings say, so an untranslated project never passes. If it fails, it names the documents: finish translating the prose of those files (never just rename headings) and run it again. It must end with `All ok.`; if any other line fails, stop and show the failing lines. Add the user's switched-off global rules (question 7) under `## User global rules` in CLAUDE.md, in the project language.
+Run `node .claude/check.cjs`. Its `language` line reads the language from `.claude/forge.json` and measures the words of each document's prose (code blocks, backtick spans and links left out): it fails while a document still reads as English (or, for Portuguese, not yet as Portuguese), whatever its headings say, so an untranslated project never passes. If it fails, it names the documents: finish translating the prose of those files (never just rename headings) and run it again. It must end with `All ok.`; if any other line fails, stop and show the failing lines. Add the user's switched-off global rules (question 9) under `## User global rules` in CLAUDE.md, in the project language.
 
 ## 4. Publish and seed the panel
 

@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import { spawnSync } from 'node:child_process';
 
 // Project data that must never travel back into the public templates: always turned back into its marker.
-const PRIVATE = ['PROJECT_NAME', 'MEM_WORKSPACE', 'MEM_PROJECT', 'DASHBOARD_URL'];
+const PRIVATE = ['PROJECT_NAME', 'MEM_WORKSPACE', 'MEM_PROJECT', 'DASHBOARD_URL', 'REPO'];
 // Markers whose value can only be learned from the project files (models and language come from forge.json).
 const SCALAR = [...PRIVATE, 'SPECIFY_SCRIPT', 'LANG_TAG', 'PANEL_OVERRIDES'];
 
@@ -120,7 +120,7 @@ async function inferAnswers(projectDir, templates) {
   let panelStrings;
   try { panelStrings = JSON.parse(w.PANEL_OVERRIDES); } catch { /* left to the built-in texts */ }
   return {
-    projectName: w.PROJECT_NAME, language: forge.language, plainStyle: forge.plainStyle, mode: forge.mode, models: forge.models,
+    projectName: w.PROJECT_NAME, repo: w.REPO, language: forge.language, plainStyle: forge.plainStyle, mode: forge.mode, models: forge.models,
     memory: { workspace: w.MEM_WORKSPACE, project: w.MEM_PROJECT }, script: w.SPECIFY_SCRIPT, dashboardUrl: w.DASHBOARD_URL,
     langTag: w.LANG_TAG, panelStrings,
   };
@@ -139,7 +139,7 @@ const strayCommon = (tLine, text, values, common) => [...common].some((n) => {
 
 // A model line the pairing could not tie to a template line keeps the models as typed: flagged like the project name (roles = their filled-in texts).
 function findLeaks(patch, answers, roles, skip) {
-  const secrets = [answers.projectName, answers.memory?.workspace, answers.memory?.project, answers.dashboardUrl?.split('/').pop(), ...roles]
+  const secrets = [answers.projectName, answers.repo, answers.memory?.workspace, answers.memory?.project, answers.dashboardUrl?.split('/').pop(), ...roles]
     .filter((s) => typeof s === 'string' && s.length >= 3 && !skip.includes(s)).map((s) => s.toLowerCase());
   const leaks = [];
   let file = '', header = false;

@@ -66,6 +66,7 @@ export const ANSWERS = (over = {}) => ({
   projectName: 'Acme Billing',
   language: 'English',
   mode: 'rigorous',
+  repo: 'acme/billing',
   models: {
     developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
     developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
@@ -96,7 +97,7 @@ export const generate = async (over = {}) => {
   const dest = mkdtempSync(join(tmpdir(), 'critico-f01-proj-'));
   await scaffold(ANSWERS(over), { dest });
   if (/^pt/.test(readJson(join(dest, '.claude/forge.json')).langTag)) {
-    for (const rel of ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
+    for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   }
   return dest;
 };

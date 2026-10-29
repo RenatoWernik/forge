@@ -11,6 +11,7 @@ const answers = (over = {}) => ({
   projectName: 'Acme Billing',
   language: 'English',
   mode: 'rigorous',
+  repo: 'acme/billing',
   models: {
     developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
     developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
@@ -38,6 +39,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     '.claude/workflows/gauntlet-ponytail.js',
     '.graphifyignore',
     '.gitignore',
+    'AGENTS.md',
     'BOOTSTRAP.md',
     'CLAUDE.md',
     'FRAMEWORK.md',
@@ -86,6 +88,18 @@ test('invalid answers are all reported at once and nothing is written', async ()
     return true;
   });
   assert.deepEqual(await readdir(dest), []);
+});
+
+test('repo is validated as owner/name, named in the error, and the valid value reaches the manual and the bootstrap', async () => {
+  const dest = await tmp();
+  for (const repo of [undefined, '', 'acme', 'acme/billing/x', 'https://github.com/acme/billing', 'acme/..', 'acme/bil$ling', 7]) {
+    await assert.rejects(scaffold(answers({ repo }), { dest }), /^Error: invalid answers:\n(- .*\n)*- repo: /m, String(repo));
+  }
+  assert.deepEqual(await readdir(dest), []);
+  await scaffold(answers({ repo: 'Acme-Org/billing.app' }), { dest });
+  for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) assert.doesNotMatch(await read(dest, rel), /\{\{REPO\}\}/, rel);
+  assert.match(await read(dest, 'FRAMEWORK.md'), /`Acme-Org\/billing\.app`/);
+  assert.match(await read(dest, 'BOOTSTRAP.md'), /tracker = GitHub \(`Acme-Org\/billing\.app`\)/);
 });
 
 test('mode, the 5 roles and their reasons are validated all at once, naming each field; a flag never drops the reason of the file', async () => {
@@ -186,7 +200,7 @@ test('plainStyle false drops the style rule from CLAUDE.md and forge.json record
   assert.doesNotMatch(await read(dest, 'CLAUDE.md'), /No dash, arrow or emoji/);
   const plain = await tmp();
   await scaffold(answers(), { dest: plain });
-  assert.match(await read(plain, 'CLAUDE.md'), /No dash, arrow or emoji in the prose of CLAUDE\.md, FRAMEWORK\.md and BOOTSTRAP\.md\./);
+  assert.match(await read(plain, 'CLAUDE.md'), /No dash, arrow or emoji in the prose of CLAUDE\.md, AGENTS\.md, FRAMEWORK\.md and BOOTSTRAP\.md\./);
 });
 
 const CHECK = (cwd) => spawnSync(process.execPath, ['.claude/check.cjs'], { cwd, encoding: 'utf8' });
@@ -333,7 +347,7 @@ const translate = (text, { line = LINE.pt, headings = {}, prose = true } = {}) =
   }).join('\n');
 };
 const rewrite = async (dest, rules, opts) => {
-  for (const rel of ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) {
+  for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) {
     const text = opts ? translate(await read(dest, rel), opts) : await read(dest, rel);
     await writeFile(join(dest, rel), rules.reduce((t, [from, to]) => t.replaceAll(from, to), text));
   }
@@ -395,7 +409,7 @@ test('the generated check scores each sub-step too: a Portuguese FRAMEWORK.md wi
   const KEPT = /^### Step [4-7]\./;
   const mixed = original.split(/^(?=#{2,} )/m).map((s) => (KEPT.test(s) ? s : translate(s, { headings: NATURAL, line: LINE.pt.repeat(2) }))).join('');
   await writeFile(join(dest, 'FRAMEWORK.md'), mixed);
-  for (const rel of ['CLAUDE.md', 'BOOTSTRAP.md']) await writeFile(join(dest, rel), translate(await read(dest, rel), { headings: NATURAL }));
+  for (const rel of ['CLAUDE.md', 'AGENTS.md', 'BOOTSTRAP.md']) await writeFile(join(dest, rel), translate(await read(dest, rel), { headings: NATURAL }));
   const r = CHECK(dest);
   assert.equal(r.status, 1, r.stdout);
   assert.match(r.stdout, /^FAIL {2}language: .*\(not in Portuguese \(Brazil\): FRAMEWORK\.md \[Step 4\. Graphify, Step 5\. Memory, Step 6\. Panel, Step 7\. Approval and tag\]\)$/m);
@@ -415,14 +429,14 @@ test('a translation that keeps the identifiers leaves the check green; one that 
   assert.match(broken.stdout, /^FAIL {2}BOOTSTRAP\.md: the step 8 args/m);
 });
 
-test('no generated file carries personal or company data, and the manual keeps its ten invariants', async () => {
+test('no generated file carries personal or company data, and the manual keeps its twelve invariants', async () => {
   // built from pieces so this test file does not contain the words it forbids
   const forbidden = new RegExp(['Key' + 'rus', 'Kri' + 'ti', 'One' + 'Drive', 'Ren' + 'ato', 'Wer' + 'nik', 'DGG1' + 'oUcP', 'Users' + '[/' + String.fromCharCode(92) + String.fromCharCode(92) + ']'].join('|'), 'i');
   const dest = await tmp();
   const { files } = await scaffold(answers({ language: 'Portuguese (Brazil)' }), { dest });
   for (const rel of files) assert.doesNotMatch(await read(dest, rel), forbidden, rel);
   const claude = await read(dest, 'CLAUDE.md');
-  for (let n = 1; n <= 10; n++) assert.ok(claude.includes(`\n${n}. **`), 'invariant ' + n);
+  for (let n = 1; n <= 12; n++) assert.ok(claude.includes(`\n${n}. **`), 'invariant ' + n);
   for (const h of ['## Terms', '## Invariants', '## Where things are', '## Style', '## Generated blocks']) assert.ok(claude.includes(h), h);
   const upToBlocks = claude.slice(0, claude.indexOf('## Generated blocks')).split('\n').length + 2;
   assert.ok(upToBlocks < 80, 'CLAUDE.md is ' + upToBlocks + ' lines up to its generated blocks');
@@ -449,6 +463,13 @@ test('the command line: a dry run lists the tree, a real run writes it, and a mi
   assert.equal(missing.status, 2);
   assert.match(missing.stdout, /models\.developer: missing[\s\S]*usage: node scaffold\.mjs/);
   assert.match(missing.stdout, /^- mode: /m);
+});
+
+test('--repo overrides the repo of the answers file and an invalid one exits 2', async () => {
+  const dest = await tmp();
+  assert.equal(await main([...FLAGS, '--repo', 'flag-owner/flag-name', '--dest', dest], () => {}), 0);
+  assert.match(await read(dest, 'FRAMEWORK.md'), /`flag-owner\/flag-name`/);
+  assert.equal(await main([...FLAGS, '--repo', 'not a repo', '--dest', await tmp()], () => {}), 2);
 });
 
 test('--answers reads a JSON file and a flag overrides the same key', async () => {

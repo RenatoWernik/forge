@@ -79,7 +79,7 @@ export const buildProject = async (answers, { translate = true } = {}) => {
   await scaffold(answers, { dest });
   const fj = readJson(join(dest, '.claude/forge.json'));
   if (translate && /^pt/i.test(fj.langTag)) {
-    for (const rel of ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
+    for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   }
   return { dest, fj };
 };
