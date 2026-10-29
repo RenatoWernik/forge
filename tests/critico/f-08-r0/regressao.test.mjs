@@ -53,8 +53,11 @@ test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da m
   const me = userInfo().username;
   const PROIBIDO = [/\b[A-Z]:\\\\?[A-Za-z]/, /\b[A-Z]:\/[A-Za-z]/, /\/Users\//, /\/home\/[a-z]/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /guilda/i, /renat/i, /@keyrus\./i, /AgentHomes|dev-mods|forge-wt|forge-ref/i,
     ...(me && me.length >= 3 ? [new RegExp(`\\b${me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')] : [])];
+  // Um texto que já estava no ficheiro na base (por exemplo a raiz falsa 'C:\\p' da simulação do check.cjs) não é novo: uma linha
+  // que o ticket edita por outro motivo não reprova por ele.
+  const base = new Map(), baseOf = (f) => { if (!base.has(f)) { const r = git('show', `${desde()}:${f}`); base.set(f, r.status === 0 ? r.stdout : ''); } return base.get(f); };
   const achados = [];
-  for (const [f, l] of acrescentadas()) for (const re of PROIBIDO) if (re.test(l)) achados.push(`${f}: ${re} → ${l.trim().slice(0, 100)}`);
+  for (const [f, l] of acrescentadas()) for (const re of PROIBIDO) { const m = l.match(re), tok = m && l.slice(m.index).match(/^[^'"`\s,;)]+/)[0]; if (m && !baseOf(f).includes(tok)) achados.push(`${f}: ${re} → ${l.trim().slice(0, 100)}`); }
   assert.deepEqual(achados, []);
 });
 

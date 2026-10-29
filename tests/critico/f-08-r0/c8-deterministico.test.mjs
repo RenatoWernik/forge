@@ -50,7 +50,7 @@ test('C8: o veredito do crítico tem o formato do brief: BLOCKING com o critéri
     assert.ok(x, `o bloqueante não tem o campo ${name}: ${JSON.stringify(Object.keys(it.properties || {}))}`);
     assert.ok((it.required || []).includes(x[0]), `o campo ${x[0]} do bloqueante não é obrigatório`);
   }
-  assert.deepEqual((mat[1].enum || []).map((v) => Number(String(v).match(/\d/)?.[0])).sort(), [1, 2, 3], 'a materialidade é um enum com exatamente 1, 2 e 3: ' + JSON.stringify(mat[1]));
+  assert.deepEqual(Array.from(mat[1].enum || []).map((v) => Number(String(v).match(/\d/)?.[0])).sort(), [1, 2, 3], 'a materialidade é um enum com exatamente 1, 2 e 3: ' + JSON.stringify(mat[1]));
   for (const [name, re] of [['MINOR', /minor|menor/i], ['BAR QUESTIONS', /question|pergunt/i], ['FOLLOW-UP', /follow|seguim/i]]) assert.ok(arr(re), `sem a lista ${name}: ${JSON.stringify(Object.keys(s.properties))}`);
 });
 
