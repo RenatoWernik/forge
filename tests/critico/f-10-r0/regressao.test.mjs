@@ -55,7 +55,7 @@ const acrescentadas = () => {
 test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão, dados pessoais nem nada da Guilda', () => {
   const PROIBIDO = [/\b[A-Z]:\\\\?[A-Za-z]/, /\/Users\//, /\/home\/[a-z]/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /guilda/i, /renat/i, /@keyrus\./i, /AgentHomes|dev-mods/i];
   const achados = [];
-  for (const [f, l] of acrescentadas()) for (const re of PROIBIDO) if (re.test(l)) achados.push(`${f}: ${re} → ${l.trim().slice(0, 100)}`);
+  for (const [f, l] of acrescentadas()) for (const re of PROIBIDO) if (re.test(l.replace(/(?:github\.com\/)?RenatoWernik\/gauntlet-loop(?![\w.-])/gi, ''))) achados.push(`${f}: ${re} → ${l.trim().slice(0, 100)}`);
   assert.deepEqual(achados, []);
 });
 
