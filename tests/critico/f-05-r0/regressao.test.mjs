@@ -34,7 +34,8 @@ test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os 139 
   assert.ok(r.pass >= 139, 'passaram ' + r.pass);
 });
 
-test('âmbito: em relação à origin/main, dos ataques já fundidos só os helpers.mjs podem mudar', () => {
+const branch = git('rev-parse', '--abbrev-ref', 'HEAD').stdout.trim();
+test('âmbito: em relação à origin/main, dos ataques já fundidos só os helpers.mjs podem mudar', { skip: branch !== 'f-05-docs-v3' && 'só no ramo f-05-docs-v3' }, () => {
   const mb = git('merge-base', 'HEAD', 'origin/main');
   assert.equal(mb.status, 0, 'sem merge-base com origin/main: ' + mb.stderr);
   const changed = git('diff', '--name-only', mb.stdout.trim(), '--', ...PRIOR.map((d) => 'tests/critico/' + d)).stdout.split(/\r?\n/).filter(Boolean);

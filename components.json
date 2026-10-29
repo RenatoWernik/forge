@@ -1,5 +1,5 @@
 {
-  "$comment": "Registry of every component forge installs. installed[] lists ways to detect it locally (first hit wins); latest says where the newest public version lives (never a pinned version); install/update are exact commands per platform (afterUpdate lists notes shown with an update command, as a list or per platform; a detector in installed[] may carry its own update, and requires, for a component found that way: pip, uv tool, pipx, a loose skill; a plain list holds on every platform; requires lists tools the commands need, as a list or per platform), printed by scripts/doctor.mjs and never run without the user's yes. Paths: ~ is the home dir, %VAR% an environment variable.",
+  "$comment": "Registry of every component forge installs. installed[] lists ways to detect it locally (first hit wins); latest says where the newest public version lives (never a pinned version); install/update are exact commands per platform (afterUpdate lists notes shown with an update command, as a list or per platform; a detector in installed[] may carry its own update, and requires, for a component found that way: pip, uv tool, pipx, a loose skill; a plain list holds on every platform; requires lists tools the commands need, as a list or per platform), printed by scripts/doctor.mjs and never run without the user's yes. Paths: ~ is the home dir, %VAR% an environment variable. Slots in a command: {claudeDir} is the Claude config folder (CLAUDE_CONFIG_DIR, else ~/.claude), always the value of an assignment; whenEnv.<VAR> holds the install/update commands used instead of the default ones when the environment variable VAR is set, with {VAR} as its value; a plugin detector with name (not id) finds the plugin under any marketplace, and {id} in its update is the plugin id of each instance. A slot value read from the environment or from a file enters the printed command inside single quotes (a plain id stays bare; the default {claudeDir} is the double-quoted \"$HOME/.claude\").",
   "components": [
     {
       "id": "uv",
@@ -30,30 +30,30 @@
       "name": "Gauntlet Loop skill",
       "type": "skill",
       "group": "gauntlet-loop",
-      "source": "https://github.com/robonuggets/gauntlet-loop",
-      "installDocs": "https://github.com/robonuggets/gauntlet-loop#quick-start",
+      "source": "https://github.com/RenatoWernik/gauntlet-loop",
+      "installDocs": "https://github.com/RenatoWernik/gauntlet-loop#readme",
       "installed": [{ "method": "skill", "name": "gauntlet-loop" }],
-      "latest": { "method": "github-head", "repo": "robonuggets/gauntlet-loop", "content": { "path": ".claude/skills/gauntlet-loop/SKILL.md" } },
+      "latest": { "method": "github-head", "repo": "RenatoWernik/gauntlet-loop", "content": { "path": ".claude/skills/gauntlet-loop/SKILL.md" } },
       "install": {
         "windows": [
-          "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/robonuggets/gauntlet-loop $src; New-Item -ItemType Directory -Force \"$HOME/.claude/skills/gauntlet-loop\" | Out-Null; Copy-Item -Force \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$HOME/.claude/skills/gauntlet-loop/SKILL.md\"; Remove-Item -Recurse -Force $src"
+          "$cfg = {claudeDir}; $src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/RenatoWernik/gauntlet-loop $src; New-Item -ItemType Directory -Force \"$cfg/skills/gauntlet-loop\" | Out-Null; Copy-Item -Force \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$cfg/skills/gauntlet-loop/SKILL.md\"; Remove-Item -Recurse -Force $src"
         ],
         "macos": [
-          "src=$(mktemp -d) && git clone --depth 1 https://github.com/robonuggets/gauntlet-loop \"$src\" && mkdir -p ~/.claude/skills/gauntlet-loop && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" ~/.claude/skills/gauntlet-loop/SKILL.md && rm -rf \"$src\""
+          "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/RenatoWernik/gauntlet-loop \"$src\" && mkdir -p \"$cfg/skills/gauntlet-loop\" && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$cfg/skills/gauntlet-loop/SKILL.md\" && rm -rf \"$src\""
         ],
         "linux": [
-          "src=$(mktemp -d) && git clone --depth 1 https://github.com/robonuggets/gauntlet-loop \"$src\" && mkdir -p ~/.claude/skills/gauntlet-loop && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" ~/.claude/skills/gauntlet-loop/SKILL.md && rm -rf \"$src\""
+          "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/RenatoWernik/gauntlet-loop \"$src\" && mkdir -p \"$cfg/skills/gauntlet-loop\" && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$cfg/skills/gauntlet-loop/SKILL.md\" && rm -rf \"$src\""
         ]
       },
       "update": {
         "windows": [
-          "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/robonuggets/gauntlet-loop $src; New-Item -ItemType Directory -Force \"$HOME/.claude/skills/gauntlet-loop\" | Out-Null; Copy-Item -Force \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$HOME/.claude/skills/gauntlet-loop/SKILL.md\"; Remove-Item -Recurse -Force $src"
+          "$cfg = {claudeDir}; $src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/RenatoWernik/gauntlet-loop $src; New-Item -ItemType Directory -Force \"$cfg/skills/gauntlet-loop\" | Out-Null; Copy-Item -Force \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$cfg/skills/gauntlet-loop/SKILL.md\"; Remove-Item -Recurse -Force $src"
         ],
         "macos": [
-          "src=$(mktemp -d) && git clone --depth 1 https://github.com/robonuggets/gauntlet-loop \"$src\" && mkdir -p ~/.claude/skills/gauntlet-loop && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" ~/.claude/skills/gauntlet-loop/SKILL.md && rm -rf \"$src\""
+          "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/RenatoWernik/gauntlet-loop \"$src\" && mkdir -p \"$cfg/skills/gauntlet-loop\" && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$cfg/skills/gauntlet-loop/SKILL.md\" && rm -rf \"$src\""
         ],
         "linux": [
-          "src=$(mktemp -d) && git clone --depth 1 https://github.com/robonuggets/gauntlet-loop \"$src\" && mkdir -p ~/.claude/skills/gauntlet-loop && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" ~/.claude/skills/gauntlet-loop/SKILL.md && rm -rf \"$src\""
+          "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/RenatoWernik/gauntlet-loop \"$src\" && mkdir -p \"$cfg/skills/gauntlet-loop\" && cp \"$src/.claude/skills/gauntlet-loop/SKILL.md\" \"$cfg/skills/gauntlet-loop/SKILL.md\" && rm -rf \"$src\""
         ]
       },
       "requires": ["git"]
@@ -68,7 +68,7 @@
       "installed": [
         {
           "method": "command",
-          "commands": ["ai-memory", "%LOCALAPPDATA%/ai-memory/ai-memory.exe", "~/Applications/ai-memory/ai-memory", "~/.local/bin/ai-memory"],
+          "commands": ["%AI_MEMORY_BIN%", "ai-memory", "%LOCALAPPDATA%/ai-memory/ai-memory.exe", "~/Applications/ai-memory/ai-memory", "~/.local/bin/ai-memory"],
           "regex": "ai-memory ([0-9]+[.][0-9]+[.][0-9]+)"
         }
       ],
@@ -99,7 +99,33 @@
         "macos": ["Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it."],
         "linux": ["Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it."]
       },
-      "requires": { "linux": ["mise"] }
+      "requires": { "linux": ["mise"] },
+      "whenEnv": {
+        "AI_MEMORY_BIN": {
+          "install": {
+            "windows": [
+              "$ErrorActionPreference = \"Stop\"; $Exe = {AI_MEMORY_BIN}; $Dest = Split-Path -Parent $Exe; $Tmp = Join-Path $env:TEMP \"forge-aim-$([guid]::NewGuid())\"; New-Item -ItemType Directory -Force $Dest, $Tmp | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Tmp -Force; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe ((Split-Path -Leaf $Exe) + \".old\") }; Move-Item -Force \"$Tmp/ai-memory.exe\" $Exe; Get-ChildItem $Exe | Unblock-File; Remove-Item -Recurse -Force $Tmp"
+            ],
+            "macos": [
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
+            ],
+            "linux": [
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-linux-$arch.tar.gz\" && tar -xzf \"ai-memory-linux-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
+            ]
+          },
+          "update": {
+            "windows": [
+              "$ErrorActionPreference = \"Stop\"; $Exe = {AI_MEMORY_BIN}; $Dest = Split-Path -Parent $Exe; $Tmp = Join-Path $env:TEMP \"forge-aim-$([guid]::NewGuid())\"; New-Item -ItemType Directory -Force $Dest, $Tmp | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Tmp -Force; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe ((Split-Path -Leaf $Exe) + \".old\") }; Move-Item -Force \"$Tmp/ai-memory.exe\" $Exe; Get-ChildItem $Exe | Unblock-File; Remove-Item -Recurse -Force $Tmp"
+            ],
+            "macos": [
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
+            ],
+            "linux": [
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-linux-$arch.tar.gz\" && tar -xzf \"ai-memory-linux-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
+            ]
+          }
+        }
+      }
     },
     {
       "id": "ai-memory-mcp",
@@ -131,6 +157,26 @@
         ],
         "macos": ["Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it."],
         "linux": ["Restart the `ai-memory serve` process afterwards (the terminal, service or scheduled task that runs it): the MCP server is a separate process that keeps using the old binary until it restarts, and closing Claude Code does not stop it."]
+      },
+      "whenEnv": {
+        "AI_MEMORY_BIN": {
+          "install": {
+            "windows": ["& {AI_MEMORY_BIN} install-mcp --client claude-code --apply"],
+            "macos": ["{AI_MEMORY_BIN} install-mcp --client claude-code --apply"],
+            "linux": ["{AI_MEMORY_BIN} install-mcp --client claude-code --apply"]
+          },
+          "update": {
+            "windows": [
+              "$ErrorActionPreference = \"Stop\"; $Exe = {AI_MEMORY_BIN}; $Dest = Split-Path -Parent $Exe; $Tmp = Join-Path $env:TEMP \"forge-aim-$([guid]::NewGuid())\"; New-Item -ItemType Directory -Force $Dest, $Tmp | Out-Null; Invoke-WebRequest -Uri \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-windows-x86_64.zip\" -OutFile \"$env:TEMP/ai-memory.zip\"; Expand-Archive \"$env:TEMP/ai-memory.zip\" -DestinationPath $Tmp -Force; if (Test-Path $Exe) { Remove-Item \"$Exe.old\" -Force -ErrorAction SilentlyContinue; Rename-Item $Exe ((Split-Path -Leaf $Exe) + \".old\") }; Move-Item -Force \"$Tmp/ai-memory.exe\" $Exe; Get-ChildItem $Exe | Unblock-File; Remove-Item -Recurse -Force $Tmp"
+            ],
+            "macos": [
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-macos-$arch.tar.gz\" && tar -xzf \"ai-memory-macos-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
+            ],
+            "linux": [
+              "arch=$(uname -m); [ \"$arch\" = arm64 ] && arch=aarch64; bin={AI_MEMORY_BIN}; tmp=$(mktemp -d) && mkdir -p \"$(dirname \"$bin\")\" && cd \"$tmp\" && curl -fsSL -O \"https://github.com/akitaonrails/ai-memory/releases/latest/download/ai-memory-linux-$arch.tar.gz\" && tar -xzf \"ai-memory-linux-$arch.tar.gz\" && mv -f ai-memory \"$bin\" && cd / && rm -rf \"$tmp\""
+            ]
+          }
+        }
       }
     },
     {
@@ -147,13 +193,13 @@
           "name": "ponytail",
           "update": {
             "windows": [
-              "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/DietrichGebert/ponytail $src; New-Item -ItemType Directory -Force \"$HOME/.claude/skills\" | Out-Null; Copy-Item -Recurse -Force \"$src/skills/*\" \"$HOME/.claude/skills/\"; Remove-Item -Recurse -Force $src"
+              "$cfg = {claudeDir}; $src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/DietrichGebert/ponytail $src; New-Item -ItemType Directory -Force \"$cfg/skills\" | Out-Null; Get-ChildItem \"$src/skills\" -Directory | ForEach-Object { Copy-Item -Recurse -Force $_.FullName \"$cfg/skills/\" }; Remove-Item -Recurse -Force $src"
             ],
             "macos": [
-              "src=$(mktemp -d) && git clone --depth 1 https://github.com/DietrichGebert/ponytail \"$src\" && mkdir -p ~/.claude/skills && cp -R \"$src\"/skills/* ~/.claude/skills/ && rm -rf \"$src\""
+              "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/DietrichGebert/ponytail \"$src\" && mkdir -p \"$cfg/skills\" && for d in \"$src\"/skills/*/; do cp -R \"${d%/}\" \"$cfg/skills/\"; done && rm -rf \"$src\""
             ],
             "linux": [
-              "src=$(mktemp -d) && git clone --depth 1 https://github.com/DietrichGebert/ponytail \"$src\" && mkdir -p ~/.claude/skills && cp -R \"$src\"/skills/* ~/.claude/skills/ && rm -rf \"$src\""
+              "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/DietrichGebert/ponytail \"$src\" && mkdir -p \"$cfg/skills\" && for d in \"$src\"/skills/*/; do cp -R \"${d%/}\" \"$cfg/skills/\"; done && rm -rf \"$src\""
             ]
           },
           "requires": ["git"]
@@ -205,24 +251,24 @@
       "latest": { "method": "github-frontmatter", "repo": "SpillwaveSolutions/sdd-skill", "path": "skill.md" },
       "install": {
         "windows": [
-          "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill $src; $dst = \"$HOME/.claude/skills/sdd\"; New-Item -ItemType Directory -Force $dst | Out-Null; Copy-Item -Force \"$src/skill.md\" \"$dst/SKILL.md\"; Copy-Item -Force \"$src/skill.json\", \"$src/README.md\" $dst; Copy-Item -Recurse -Force \"$src/references\", \"$src/scripts\" $dst; Remove-Item -Recurse -Force $src"
+          "$cfg = {claudeDir}; $src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill $src; $dst = \"$cfg/skills/sdd\"; New-Item -ItemType Directory -Force $dst | Out-Null; Copy-Item -Force \"$src/skill.md\" \"$dst/SKILL.md\"; Copy-Item -Force \"$src/skill.json\", \"$src/README.md\" $dst; Copy-Item -Recurse -Force \"$src/references\", \"$src/scripts\" $dst; Remove-Item -Recurse -Force $src"
         ],
         "macos": [
-          "src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=~/.claude/skills/sdd && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
+          "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=\"$cfg/skills/sdd\" && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
         ],
         "linux": [
-          "src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=~/.claude/skills/sdd && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
+          "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=\"$cfg/skills/sdd\" && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
         ]
       },
       "update": {
         "windows": [
-          "$src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill $src; $dst = \"$HOME/.claude/skills/sdd\"; New-Item -ItemType Directory -Force $dst | Out-Null; Copy-Item -Force \"$src/skill.md\" \"$dst/SKILL.md\"; Copy-Item -Force \"$src/skill.json\", \"$src/README.md\" $dst; Copy-Item -Recurse -Force \"$src/references\", \"$src/scripts\" $dst; Remove-Item -Recurse -Force $src"
+          "$cfg = {claudeDir}; $src = Join-Path $env:TEMP \"forge-src-$([guid]::NewGuid())\"; git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill $src; $dst = \"$cfg/skills/sdd\"; New-Item -ItemType Directory -Force $dst | Out-Null; Copy-Item -Force \"$src/skill.md\" \"$dst/SKILL.md\"; Copy-Item -Force \"$src/skill.json\", \"$src/README.md\" $dst; Copy-Item -Recurse -Force \"$src/references\", \"$src/scripts\" $dst; Remove-Item -Recurse -Force $src"
         ],
         "macos": [
-          "src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=~/.claude/skills/sdd && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
+          "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=\"$cfg/skills/sdd\" && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
         ],
         "linux": [
-          "src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=~/.claude/skills/sdd && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
+          "cfg={claudeDir}; src=$(mktemp -d) && git clone --depth 1 https://github.com/SpillwaveSolutions/sdd-skill \"$src\" && dst=\"$cfg/skills/sdd\" && mkdir -p \"$dst\" && cp \"$src/skill.md\" \"$dst/SKILL.md\" && cp -R \"$src/skill.json\" \"$src/README.md\" \"$src/references\" \"$src/scripts\" \"$dst/\" && rm -rf \"$src\""
         ]
       },
       "requires": ["git"]
@@ -234,17 +280,17 @@
       "group": "matt-pocock",
       "source": "https://github.com/mattpocock/skills",
       "installDocs": "https://github.com/mattpocock/skills#readme",
-      "installed": [{ "method": "plugin", "id": "mattpocock-skills@claude-plugins-official" }],
+      "installed": [{ "method": "plugin", "name": "mattpocock-skills", "update": ["claude plugin update {id}"] }],
       "latest": { "method": "github-release", "repo": "mattpocock/skills" },
       "install": {
-        "windows": ["claude plugin install mattpocock-skills@claude-plugins-official"],
-        "macos": ["claude plugin install mattpocock-skills@claude-plugins-official"],
-        "linux": ["claude plugin install mattpocock-skills@claude-plugins-official"]
+        "windows": ["claude plugin marketplace add mattpocock/skills", "claude plugin install mattpocock-skills@mattpocock"],
+        "macos": ["claude plugin marketplace add mattpocock/skills", "claude plugin install mattpocock-skills@mattpocock"],
+        "linux": ["claude plugin marketplace add mattpocock/skills", "claude plugin install mattpocock-skills@mattpocock"]
       },
       "update": {
-        "windows": ["claude plugin update mattpocock-skills@claude-plugins-official"],
-        "macos": ["claude plugin update mattpocock-skills@claude-plugins-official"],
-        "linux": ["claude plugin update mattpocock-skills@claude-plugins-official"]
+        "windows": ["claude plugin update mattpocock-skills@mattpocock"],
+        "macos": ["claude plugin update mattpocock-skills@mattpocock"],
+        "linux": ["claude plugin update mattpocock-skills@mattpocock"]
       }
     },
     {
