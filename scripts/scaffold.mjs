@@ -2,6 +2,7 @@ import { readdir, readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { validarHooks, ficheirosDosHooks, juntarSettings } from './hooks.mjs';
 
 const TEMPLATES = fileURLToPath(new URL('../templates/', import.meta.url));
 // copied as is: its comments quote the marker syntax
@@ -9,6 +10,7 @@ const VERBATIM = new Set(['.claude/check.cjs']);
 const LEITOR = fileURLToPath(new URL('./painel-leitor.mjs', import.meta.url));
 export const LEITOR_NO_PROJETO = '.claude/painel-leitor.mjs';
 const PAINEL = '.checkpoints/painel.json';
+const SETTINGS = '.claude/settings.json'; // the settings of the PROJECT; the hooks the user said yes to are joined to it, never to a global file
 const MODO_DO_PAINEL = { rigorous: 'rigoroso', accelerated: 'acelerado' }; // the mode of forge.json, in the words of painel.json
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const ROLES = ['developer', 'developerUi', 'critic', 'tester', 'aux'];
@@ -24,6 +26,7 @@ const ESCALATION = {
 const STYLE_CHARS = /[\u2013\u2014\u2192\u2600-\u27BF\u{1F300}-\u{1FAFF}]/gu; // what the plainStyle line of check.cjs refuses
 const PANEL_URL = /^https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+$/;
 const PENDING_URL = 'https://claude.ai/artifact/PANEL-URL-PENDING';
+const REPO = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$/; // GitHub owner/name; the owner never has dots
 
 // Panel texts in Portuguese (Brazil); English lives in the panel page itself. Any other language comes in as answers.panelStrings.
 // ponytail: one built-in translation, the rest translated by the skill at setup; move to one file per language when a third one ships
@@ -51,6 +54,9 @@ const PANEL_PT = {
   inboxSent: 'Recado enviado.', inboxRead: 'lido pelo Claude', inboxWaiting: 'aguardando leitura', inboxReadOnly: 'Você só tem acesso de leitura a este painel.',
   inboxFail: 'Não foi possível enviar. Tente de novo em instantes.', inboxUnavailable: 'Recados indisponíveis nesta visualização.',
   agoNow: 'agora', agoMin: 'há {n} min', agoHour: 'há {n} h',
+  painelTitle: 'Tickets e agentes', painelDone: 'concluído', painelGoal: 'Objetivo', painelMissing: 'Ainda sem dados do painel: falta a cópia do painel.json.', painelInvalid: 'Os dados do painel são inválidos: {erro}',
+  tk_main: 'Na main', tk_aprovado: 'Aprovados', tk_critico: 'No crítico', tk_dev: 'Em desenvolvimento', tk_reprovado: 'Reprovados', tk_espera: 'Em espera', tk_falta: 'Por fazer',
+  lifeStarting: 'a começar', lifeActive: 'ativo', lifeNoSignal: 'sem sinal', lifeStalled: 'parado?',
 };
 
 const templateFiles = async () => (await readdir(TEMPLATES, { recursive: true, withFileTypes: true }))
@@ -125,6 +131,7 @@ function validate(a) {
   need('projectName', str(a.projectName) && /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,59}$/u.test(a.projectName), 'letters, digits, space, dot, dash or underscore (1 to 60 characters)');
   for (const k of ['workspace', 'project']) need(`memory.${k}`, str(a.memory?.[k]) && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(a.memory[k]), 'letters, digits, dot, dash or underscore, no spaces');
   need('mode', MODES.includes(a.mode), `one of ${MODES.join(', ')}`);
+  need('repo', str(a.repo) && REPO.test(a.repo), 'the GitHub repository of the project as owner/name, for example acme/billing (the ticket contracts live in its issues)');
   for (const role of ROLES) {
     const r = a.models?.[role];
     if (!r || typeof r !== 'object') { bad.push(`models.${role}: missing (model, effort and reason)`); continue; }
@@ -142,6 +149,7 @@ function validate(a) {
   need('dashboardUrl', a.dashboardUrl === undefined || (str(a.dashboardUrl) && PANEL_URL.test(a.dashboardUrl)), 'a https://claude.ai/artifact/<id> URL');
   const lang = resolveLanguage(a);
   if (lang.error) bad.push(lang.error);
+  bad.push(...validarHooks(a.hooks));
   const ps = a.panelStrings;
   need('panelStrings', ps === undefined || (ps && typeof ps === 'object' && Object.entries(ps).every(([k, v]) => /^\w+$/.test(k) && str(v) && v.length <= 400)), 'an object of short strings keyed like the panel texts');
   if (bad.length) throw new Error(`invalid answers:\n- ${bad.join('\n- ')}`);
@@ -152,13 +160,14 @@ function markers(a, lang) {
   const m = a.models;
   return {
     PROJECT_NAME: a.projectName,
+    REPO: a.repo,
     LANGUAGE: lang.name,
     MEM_WORKSPACE: a.memory.workspace,
     MEM_PROJECT: a.memory.project,
     DASHBOARD_URL: a.dashboardUrl ?? PENDING_URL,
     SPECIFY_SCRIPT: a.script ?? 'sh',
     MODELS_JSON: JSON.stringify(m).replace(STYLE_CHARS, (c) => [...Array(c.length).keys()].map((i) => `\\u${c.charCodeAt(i).toString(16).padStart(4, '0')}`).join('')), // a reason is free text: the dash or emoji the style check forbids is written as a JSON escape
-    STYLE_RULE: a.plainStyle !== false ? 'No dash, arrow or emoji in the prose of CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md. ' : '',
+    STYLE_RULE: a.plainStyle !== false ? 'No dash, arrow or emoji in the prose of CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md. ' : '',
     LANG_TAG: lang.tag,
     PANEL_OVERRIDES: JSON.stringify(a.panelStrings ?? (/^pt(-|$)/.test(lang.tag) ? PANEL_PT : {})).replace(/</g, '\\u003c'), // safe inside <script>
     // the same tokens `node .claude/check.cjs --render` fills in the workflow meta
@@ -169,7 +178,8 @@ function markers(a, lang) {
 
 export async function scaffold(answers, { dest, dryRun = false, force = false } = {}) {
   const lang = validate(answers);
-  const vars = markers(answers, lang);
+  const leitor = await readFile(LEITOR, 'utf8'); // the single source of the reader, copied as is (its text has no markers to fill)
+  const vars = { ...markers(answers, lang), PAINEL_LEITOR: leitor }; // the panel page embeds it in its module script (filled in one pass, never re-scanned)
   const tree = {};
   for (const rel of await templateFiles()) {
     const text = await readFile(TEMPLATES + rel, 'utf8');
@@ -177,10 +187,13 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
   }
   tree['.claude/forge.json'] = JSON.stringify({ language: lang.name, langTag: lang.tag, plainStyle: answers.plainStyle !== false, mode: answers.mode, models: answers.models, escalation: ESCALATION }, null, 2) + '\n';
   tree[PAINEL] = JSON.stringify({ versao: 1, projeto: answers.projectName, modo: MODO_DO_PAINEL[answers.mode], tickets: [], agentes: [] }, null, 2) + '\n';
-  tree[LEITOR_NO_PROJETO] = await readFile(LEITOR, 'utf8'); // the single source of the reader, copied as is (its text has no markers to fill)
-  const files = Object.keys(tree);
+  tree[LEITOR_NO_PROJETO] = leitor;
+  for (const [rel, from] of ficheirosDosHooks(answers.hooks)) tree[rel] = await readFile(from, 'utf8'); // only the hooks answered true; copied as is, like the reader
   const conflicts = [];
-  for (const rel of files) if (await exists(join(dest, rel))) conflicts.push(rel);
+  for (const rel of Object.keys(tree)) if (await exists(join(dest, rel))) conflicts.push(rel);
+  // no answer for hooks leaves settings.json alone; an answer joins it (no force needed: the user's keys and hooks stay) or, when it is not valid JSON, stops before anything is written
+  const settings = answers.hooks === undefined ? null : juntarSettings(await readFile(join(dest, SETTINGS), 'utf8').catch(() => undefined), answers.hooks);
+  const files = [...Object.keys(tree), ...(settings === null ? [] : [SETTINGS])];
   if (!dryRun) {
     if (conflicts.length && !force) throw new Error(`refusing to overwrite existing files (use force to replace them): ${conflicts.join(', ')}`);
     for (const [rel, text] of Object.entries(tree)) {
@@ -188,8 +201,16 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
       await mkdir(dirname(join(dest, rel)), { recursive: true });
       await writeFile(join(dest, rel), text);
     }
+    if (settings !== null) await writeFile(join(dest, SETTINGS), settings);
   }
   return { files, conflicts };
+}
+
+// The seed of notes/n0001: the setup decisions of the project in `dest`, read back from its forge.json so the reasons shown are the ones recorded.
+export async function decisionNote(dest) {
+  const fj = JSON.parse((await readFile(join(dest, '.claude/forge.json'), 'utf8')).replace(/^﻿/, ''));
+  const roles = ROLES.map((r) => `${r}: ${fj.models[r].label ?? fj.models[r].model} ${fj.models[r].effort}, ${fj.models[r].reason}`);
+  return { kind: 'decisao', body: [`language: ${fj.language}`, `mode: ${fj.mode}`, ...roles].join('\n') };
 }
 
 // The panel URL only exists after the page is published, which needs the generated panel.html: write with the pending URL first, swap it in afterwards.
@@ -211,10 +232,11 @@ export async function setPanelUrl(dest, url) {
 const USAGE = `usage: node scaffold.mjs --dest <folder> --name <project> --language <language>
          --developer <model:effort[:label]> --critic <model:effort[:label]> --aux <model:effort[:label]>
          --workspace <ai-memory workspace> --project <ai-memory project>
-         --mode <rigorous|accelerated>
+         --mode <rigorous|accelerated> --repo <owner/name>
          [--script sh|ps] [--panel-url <url>] [--lang-tag <tag>] [--no-plain-style] [--answers <file.json>]
          [--dry-run] [--force]
        node scaffold.mjs --dest <folder> --set-panel-url <url>
+       node scaffold.mjs --dest <folder> --decision-note
        Flags override the same keys of --answers; models are never defaulted: the user chooses them.
        The roles developerUi and tester, and the reason of every role, come only through --answers.`;
 
@@ -222,11 +244,15 @@ export async function main(argv, write) {
   try {
     const v = parseArgs({ args: argv, options: {
       dest: { type: 'string' }, answers: { type: 'string' }, name: { type: 'string' }, language: { type: 'string' }, 'lang-tag': { type: 'string' },
-      mode: { type: 'string' }, developer: { type: 'string' }, critic: { type: 'string' }, aux: { type: 'string' }, workspace: { type: 'string' }, project: { type: 'string' },
+      mode: { type: 'string' }, repo: { type: 'string' }, developer: { type: 'string' }, critic: { type: 'string' }, aux: { type: 'string' }, workspace: { type: 'string' }, project: { type: 'string' },
       script: { type: 'string' }, 'panel-url': { type: 'string' }, 'set-panel-url': { type: 'string' },
-      'no-plain-style': { type: 'boolean' }, 'dry-run': { type: 'boolean' }, force: { type: 'boolean' },
+      'no-plain-style': { type: 'boolean' }, 'dry-run': { type: 'boolean' }, force: { type: 'boolean' }, 'decision-note': { type: 'boolean' },
     } }).values;
     const dest = resolve(v.dest ?? '.');
+    if (v['decision-note']) {
+      write(JSON.stringify(await decisionNote(dest)));
+      return 0;
+    }
     if (v['set-panel-url']) {
       const { changed } = await setPanelUrl(dest, v['set-panel-url']);
       write(`forge scaffold: panel URL set in ${changed.length} files: ${changed.join(', ')}`);
@@ -243,7 +269,7 @@ export async function main(argv, write) {
     }
     const answers = {
       ...base,
-      mode: v.mode ?? base.mode,
+      mode: v.mode ?? base.mode, repo: v.repo ?? base.repo,
       projectName: v.name ?? base.projectName, language: v.language ?? base.language, langTag: v['lang-tag'] ?? base.langTag,
       memory: { workspace: v.workspace ?? base.memory?.workspace, project: v.project ?? base.memory?.project },
       models, script: v.script ?? base.script, dashboardUrl: v['panel-url'] ?? base.dashboardUrl,
@@ -257,8 +283,8 @@ export async function main(argv, write) {
       ...(kept.length ? [`existing files (kept): ${kept.join(', ')}`] : [])].join('\n'));
     return 0;
   } catch (e) {
-    write(`${e.message}\n${USAGE}`);
-    return 2;
+    write(e.exit === 1 ? e.message : `${e.message}\n${USAGE}`); // a settings.json that is not valid JSON: exit 1, nothing written
+    return e.exit ?? 2;
   }
 }
 

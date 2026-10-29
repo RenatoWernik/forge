@@ -1,0 +1,7 @@
+{
+  "base": "pt-plain-pending",
+  "file": "AGENTS.md",
+  "find": "Esta parte descreve o que o agente faz para cada peça, com o teste e a evidência que não podem faltar.",
+  "replace": "This part describes what the agent does for each piece, with the test and the evidence that cannot be missing.",
+  "line": "language: CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist) are in the language of forge.json, in the body text and not only in the headings"
+}

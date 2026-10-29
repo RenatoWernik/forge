@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": ".claude/briefs/batch.md",
+  "find": "# Batch brief",
+  "replace": "# Batch brief\n\nThe first lines of this brief are filled with plain text.\nSo the warning of the hook is pushed down.\nIt now starts below line 5.\nThe batch must see it at the top.",
+  "line": "briefs"
+}

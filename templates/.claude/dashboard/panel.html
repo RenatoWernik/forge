@@ -57,6 +57,29 @@ button, textarea { font: inherit; color: inherit }
 .stat[data-tone="ok"] b { color: var(--ok) }
 .stat[data-tone="run"] b { color: var(--accent) }
 
+/* painel.json: progress, counts by state, goal and agents */
+.painel-erro { margin: 0; padding: 10px 12px; border: 1px solid var(--fail); background: var(--fail-soft); overflow-wrap: anywhere }
+.resumo { display: grid; gap: 10px; min-width: 0 }
+.resumo:empty { display: none }
+.prog { display: flex; align-items: center; gap: 10px }
+.prog b { font-family: var(--f-data); font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums }
+.prog span { color: var(--muted); font-size: 0.8rem }
+.pbar { flex: 1; height: 6px; background: var(--sunk) }
+.pbar i { display: block; height: 100%; background: var(--ok) }
+.contagens { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px }
+.contagens li { border: 1px solid var(--line); background: var(--bg); padding: 3px 8px; font-size: 0.8rem; display: flex; gap: 6px; align-items: baseline }
+.contagens b { font-family: var(--f-data); font-variant-numeric: tabular-nums }
+.objetivo { margin: 0; overflow-wrap: anywhere }
+.objetivo span { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 6px }
+.agentes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 8px }
+.agentes:empty { display: none }
+.agentes li { border: 1px solid var(--line); background: var(--bg); padding: 8px 10px; display: grid; gap: 3px; min-width: 0 }
+.agentes .nome { font-weight: 600; overflow-wrap: anywhere }
+.agentes .meta, .agentes .vida { font-family: var(--f-data); font-size: 0.72rem; color: var(--muted); overflow-wrap: anywhere }
+.agentes li[data-vida="ativo"] .vida { color: var(--ok) }
+.agentes li[data-vida="sem sinal"] .vida { color: var(--warn) }
+.agentes li[data-vida="parado?"] .vida { color: var(--fail) }
+
 /* SDD stepper + checkpoints */
 .band { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px }
 @media (max-width: 900px) { .band { grid-template-columns: minmax(0, 1fr) } }
@@ -177,6 +200,13 @@ button, textarea { font: inherit; color: inherit }
     <div class="live" id="live" data-state="wait" role="status"><span class="dot"></span><span id="livetxt"></span></div>
   </header>
 
+  <section class="panel">
+    <div class="panel-head"><h2 data-t="painelTitle"></h2></div>
+    <p class="painel-erro" id="painel-erro" role="alert" hidden></p>
+    <div class="resumo" id="painel-resumo"></div>
+    <ul class="agentes" id="painel-agentes"></ul>
+  </section>
+
   <section class="rail" data-al="summary">
     <div class="stat" data-tone="run"><b id="s-run">0</b><span data-t="running"></span></div>
     <div class="stat"><b id="s-queue">0</b><span data-t="queued"></span></div>
@@ -236,7 +266,10 @@ button, textarea { font: inherit; color: inherit }
   </section>
 </div>
 
-<script>
+<script type="module">
+{{PAINEL_LEITOR}}
+// The page code. Above it, the shared reader of painel.json (validar, ler), embedded byte for byte when the project is generated: never edit it here
+// and never declare its names again (ESTADOS, ler, vida, ...) below, since both share this module.
 // Texts: English here; a project in another language gets the overrides of its language in the object merged after EN (filled when the project is generated).
 const EN = {
   title: "{name} Gauntlet Control", subtitle: "Live panel of the project agents", connecting: "connecting...", live: "live",
@@ -261,7 +294,10 @@ const EN = {
   inboxTitle: "Message to Claude", inboxLabel: "Claude reads these messages at every checkpoint.", inboxPlaceholder: "E.g.: do the login before the report", inboxSend: "Send message",
   inboxSent: "Message sent.", inboxRead: "read by Claude", inboxWaiting: "waiting to be read", inboxReadOnly: "You only have read access to this panel.",
   inboxFail: "Could not send. Try again shortly.", inboxUnavailable: "Messages are unavailable in this view.",
-  agoNow: "now", agoMin: "{n} min ago", agoHour: "{n} h ago"
+  agoNow: "now", agoMin: "{n} min ago", agoHour: "{n} h ago",
+  painelTitle: "Tickets and agents", painelDone: "done", painelGoal: "Goal", painelMissing: "No panel data yet: the copy of painel.json is missing.", painelInvalid: "The panel data is invalid: {erro}",
+  tk_main: "Merged", tk_aprovado: "Approved", tk_critico: "With the critic", tk_dev: "In development", tk_reprovado: "Rejected", tk_espera: "Waiting", tk_falta: "Not started",
+  lifeStarting: "starting", lifeActive: "active", lifeNoSignal: "no signal", lifeStalled: "stalled?"
 };
 const PROJECT = "{{PROJECT_NAME}}", LANG = "{{LANG_TAG}}";
 const T = Object.assign({}, EN, {{PANEL_OVERRIDES}});
@@ -394,7 +430,45 @@ function renderNotes() {
   $("inbox").innerHTML = S.inbox.map(m => `<div class="msg" data-s="${esc(m.status)}"><span>${esc(m.text)}</span><small>${esc(ago(m.t))} · ${esc(tx(m.status === "lido" ? "inboxRead" : "inboxWaiting"))}${m.reply ? " · " + esc(m.reply) : ""}</small></div>`).join("");
 }
 
-function renderAll() { renderHeader(); renderFramework(); renderCheckpoints(); renderAgents(); renderBoard(); renderFeed(); renderNotes() }
+// painel.json through the shared reader above. painel/estado is the exact copy of the file; painel/vida, the age of each checkpoint when
+// it was written. That age goes back to the reader as an mtime, so it keeps ageing: a painel/vida nobody refreshes ends in "parado?".
+// Everything is built with textContent: the panel data is text, never markup.
+const P = { estado: undefined, vida: null, semDb: false };
+const LIFE = { "a começar": "lifeStarting", "ativo": "lifeActive", "sem sinal": "lifeNoSignal", "parado?": "lifeStalled" };
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e };
+
+function renderPainel() {
+  const erro = $("painel-erro"), resumo = $("painel-resumo"), lista = $("painel-agentes");
+  resumo.replaceChildren(); lista.replaceChildren();
+  const t = Date.parse(P.vida && P.vida.t), idades = P.vida && typeof P.vida.agentes === "object" && P.vida.agentes;
+  const mtimes = Object.create(null), conhecidos = new Set();
+  if (isFinite(t) && idades) for (const a of Array.isArray(P.estado && P.estado.agentes) ? P.estado.agentes : []) {
+    if (!a || typeof a.nome !== "string" || !Object.hasOwn(idades, a.nome)) continue;
+    const min = idades[a.nome] && idades[a.nome].minutos;
+    if (min === null) conhecidos.add(a.nome);
+    else if (Number.isFinite(min) && min >= 0) { conhecidos.add(a.nome); mtimes[a.checkpoint] = t - min * 60000 }
+  }
+  const m = P.semDb || P.estado === undefined ? null : ler(P.estado === null ? undefined : JSON.stringify(P.estado), mtimes, Date.now());
+  const msg = P.semDb ? tx("noData") : !m || !m.erro ? "" : P.estado === null ? tx("painelMissing") : tx("painelInvalid", { erro: m.erro });
+  erro.textContent = msg; erro.hidden = !msg;
+  if (!m || m.erro) return;
+  const prog = el("div", "prog"), pct = el("b", null, m.percentagem + "%"), bar = el("div", "pbar"), fill = el("i");
+  pct.id = "painel-pct"; bar.setAttribute("aria-hidden", "true"); fill.style.width = m.percentagem + "%";
+  bar.append(fill); prog.append(pct, el("span", null, tx("painelDone")), bar);
+  const cont = el("ul", "contagens");
+  cont.id = "painel-contagens";
+  for (const [estado, n] of m.contagens) { const li = el("li"); li.dataset.estado = estado; li.append(el("b", null, n), el("span", null, tx("tk_" + estado))); cont.append(li) }
+  resumo.append(prog, cont);
+  if (m.objetivo) { const obj = el("p", "objetivo"); obj.append(el("span", null, tx("painelGoal")), m.objetivo); resumo.append(obj) }
+  for (const a of m.agentes) {
+    const li = el("li");
+    li.append(el("span", "nome", a.nome), el("span", "meta", [a.papel, a.ticket, a.modelo].join(" · ")));
+    if (conhecidos.has(a.nome)) { li.dataset.vida = a.vida; li.append(el("span", "vida", tx(LIFE[a.vida]) + (a.minutos === null ? "" : " · " + ago(Date.now() - a.minutos * 60000)))) }
+    lista.append(li);
+  }
+}
+
+function renderAll() { renderPainel(); renderHeader(); renderFramework(); renderCheckpoints(); renderAgents(); renderBoard(); renderFeed(); renderNotes() }
 
 $("tabs").addEventListener("click", e => {
   const t = e.target.closest(".tab"); if (!t) return;
@@ -408,15 +482,17 @@ $("lanes").addEventListener("click", e => {
 });
 
 renderAll();
-setInterval(() => { renderHeader(); renderAgents(); renderNotes() }, 30000);
+setInterval(() => { renderPainel(); renderHeader(); renderAgents(); renderNotes() }, 30000);
 
 (async () => {
   const db = await claude.use("db");
   const live = $("live");
-  if (!db) { live.dataset.state = "off"; $("livetxt").textContent = tx("noData"); $("inbox-send").disabled = true; $("inbox-status").textContent = tx("inboxUnavailable"); return }
+  if (!db) { live.dataset.state = "off"; $("livetxt").textContent = tx("noData"); $("inbox-send").disabled = true; $("inbox-status").textContent = tx("inboxUnavailable"); P.semDb = true; renderPainel(); return }
   const mark = () => { live.dataset.state = "on"; $("livetxt").textContent = tx("live") };
   const fail = e => { live.dataset.state = "off"; $("livetxt").textContent = tx("lost"); console.warn(e) };
   const docs = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  db.doc("painel/estado").onSnapshot(s => { P.estado = s.exists ? s.data() : null; mark(); renderPainel() }, fail);
+  db.doc("painel/vida").onSnapshot(s => { P.vida = s.exists ? s.data() : null; renderPainel() }, fail);
   db.doc("meta/project").onSnapshot(s => { S.project = s.exists ? s.data() : null; mark(); renderHeader() }, fail);
   db.doc("meta/framework").onSnapshot(s => { S.framework = s.exists ? s.data() : null; renderFramework() }, fail);
   db.collection("checkpoints").orderBy("n").onSnapshot(s => { S.checkpoints = docs(s); renderCheckpoints() }, fail);

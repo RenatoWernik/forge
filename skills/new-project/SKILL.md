@@ -1,12 +1,12 @@
 ---
 name: new-project
 description: >-
-  Sets up a complete forge project in the current folder: checks the machine against the latest public release of every tool and offers to install or update what is missing (with your yes), asks for the project name, language, models and ai-memory scope, generates the manual, workflows, checker and live panel, then runs the CP0 bootstrap. Use when the user says "new forge project", "set up the framework here", "/forge:new-project" or starts a session in an empty folder to build with the gauntlet loop, Spec-Kit, TDD and Ponytail.
+  Sets up a complete forge project in the current folder: checks the machine against the latest public release of every tool and offers to install or update what is missing (with your yes), interviews you about the project, proposes the mode and the model of each role with its reason, asks the setup questions, generates the manual, workflows, checker and live panel, then runs the CP0 bootstrap. Use when the user says "new forge project", "set up the framework here", "/forge:new-project" or starts a session in an empty folder to build with the gauntlet loop, Spec-Kit, TDD and Ponytail.
 ---
 
 # forge: new-project
 
-You are the orchestrator of a new project. This skill takes a folder from nothing to a project whose `node .claude/check.cjs` passes and whose CP0 (`BOOTSTRAP.md`) is running. Everything below happens in the current working directory, which must be the folder of the new project. Speak the user's language in chat. The generated project follows the language the user chooses in step 2: `CLAUDE.md`, `FRAMEWORK.md`, `BOOTSTRAP.md` and the panel come out in it (the templates are English, so step 3 translates the three documents), and so do notes and commits.
+You are the orchestrator of a new project. This skill takes a folder from nothing to a project whose `node .claude/check.cjs` passes and whose CP0 (`BOOTSTRAP.md`) is running. Everything below happens in the current working directory, which must be the folder of the new project. Speak the user's language in chat. The generated project follows the language the user chooses in step 3: `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, the four briefs of `.claude/briefs/`, `.checkpoints/README.md` and the panel come out in it (the templates are English, so step 5 translates those nine files), and so do notes and commits.
 
 Ground rules:
 
@@ -33,30 +33,68 @@ Show the user a short table (component, installed, latest, status). For every `m
 - The `ai-memory` MCP registration and the ai-memory hooks are machine-level and done once; do not run `ai-memory init` or `install-instructions`.
 - If the user declines a component, note it and go on; the bootstrap will stop at the step that needs it.
 
-## 2. Ask the setup questions
+## 2. Interview
 
-Ask in chat, in this order, waiting for the answers. You may propose a value, but the user decides; no model is chosen for them.
+Before any setup question, understand the project, so the proposal at the end of this step rests on what the user said and not on a default. Ask in chat, one question at a time, in the user's language, and wait for each answer. Cover five dimensions (the terms are fixed names, whatever the language of the chat):
+
+1. **UI rica**: how much rich interface the project needs (screens, interaction, design bar).
+2. **lógica e servidor**: the logic, the data and the server code behind it.
+3. **riscos (segredos, dados, dinheiro, segurança)**: secrets, personal or lost data, money, security exposure.
+4. **dimensão e prazo**: how big the project is and by when it must exist.
+5. **quota**: the usage quota of the user's accounts, and how much of it this project may spend.
+
+State your certainty for each dimension as a percentage. Do it after every question, as a short line (for example: `UI rica 60 %, lógica e servidor 90 %, ...`), and aim the next question at the lowest one.
+
+Stop asking when every dimension is at 95 % or more, or when the user says "enough" ("chega"). If the user stops early, say which dimensions are below 95 % and what the proposal assumes for them.
+
+Then propose, from what you learned:
+
+- The **mode**: `rigorous` (the full process: the critic's attacks before the code, several rounds, the full regression once per batch) or `accelerated` (fewer rounds, less quality margin, security never relaxes). Lean to `rigorous` when the risks or the size are high, to `accelerated` when the project is small or the deadline is tight.
+- A **model**, an **effort** (`low`, `medium`, `high`, `xhigh` or `max`) and a **reason** for each of the five roles: `developer` (builds logic and server code with TDD), `developerUi` (builds the rich interface), `critic` (judges blind, fresh context, ideally the strongest model available), `tester` (runs the batch suite and the end-to-end checks) and `aux` (panel agent and readers). Start from the pattern measured in the Guild and adjust it to the answers and to the quota; the reason is one line that ties the choice to what the user said:
+
+| Role | Model and effort | Why it is the default |
+|---|---|---|
+| `developer` | Haiku xhigh | builds from a closed contract, and the effort replaces the size |
+| `developerUi` | Opus high | rich UI work needs a strong model |
+| `critic` | Opus high | judges blind, so it gets the strongest model |
+| `tester` | Haiku xhigh | the batch suite is mechanical work |
+| `aux` | Opus 5.5 high | panel agent and readers, where a slip is costly |
+
+Never choose a model for the user: propose it with its reason and write it to the answers only after the user says yes. The user may change any model, effort or reason; a model is an alias or ID the `Workflow` tool accepts (`haiku`, `sonnet`, `opus`, or a full model ID). Optionally add a display label and a `match` regex the model ID must satisfy (default: the model itself).
+
+## 3. Ask the setup questions
+
+Ask in chat, in this order, waiting for the answers. You may propose a value, but the user decides.
 
 1. **Project name.** Suggest the folder name.
 2. **Language** of the documents, panel texts, notes and commits (for example English or Portuguese (Brazil)). Suggest the language the user writes in.
-3. **Mode**: `rigorous` (the full process: the critic's attacks before the code, several rounds, the full regression once per batch) or `accelerated` (fewer rounds, less quality margin, security never relaxes). Suggest `rigorous`.
-4. **Models and effort** for five roles: the developer (builds logic and server code with TDD), the UI developer (`developerUi`: builds the rich interface), the critic (judges blind, fresh context, ideally the strongest model available), the tester (runs the batch suite and the end-to-end checks) and the auxiliaries (panel agent and readers). For each: a model alias or ID accepted by the `Workflow` tool (for example `sonnet`, `opus`, `haiku`, or a full model ID), an effort (`low`, `medium`, `high`, `xhigh` or `max`) and a `reason`: one line on why this model and effort (propose one, the user may edit it; it is required). Optionally a display label and a `match` regex the model ID must satisfy (default: the model itself). Defaults to propose for the two new roles: `developerUi` on `opus` with `high` ("rich UI work needs a strong model"), `tester` on `haiku` with `xhigh` ("the batch suite is mechanical work, and Haiku xhigh is the measured default"). The full interview comes with a later release; here, ask for these five and nothing more.
-5. **ai-memory scope**: a workspace and a project name (letters, digits, dot, dash, underscore). Suggest a slug of the project name for the project.
-6. **Shell for the Spec Kit scripts**: `sh` (macOS, Linux, Git Bash) or `ps` (PowerShell). Suggest `sh` when `bash` is on the PATH, else `ps`.
-7. **Plain style**: forbid dashes, arrows and emoji in CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md (the checker enforces it). Suggest yes.
-8. **Global rules to switch off** for this project, if the user has global `~/.claude/CLAUDE.md` rules that conflict with the framework. Optional; if any, you will record them in the `## User global rules` section of CLAUDE.md after generation.
+3. **ai-memory scope**: a workspace and a project name (letters, digits, dot, dash, underscore). Suggest a slug of the project name for the project.
+4. **GitHub repository** of the project as `owner/name` (for example `acme/billing`): the contract of every piece lives in its issues. The user's own account must be able to read and write issues there. Suggest the owner and the project slug when the user has no repository yet, and ask the user to create it.
+5. **Shell for the Spec Kit scripts**: `sh` (macOS, Linux, Git Bash) or `ps` (PowerShell). Suggest `sh` when `bash` is on the PATH, else `ps`.
+6. **Plain style**: forbid dashes, arrows and emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md, BOOTSTRAP.md, the briefs and `.checkpoints/README.md` (the checker enforces it). Suggest yes.
+7. **Global rules to switch off** for this project, if the user has global `~/.claude/CLAUDE.md` rules that conflict with the framework. Optional; if any, you will record them in the `## User global rules` section of CLAUDE.md after generation.
 
 For a language other than English or Portuguese, also translate the panel page: take the values of the `EN` object in `${CLAUDE_PLUGIN_ROOT}/templates/.claude/dashboard/panel.html`, translate them keeping the keys, the `{n}`-style placeholders and the separators between words, and pass the result as `panelStrings`, with a BCP 47 `langTag`. Identifiers such as `ganhou`, `pergunta` or `ativo` are never translated.
 
-Write the answers as JSON to a file in the operating system's temp folder (not in the project):
+Write the answers as JSON to a file in the operating system's temp folder (not in the project), with the mode and the models the user said yes to in step 2 and the answers of this step:
 
 ```json
-{"projectName":"My Project","language":"English","mode":"rigorous","models":{"developer":{"model":"sonnet","effort":"high","reason":"logic and server code"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"sonnet","effort":"medium","reason":"the panel only records"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
+{"projectName":"My Project","language":"English","mode":"rigorous","repo":"my-owner/my-project","models":{"developer":{"model":"haiku","effort":"xhigh","reason":"builds from a closed contract, and the effort replaces the size"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"opus","effort":"high","reason":"panel agent and readers, where a slip is costly"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
 ```
 
-The values above are an example: replace every one with the user's answers. `mode` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role.
+The values above are an example: replace every one with the user's answers. `mode`, `repo` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role. Step 4 adds the optional `hooks` key to this file.
 
-## 3. Generate the files
+## 4. Install the protection hooks
+
+Three hooks protect the agents of this project. They go into this project's own `.claude/settings.json`, never into a global one, and only with the user's yes. Ask one question per hook, show first what it blocks, and wait for each yes or no; a missing answer is not a yes, and a yes to one hook is not a yes to the next:
+
+- `killByName`: blocks killing processes by name (`taskkill /IM`, `killall`, `pkill`, `Stop-Process -Name`), which also ends the processes of the other agents and of the user. Killing by PID stays allowed.
+- `backgroundTests`: blocks test commands started with `run_in_background`, which leave an agent waiting with nobody noticing. Tests run in the foreground, in blocks of up to 9 minutes.
+- `idleWatch`: warns the orchestrator, on each prompt, when an agent active in `.checkpoints/painel.json` has written no checkpoint for 10 minutes.
+
+Add `"hooks":{"killByName":true,"backgroundTests":false,"idleWatch":true}` to the answers file, with `true` only on the hooks the user said yes to. If the user says no to all, leave `hooks` out: nothing is installed and `.claude/settings.json` is not touched. Step 5 installs them, together with the other files.
+
+## 5. Generate the files
 
 The seam is `scaffold.mjs`: answers in, file tree out. Preview first, then ask the user's yes to write:
 
@@ -65,23 +103,23 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --d
 node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --dest .
 ```
 
-It writes `CLAUDE.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the mode, the five roles with their reasons and the escalation rules), `.claude/check.cjs`, both workflows and `.claude/dashboard/panel.html`. It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
+It writes `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, `.ai-memory.toml`, `.graphifyignore`, `.gitignore`, `.claude/forge.json` (the mode, the five roles with their reasons and the escalation rules), `.claude/check.cjs`, both workflows, `.claude/dashboard/panel.html`, the four role briefs in `.claude/briefs/` (`dev.md`, `critic.md`, `round-minus-1.md`, `batch.md`) and `.checkpoints/README.md` (the format of the checkpoints). With `hooks` answers it also writes the scripts of the hooks answered `true` to `.claude/hooks/` and joins their entries to the project's `.claude/settings.json`, keeping every other key and hook already there (an existing `settings.json` that is not valid JSON is never overwritten: it stops with exit code 1 and writes nothing). It refuses to overwrite an existing file: list the conflicts to the user and use `--force` only for files they agree to replace. Every invalid answer is reported at once with the field name; fix and rerun. Delete the answers file afterwards.
 
 ### Translate the documents
 
-Skip this when the language is English (any variant). Otherwise `.claude/forge.json` now holds the language and the three documents are still English: translate them, you and no other agent, right now, before the check and before anything else reads them.
+Skip this when the language is English (any variant). Otherwise `.claude/forge.json` now holds the language and the four documents, the four briefs of `.claude/briefs/` and `.checkpoints/README.md` are still English: translate them, you and no other agent, right now, before the check and before anything else reads them.
 
 1. Keep the English originals for comparison: run the same generation into a folder outside the project, `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --answers "<answers.json>" --dest "<temp folder>/en"`. Delete it at the end of the step.
-2. Translate `CLAUDE.md`, `FRAMEWORK.md` and `BOOTSTRAP.md` in place, one file at a time, into the language of `forge.json`, and write each whole file (no half-translated file may stay). Translate every sentence of prose, heading, table cell and list item, into the natural wording of the language (headings are yours to word, no heading text is fixed); translating only the headings leaves the language check red, and inside the `json` blocks only the string values of `title`, `goal`, `bar` and `context`.
-3. Never translate, character for character: anything between backticks (commands, flags, paths, tool and skill names, `check.cjs` line names, quoted in the invariants as `Verifies:` lines, and file names); every other part of the `json`, `toml` and `bash` blocks (keys, ids, model names, URLs, the args); link targets; the values the panel and workflows read (`ganhou`, `perdeu`, `pergunta`, `decisao`, `risco`, `ativo`, `pausado`, `ocioso`, `erro`, `planejado`, `concluido`, `falhou`); the tag `cp-N`, `CP0`, ids such as `T###`, and the numbers of invariants and sections. Do not add, drop, merge or reorder headings, table rows, list items or code blocks.
+2. Translate `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md`, `BOOTSTRAP.md`, the four briefs of `.claude/briefs/` and `.checkpoints/README.md` in place (the 12 invariants of `AGENTS.md` are the same text as those of `CLAUDE.md`: translate them once and write the same lines in both, byte for byte), one file at a time, into the language of `forge.json`, and write each whole file (no half-translated file may stay). Translate every sentence of prose, heading, table cell and list item, into the natural wording of the language (headings are yours to word, no heading text is fixed); translating only the headings leaves the language check red, and inside the `json` blocks only the string values of `title`, `goal`, `bar` and `context`.
+3. Never translate, character for character: anything between backticks (commands, flags, paths, tool and skill names, `check.cjs` line names, quoted in the invariants as `Verifies:` lines, and file names); every other part of the `json`, `toml` and `bash` blocks (keys, ids, model names, URLs, the args); link targets; the values the panel and workflows read (`ganhou`, `perdeu`, `pergunta`, `decisao`, `risco`, `ativo`, `pausado`, `ocioso`, `erro`, `planejado`, `concluido`, `falhou`); the tag `cp-N`, `CP0`, ids such as `T###`, and the numbers of invariants and sections. Do not add, drop, merge or reorder headings, table rows, list items or code blocks. The label `Verifies:` that ends the first sentence of every invariant is translated, but the checker looks for it: in Portuguese write exactly `Verifica:` in each of the 12 invariants of both files; in another language keep one label with a colon in each invariant, followed by the backtick span that names what verifies it.
 4. Plain style: if `plainStyle` is true in `forge.json`, the translation has no dash (en or em), arrow or emoji either; use a comma, colon or period where the language would use one.
-5. Compare each file with its original in the `en` folder: same headings in the same order, same tables and code blocks, same inline code spans, same invariants 1 to 10. Fix any difference before going on.
+5. Compare each file with its original in the `en` folder: same headings in the same order, same tables and code blocks, same inline code spans, same invariants 1 to 12, the same lines in `CLAUDE.md` and `AGENTS.md`. Fix any difference before going on.
 
 ### Check
 
 Run `node .claude/check.cjs`. Its `language` line reads the language from `.claude/forge.json` and measures the words of each document's prose (code blocks, backtick spans and links left out): it fails while a document still reads as English (or, for Portuguese, not yet as Portuguese), whatever its headings say, so an untranslated project never passes. If it fails, it names the documents: finish translating the prose of those files (never just rename headings) and run it again. It must end with `All ok.`; if any other line fails, stop and show the failing lines. Add the user's switched-off global rules (question 7) under `## User global rules` in CLAUDE.md, in the project language.
 
-## 4. Publish and seed the panel
+## 6. Publish and seed the panel
 
 The panel is a live page (an Artifact with a small database) that shows agents, pieces, checkpoints, events, notes and an inbox.
 
@@ -90,11 +128,11 @@ The panel is a live page (an Artifact with a small database) that shows agents, 
   - `meta/project`: `{name, description, phase:"constituicao", phaseNote, updatedAt}`
   - `meta/framework`: `{items:[{key,name,status,note} x 7], updatedAt}` with keys `gauntlet`, `ai-memory`, `ponytail`, `sdd`, `tdd`, `mattpocock`, `graphify`, status `ocioso` and a note saying it waits for CP0
   - `checkpoints/cp0`: `{n:0, title:"Step 0: framework", status:"planejado", ponytail:"pendente"}`
-  - `notes/n0001`: kind `decisao`, the setup decisions (language, models, scope)
+  - `notes/n0001`: kind `decisao`, a title in the project language and, as the body, the `body` of the JSON printed by `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --dest . --decision-note` (the language, the mode and the model, effort and reason of each role, read back from `.claude/forge.json`)
 - Put the URL in the generated files: `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --dest . --set-panel-url "<url>"`.
 - Without the `Artifact` tool, or if the user declines: go on without a panel and warn the user clearly. The files keep a pending URL, the workflows still run and their panel writes end in a WARNING. The page in `.claude/dashboard/panel.html` can be published later by hand, followed by the `--set-panel-url` command.
 
-## 5. Run the bootstrap
+## 7. Run the bootstrap
 
 Read `BOOTSTRAP.md` and `FRAMEWORK.md` in full (you are the orchestrator). Present the BOOTSTRAP checklist once and ask the user to approve it as a whole: that approval covers steps 1 to 6 and the pieces and bars of step 8, as the file says. Then run the steps in order, with the tools the files name:
 
