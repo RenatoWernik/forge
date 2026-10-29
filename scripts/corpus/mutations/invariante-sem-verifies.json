@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": "CLAUDE.md",
+  "find": "Verifies: `/speckit-analyze` has no CRITICAL.",
+  "replace": "Seen in: `/speckit-analyze` has no CRITICAL.",
+  "line": "invariants: CLAUDE.md and AGENTS.md have the 12 numbered invariants, each with its Verifies: line"
+}

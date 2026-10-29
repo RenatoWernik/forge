@@ -2,6 +2,7 @@
   "projectName": "Clube do Livro",
   "language": "Portuguese (Brazil)",
   "mode": "rigorous",
+  "repo": "acme/livro",
   "models": {
     "developer": {
       "model": "sonnet",

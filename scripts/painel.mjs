@@ -7,7 +7,7 @@
 import { readFileSync, writeFileSync, renameSync, unlinkSync, openSync, closeSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { validar } from './painel-leitor.mjs';
+import { validar, ler } from './painel-leitor.mjs';
 
 const LOCK_MS = 5000;
 const RETRY = ['EEXIST', 'EPERM', 'EACCES', 'EBUSY']; // Windows reports a file being deleted by another process as EPERM or EACCES
@@ -15,6 +15,11 @@ const dorme = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 
 const num = (s) => (/^-?\d+$/.test(s) ? Number(s) : s); // anything else stays text, and the validator refuses it
 
 export const bloqueio = (file) => `${file}.lock`;
+
+// The painel/vida document the panel page reads (FRAMEWORK.md, section 6): the life of each agent, by the shared reader, from the checkpoint mtimes.
+export const docsVida = (texto, mtimes, agora) => ({
+  'painel/vida': { t: new Date(agora).toISOString(), agentes: Object.fromEntries(ler(texto, mtimes, agora).agentes.map((a) => [a.nome, { minutos: a.minutos, vida: a.vida }])) },
+});
 
 const CAMPOS_TICKET = ['id', 'issue', 'titulo', 'estado', 'rondas'];
 const CAMPOS_AGENTE = ['nome', 'papel', 'ticket', 'modelo', 'checkpoint', 'porta'];

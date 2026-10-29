@@ -44,7 +44,8 @@ test('regressão: os ataques da Ronda −1 do F-01, F-02, F-03 e F-10 continuam 
   assert.ok(r.pass >= 150, 'passaram ' + r.pass);
 });
 
-test('âmbito: os ataques dos tickets já fundidos não mudam neste ticket', () => {
+const branch = git('rev-parse', '--abbrev-ref', 'HEAD').stdout.trim();
+test('âmbito: os ataques dos tickets já fundidos não mudam neste ticket', { skip: branch !== 'f-04-entrevista-modelos' && 'só no ramo f-04-entrevista-modelos' }, () => {
   const mb = git('merge-base', 'HEAD', 'origin/main');
   const base = mb.status === 0 ? mb.stdout.trim() : BASE;
   const d = git('diff', '--name-only', base, '--', 'tests/critico/f-01-r0', 'tests/critico/f-02-r0', 'tests/critico/f-03-r0', 'tests/critico/f-10-r0');

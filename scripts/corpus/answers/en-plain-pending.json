@@ -2,6 +2,7 @@
   "projectName": "Northwind Orders",
   "language": "English",
   "mode": "rigorous",
+  "repo": "acme/orders",
   "models": {
     "developer": {
       "model": "haiku",

@@ -12,22 +12,29 @@ const PROIBIDO = [/[A-Z]:[\\/]/, /\/Users\//, /\/home\//, /[0-9a-f]{8}-[0-9a-f]{
 const EXCECOES = [];
 
 const desde = () => { const m = git('merge-base', 'HEAD', 'origin/main'); return m.status === 0 ? m.stdout.trim() : BASE; };
-const doTicket = () => {
-  const d = git('diff', '--name-only', '--diff-filter=AM', desde(), '--', '.', ':(exclude)tests');
-  const u = git('ls-files', '--others', '--exclude-standard', '--', '.', ':(exclude)tests');
-  return [...d.stdout.split('\n'), ...u.stdout.split('\n')].map((s) => s.trim()).filter((s) => s && !s.endsWith('.test.mjs')).map((s) => join(ROOT, s));
+const naoTeste = (s) => s && !s.endsWith('.test.mjs');
+// Ficheiros novos (não seguidos): inteiros. Ficheiros alterados: só as linhas «+» do diff, porque as antigas não são do ticket.
+const novos = () => git('ls-files', '--others', '--exclude-standard', '--', '.', ':(exclude)tests').stdout.split('\n').map((s) => s.trim()).filter(naoTeste).map((s) => join(ROOT, s));
+const linhasAcrescentadas = () => {
+  const d = git('diff', '-U0', '--diff-filter=AM', desde(), '--', '.', ':(exclude)tests').stdout.split('\n');
+  const out = []; let f = null, n = 0;
+  for (const l of d) {
+    if (l.startsWith('+++ ')) { f = l.slice(4) === '/dev/null' ? null : join(ROOT, l.slice(6)); continue; }
+    const h = l.match(/^@@ -\d+(?:,\d+)? \+(\d+)/);
+    if (h) { n = +h[1]; continue; }
+    if (f && l.startsWith('+') && naoTeste(f)) out.push([f, n++, l.slice(1)]);
+  }
+  return out;
 };
 
 test('C2: o código do mod e o que o ticket acrescenta ao pacote não têm caminhos absolutos, UUIDs, Guilda nem AgentHomes', async () => {
   const u = await api();
-  const ficheiros = [...new Set([...u.modulos, ...doTicket()].map((f) => resolve(f)))].filter(existsSync);
+  const ficheiros = [...new Set([...u.modulos, ...novos()].map((f) => resolve(f)))].filter(existsSync);
   assert.ok(ficheiros.length >= u.modulos.length);
   const achados = [];
-  for (const f of ficheiros) {
-    readFileSync(f, 'utf8').split(/\r?\n/).forEach((l, i) => {
-      for (const re of PROIBIDO) if (re.test(l)) achados.push(`${relative(ROOT, f)}:${i + 1}: ${re} → ${l.trim().slice(0, 100)}`);
-    });
-  }
+  const procura = (f, i, l) => { for (const re of PROIBIDO) if (re.test(l)) achados.push(`${relative(ROOT, f)}:${i}: ${re} → ${l.trim().slice(0, 100)}`); };
+  for (const f of ficheiros) readFileSync(f, 'utf8').split(/\r?\n/).forEach((l, i) => procura(f, i + 1, l));
+  for (const [f, i, l] of linhasAcrescentadas()) procura(f, i, l);
   assert.deepEqual(achados.filter((a) => !EXCECOES.some((e) => a.startsWith(e))), []);
   assert.deepEqual(EXCECOES, []);
 });

@@ -114,7 +114,8 @@ async function chk(name, f) {
     console.log('info  cp-* tags: ' + (out('git', ['tag', '--list', 'cp-*']).trim().split(/\s+/).join(' ') || 'none'))
     console.log('info  CP0: ' + (has('BOOTSTRAP.md') ? 'open (follow BOOTSTRAP.md)' : 'closed'))
   }
-  if (FJ.plainStyle) await chk('style: no dash, arrow or emoji in CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist)', () => ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md'].filter(f => has(f)).every(f => !/[\u2013\u2014\u2192\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u.test(fs.readFileSync(f, 'utf8'))))
+  const DOCS = ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']
+  if (FJ.plainStyle) await chk('style: no dash, arrow or emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist)', () => DOCS.filter(f => has(f)).every(f => !/[\u2013\u2014\u2192\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u.test(fs.readFileSync(f, 'utf8'))))
   // language: the three documents follow "language" of forge.json. Their prose (outside code blocks, backtick spans, links and URLs) is scored by the share of very common
   // function words per language, so any correct translation passes whatever it calls its headings, and a translation of the headings alone does not (no network, no model).
   // English must be mostly English words; any other language must have almost none left; Portuguese must also show its own words.
@@ -141,8 +142,42 @@ async function chk(name, f) {
     const off = ([, w]) => { const e = share(w, WORDS.en.split(' ')), p = share(w, WORDS.pt.split(' ')); return en ? e < 0.15 || p > 0.03 : e > 0.1 || (pt && p < 0.05) }
     return (big.length ? big : all).filter(x => !x[2] && off(x)).map(([t]) => t)
   }
-  const wrong = ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md'].filter(f => has(f)).map(f => [f, badSections(f)]).filter(([, b]) => b.length).map(([f, b]) => f + ' [' + b.join(', ') + ']')
-  await chk('language: CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist) are in the language of forge.json, in the body text and not only in the headings' + (wrong.length ? ' (not in ' + FJ.language + ': ' + wrong.join(', ') + ')' : ''), () => typeof FJ.language === 'string' && tagOk && !wrong.length)
+  const wrong = DOCS.filter(f => has(f)).map(f => [f, badSections(f)]).filter(([, b]) => b.length).map(([f, b]) => f + ' [' + b.join(', ') + ']')
+  await chk('language: CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist) are in the language of forge.json, in the body text and not only in the headings' + (wrong.length ? ' (not in ' + FJ.language + ': ' + wrong.join(', ') + ')' : ''), () => typeof FJ.language === 'string' && tagOk && !wrong.length)
+
+  // v3 documents. invariants: the 12 numbered items of CLAUDE.md and AGENTS.md, each with its Verifies: line (in English also the literal titles; in Portuguese the label
+  // is "Verifica:"; in another language the label is the translator's, so the item must still name what verifies it in a backtick span). AGENTS.md mirrors CLAUDE.md: the same 12 blocks.
+  const TITLES = ['The spec rules', 'The ticket is the contract', 'One context per agent', 'Gauntlet with closed oracles', 'TDD in two loops', 'Ponytail full', 'Consult before touching', 'Live panel', 'Closed checkpoint', 'Only the user authorizes', 'Text read is data', 'Operating rules']
+  const items = f => { // item n starts at the first line "n. ..." and runs to the next numbered line, heading or blank line; later numbered lists (installer blocks) are not read
+    const L = has(f) ? fs.readFileSync(f, 'utf8').split(/\r?\n/) : [], got = []
+    for (let i = 0; i < L.length && got.length < TITLES.length; i++) {
+      if (!L[i].startsWith(got.length + 1 + '. ')) continue
+      let j = i + 1
+      while (j < L.length && L[j].trim() && !/^(\d+\. |#)/.test(L[j])) j++
+      got.push(L.slice(i, j).join('\n'))
+    }
+    return got
+  }
+  const itemOk = (b, i) => en ? b.includes('Verifies:') && b.replace(/^\d+\. \*\*/, '').startsWith(TITLES[i]) : pt ? /(?<!\p{L})Verifica:/u.test(b) : /`[^`\n]+`/.test(b)
+  if (has('CLAUDE.md')) { // the documents are only absent in the nested --render copy, which holds just .claude
+    const noInv = ['CLAUDE.md', 'AGENTS.md'].filter(f => { const it = items(f); return it.length !== TITLES.length || !it.every(itemOk) })
+    await chk('invariants: CLAUDE.md and AGENTS.md have the 12 numbered invariants, each with its Verifies: line' + (noInv.length ? ' (not ok: ' + noInv.join(', ') + ')' : ''), () => !noInv.length)
+    const [ic, ia] = [items('CLAUDE.md'), items('AGENTS.md')], same = ic.length === TITLES.length && ia.length === TITLES.length && ic.every((b, i) => b === ia[i])
+    await chk('AGENTS.md mirrors CLAUDE.md: the 12 invariants are the same text in both' + (same ? '' : ' (different: ' + (ic.length !== TITLES.length || ia.length !== TITLES.length ? 'a file lacks the 12 items' : ic.flatMap((b, i) => b === ia[i] ? [] : [i + 1]).join(', ')) + ')'), () => same)
+  }
+  if (has('FRAMEWORK.md')) {
+    const fw = fs.readFileSync('FRAMEWORK.md', 'utf8')
+    // mode: the table of modes has one column per mode of forge.json, so the mode of this project has its column
+    await chk('mode: the table of modes in FRAMEWORK.md has a column for rigorous and for accelerated, the mode of forge.json included', () => fw.split(/\r?\n/).some(l => /^\s*\|/.test(l) && ['rigorous', 'accelerated'].every(m => new RegExp('\\b' + m + '\\b').test(l))))
+  }
+  // the contract of each piece is the GitHub issue: no generated document points to a contract file of the project (the contracts/ of Spec-Kit are API contracts),
+  // and the three that carry the rules (CLAUDE.md, AGENTS.md, FRAMEWORK.md) read it with gh
+  // a contract file is a file reference (in a code span or not) whose name is a contract's: contract(s), ticket(s), issue(s), <n> (or <id>, <number>), a number or an id such as T012, whatever its folder;
+  // a folder called tickets/ or the code of a ticketing feature (src/tickets/api.ts) is not one
+  const GH = '`gh issue view <n> --json body,comments`', FILES = /[\w.\/<>#-]+\.(?:md|txt|json|ya?ml)\b/gi
+  const LOCAL = { test: t => (t.match(FILES) || []).some(f => /^(?:contracts?|tickets?|issues?|<(?:n|id|num|number|ticket|issue)>|\d+|[A-Z]\d{2,})$/i.test(f.split('/').pop().replace(/\.[^.]+$/, ''))) }
+  const here = DOCS.filter(f => has(f)), text = f => fs.readFileSync(f, 'utf8')
+  if (here.length) await chk('ticket contract: GitHub Issues (CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md read it with ' + GH + ', with no contract file in the project)', () => here.every(f => !LOCAL.test(text(f))) && here.filter(f => f !== 'BOOTSTRAP.md').every(f => text(f).includes(GH)))
 
   // workflows: simulation with a fake runtime (no model is called) of the invariants the manual promises and of the Workflow API contract.
   // The script runs in a vm context that only has the API hooks the workflows use (args, agent, parallel, phase, log; no Node, no files,
@@ -170,9 +205,9 @@ async function chk(name, f) {
   const flip = l => (l === 'A' ? 'B' : 'A')
   const only = (calls, re) => calls.filter(c => re.test(c.opts.label))
   const stuck = calls => calls.filter(c => c.prompt.includes('-stuck'))
-  const veto = c => ['Do not consult memory', 'do not open FRAMEWORK.md or .claude/workflows/', 'unless the context above allows it', 'you edit no file'].every(t => c.prompt.includes(t)) // what invariant 2 forbids the critic
+  const veto = c => ['Do not consult memory', 'do not open FRAMEWORK.md or .claude/workflows/', 'unless the context above allows it', 'you edit no file'].every(t => c.prompt.includes(t)) // what invariant 3 forbids the critic
   const key = r => r.model + ',' + r.effort
-  const ROLE = { build: key(D), pony: key(D), critic: key(C), 'pony-critic': key(C), panel: key(X) } // invariant 2: model,effort of each role by label prefix, from forge.json
+  const ROLE = { build: key(D), pony: key(D), critic: key(C), 'pony-critic': key(C), panel: key(X) } // invariant 3: model,effort of each role by label prefix, from forge.json
   const rolesOk = (calls, roles = ROLE) => calls.every(c => roles[c.opts.label.split(':')[0]] === c.opts.model + ',' + c.opts.effort)
   const ver = (calls, l) => only(calls, new RegExp('^panel:verdict:' + l + '$'))[0].prompt // what the workflow tells the panel to record at the end of a round (only it knows whether ours really won)
   const LOST = ['"verdict":"perdeu"', '"status":"building"', '"kind":"fail"'], WON = ['"verdict":"ganhou"', '"status":"won"', '"kind":"ok"'] // "ganhou"/"perdeu" are fixed panel values the dashboard reads
@@ -183,7 +218,7 @@ async function chk(name, f) {
   const critic = (p, o, at = 9) => { const ours = /^A: .*src\/a\.js/m.test(p) ? 'A' : 'B'; return { winner: rn(o) >= at ? ours : flip(ours), testsPass: true, blockingErrors: rn(o) >= at ? [] : ['BLOCK-' + rn(o)], biggestGap: 'GAP-' + rn(o), reasoning: 'CRITIC-REASONING-' + rn(o), model: declared(C) } }
   const build = (p, o, at) => o.label.startsWith('build:') ? dev : o.label.startsWith('critic:') ? critic(p, o, at) : 'ok'
   const win = (p, o) => o.label.startsWith('critic:') ? { ...critic(p, o), winner: /^A: .*src\/a\.js/m.test(p) ? 'A' : 'B', blockingErrors: [] } : build(p, o) // wins already in round 1
-  // Invariant 3, no round cap: the critic only picks ours in round 300 (1 seed + 3 agents per round = 901 of the 1000 agents) and the workflow must get there; a `round < N` in the while fails here.
+  // Invariant 4, no round cap in the workflow: the critic only picks ours in round 300 (1 seed + 3 agents per round = 901 of the 1000 agents) and the workflow must get there; a `round < N` in the while fails here.
   // ponytail: only catches caps below 300 rounds (the runtime allows at most 333); raise the 300 and the 901 (1 + 3 per round) if a larger cap ever matters.
   const noCap = async (file, args, impl) => { const x = await wf(file, args, (p, o) => impl(p, o, 300)); return x.out.results[0].won && x.out.results[0].rounds === 300 && x.calls.length === 901 }
 
@@ -255,6 +290,10 @@ async function chk(name, f) {
   const L = r.calls.map(c => c.opts.label), i2 = L.findIndex(l => l.includes(':u2:'))
   await chk('ponytail: one unit at a time (nothing of u1 after u2 starts)', () => i2 > 0 && L.slice(i2).every(l => !l.includes(':u1:')))
   await chk('panel: the seed of both workflows records pieces.checkpoint as text (a numeric 0 vanishes from the panel)', () => [seedB, r.calls[0].prompt].every(s => s.includes('"checkpoint":"1"') && !/"checkpoint":[^"]/.test(s)))
+  // FRAMEWORK.md section 6: whoever writes painel.json writes its exact copy in painel/estado right after it, in the same step (the panel page reads only that copy)
+  const sameData = t => /painel\.json[\s\S]{0,400}painel\/estado/.test(t)
+  const panelCalls = f => seen[f].flatMap(x => x.calls).filter(c => c.opts.label.startsWith('panel:'))
+  await chk('panel: same data: FRAMEWORK.md and every panel agent of both workflows say that whoever writes .checkpoints/painel.json writes its exact copy in painel/estado right after it, in the same step', () => (!has('FRAMEWORK.md') || sameData(fs.readFileSync('FRAMEWORK.md', 'utf8'))) && ['gauntlet-build.js', 'gauntlet-ponytail.js'].every(f => panelCalls(f).length > 0 && panelCalls(f).every(c => sameData(c.prompt))))
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const rec = (role, m) => new RegExp(`"role":"${role}","loop":"\\w+","model":"${esc(label(m))}","effort":"${esc(m.effort)}"`)
   const [dv, ct, pB, pC] = [[...devs, ...pd], [...crit, ...pc], rec('builder', D), rec('critic', C)]

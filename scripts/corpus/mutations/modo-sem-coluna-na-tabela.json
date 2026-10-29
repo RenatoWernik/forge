@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": "FRAMEWORK.md",
+  "find": "| | `rigorous` | `accelerated` |",
+  "replace": "| | `rigorous` | `relaxed` |",
+  "line": "mode: the table of modes in FRAMEWORK.md has a column for rigorous and for accelerated, the mode of forge.json included"
+}
