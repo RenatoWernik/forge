@@ -1,7 +1,7 @@
-// F-09: regressão e higiene («reprova sempre»). Nenhum ficheiro de teste do pacote perde testes (referência: 0a35bee), a suíte
+// F-09: regressão e higiene («reprova sempre»). Nenhum ficheiro de teste do pacote perde testes (referência: 9f176c1), a suíte
 // scripts/*.test.mjs continua verde, os ataques da Ronda −1 já fundidos continuam no repositório, e o que o ticket acrescenta ao
 // pacote não leva caminhos da máquina, dados pessoais nem dependências fora da biblioteca padrão.
-// Depende do F-08: quando o F-08 (e o F-05 a F-07) entrarem na main, os ataques deles entram na lista FUNDIDOS e o BASELINE sobe.
+// Depende do F-08: quando o F-06, o F-07 e o F-08 entrarem na main, os ataques deles entram na lista FUNDIDOS e o BASELINE sobe.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
@@ -10,10 +10,10 @@ import { spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
 import { ROOT, BASE, sandboxEnv, git } from './helpers.mjs';
 
-// Testes estáticos (`^test(`) por ficheiro em 0a35bee
-const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'mod-painel.test.mjs': 10, 'painel-web.test.mjs': 2, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'skill-new-project.test.mjs': 8, 'sync.test.mjs': 22 };
-const PASS_BASE = 177; // node --test "scripts/*.test.mjs" em 0a35bee: 177 passam, 0 falham
-const FUNDIDOS = ['f-01-r0', 'f-02-r0', 'f-03-r0', 'f-04-r0', 'f-10-r0', 'f-11-r0', 'f-12-r0'];
+// Testes estáticos (`^test(`) por ficheiro em 9f176c1
+const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'mod-painel.test.mjs': 10, 'painel-web.test.mjs': 2, 'painel.test.mjs': 13, 'scaffold.test.mjs': 35, 'sem-claude-mem.test.mjs': 1, 'skill-new-project.test.mjs': 8, 'sync.test.mjs': 22 };
+const PASS_BASE = 198; // node --test "scripts/*.test.mjs" em 9f176c1: 198 passam, 0 falham
+const FUNDIDOS = ['f-01-r0', 'f-02-r0', 'f-03-r0', 'f-04-r0', 'f-05-r0', 'f-10-r0', 'f-11-r0', 'f-12-r0'];
 const runTests = (globs) => {
   const r = spawnSync(process.execPath, ['--test', '--test-concurrency=2', '--test-reporter=tap', ...globs], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout: 500000 });
   const out = (r.stdout || '') + (r.stderr || '');
@@ -30,7 +30,7 @@ test('regressão: nenhum ficheiro de teste do pacote perde testes', () => {
   }
 });
 
-test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os testes que passavam em 0a35bee', () => {
+test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os testes que passavam em 9f176c1', () => {
   const r = runTests(['scripts/*.test.mjs']);
   assert.equal(r.status, 0, failures(r.out));
   assert.equal(r.fail, 0, failures(r.out));

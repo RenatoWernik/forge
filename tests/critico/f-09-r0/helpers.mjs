@@ -3,23 +3,31 @@
 // para <pasta>/home e TMP, TEMP e TMPDIR para <pasta>/tmp (também nos processos filhos). A pasta é apagada no after() e no exit.
 // Nenhum ataque abre uma sessão `claude`: os workflows correm num runtime falso (vm), como a simulação do check.cjs.
 //
-// LEITURA DO CONTRATO que estes ataques assumem (a #10 não fixa a interface do tester; cada ponto ajusta-se AQUI, num só sítio,
-// quando o orquestrador responder às PERGUNTAS da #10):
+// LEITURA DO CONTRATO: o corpo da #10 mais as respostas do orquestrador às P1–P10 (comentário de 2026-10-29 na #10; cópia em
+// orquestrador-resp-f08-f09-f15b.md). Cada ponto ajusta-se AQUI, num só sítio:
 //   - args do gauntlet-batch: os de base dos outros workflows (checkpoint, root, dashboardUrl, context, models com os 5 papéis,
 //     language, memory) mais `mode` (rigorous | accelerated), `pieces` (as peças do lote, cada uma com id, title e owns; levam
 //     também os campos do build e do contrato do F-07, que o lote pode ignorar), `testCommand` e, opcional, `e2eCommand`;
-//   - PERGUNTA 1: UM agente tester por lote, com `models.tester` (modelo e esforço). Ele declara as execuções e as repetições
-//     isoladas como DADOS, nos campos de T abaixo:
+//   - R1: UM agente tester por lote, com `models.tester` (modelo e esforço). Declara DADOS, nos campos de T abaixo, e o workflow
+//     calcula a partir deles; nunca usa um rótulo do tester:
 //       runs: [{ kind: 'suite' | 'e2e', command, failures: [{ test, files: [ficheiros que o teste toca, o dele incluído], output }] }]
 //       isolated: [{ test, passed: boolean, output }]   (uma repetição isolada de cada teste que falhou)
-//     O tester falso também mente nos rótulos (flaky, regressions, class, piece): o workflow decide a partir dos dados, nunca deles;
-//   - critério 2 (PERGUNTA 4): um tester que declara menos do que 2 execuções da suíte, ou menos do que 3 do E2E quando há
-//     e2eCommand, não dá um lote aprovado;
-//   - retorno: `{ regressions: [{ piece, test, output }], flaky: [teste ou { test, ... }] }` no topo. O lote está REPROVADO quando
-//     há regressões, quando o workflow falha, ou quando o retorno traz uma marca explícita (passed/approved/ok === false ou
-//     incomplete). PERGUNTA 2: qual é o campo do veredito do lote;
-//   - PERGUNTA 3: uma falha estável fora do diff (caso 3 do critério 4) reprova o lote e não é flaky; a peça dela não é verificada;
-//   - recusa (critério 1) = zero agent() e nenhum retorno com `regressions` (erro lançado ou retorno de recusa).
+//       main: [{ test, results: [boolean: passou?, um por execução na main], output }]   (R3, R6 e emenda P7: a prova na main)
+//     A forma de `main` é a leitura do crítico (a R3/R6 dizem «falha igual na main», «intermitente na main», «nunca na main»):
+//     falha igual = todas as execuções na main falham; intermitente = umas passam e outras falham; nunca = todas passam;
+//   - R2: retorno `{ batch: { verdict: 'pass' | 'fail', failures: [{ test, class: 'a' | 'b' | 'c', evidence }] }, regressions:
+//     [{ piece, test, output }] }` (as regressões do critério 3 são as falhas de classe a, uma por peça; R5: um teste que toca em 2
+//     peças dá uma regressão a cada uma);
+//   - R4: menos execuções do que as do contrato → `verdict: 'fail'` com `reason: 'runs'` (no batch ou no topo);
+//   - classificação (critério 4 + R3 + R6), por teste que falhou:
+//       toca nos owns de uma peça → a (dessa peça);
+//       fora do diff, passa isolado, falha só em algumas execuções → c;
+//       fora do diff, passa isolado, falha em TODAS as execuções → c se a main é intermitente, b se a main falha sempre, a se a main
+//       nunca falha ou não há prova na main;
+//       fora do diff, falha isolado → b se a main falha sempre; a se a main nunca falha ou não há prova. (Falha isolado e main
+//       intermitente: o contrato não fixa; fica fora do corpus e do gerador.)
+//     O veredito é `fail` quando há uma falha a (ou faltam execuções); só c → `pass`. Com b e sem a, o veredito não é verificado;
+//   - recusa (critério 1) = zero agent() e nenhum retorno com `batch` (erro lançado ou retorno de recusa).
 // Os papéis reconhecem-se pelo modelo e pelo esforço (modelos de sonda distintos), nunca pelas etiquetas, que são internas.
 // Dependência do F-08: só a simulação partilhada do check.cjs (risco 2 da spec): os ataques que correm o check.cjs num projeto
 // gerado (c5, c6 e c7) têm de continuar verdes por cima das linhas do build que o F-08 reescreve.
@@ -32,7 +40,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 
 export const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
-export const BASE = '0a35bee'; // a main com o F-01 a F-04 e o F-10 a F-12
+export const BASE = '9f176c1'; // a main com o F-01 a F-05 e o F-10 a F-12
 
 const WORK = mkdtempSync(join(tmpdir(), 'critico-f09-'));
 const HOME = join(WORK, 'home'), TMP = join(WORK, 'tmp');
@@ -57,7 +65,7 @@ export const LIMIT = { rigorous: 3, accelerated: 5 }; // literal do critério 1
 export const SUITE_RUNS = 2, E2E_RUNS = 3; // literal do critério 2
 
 // Nomes dos campos do tester (PERGUNTA 1). As mutações do c7 usam os mesmos nomes.
-export const T = { runs: 'runs', kind: 'kind', suite: 'suite', e2e: 'e2e', command: 'command', failures: 'failures', test: 'test', files: 'files', output: 'output', isolated: 'isolated', passed: 'passed' };
+export const T = { runs: 'runs', kind: 'kind', suite: 'suite', e2e: 'e2e', command: 'command', failures: 'failures', test: 'test', files: 'files', output: 'output', isolated: 'isolated', passed: 'passed', main: 'main', results: 'results' };
 
 // ---------- Runtime falso (a mesma técnica do check.cjs: vm só com args, agent, parallel, phase e log; sem relógio nem acaso) ----------
 export const PROBE = {
@@ -114,8 +122,11 @@ export const batchArgs = (ps, over = {}) => ({
   pieces: ps, testCommand: CMD.test, e2eCommand: CMD.e2e, ...over,
 });
 
-// Uma falha do cenário: { test, files, suite: [execuções da suíte onde falha, 1..2], e2e: [execuções do E2E, 1..3], isolated: passa sozinho? }
-// declared(): o que o tester falso declara para o cenário. counts muda o número de execuções declaradas; lie põe os rótulos ao contrário.
+// Uma falha do cenário: { test, files, suite: [execuções da suíte onde falha, 1..2], e2e: [execuções do E2E, 1..3], isolated: passa
+// sozinho?, main: undefined (sem prova) | 'all' (falha sempre na main) | 'some' (intermitente na main) | 'none' (nunca falha na
+// main), cls: a classe que o contrato manda, owners: as peças cujos owns o teste toca }.
+// declared(): o que o tester falso declara. counts muda o número de execuções declaradas; lie põe os rótulos ao contrário.
+const LIE = { a: 'c', b: 'a', c: 'a' };
 export const declared = (failures, { suite = SUITE_RUNS, e2e = E2E_RUNS, lie = false } = {}) => {
   const runs = [];
   for (const [kind, total, cmd] of [[T.suite, suite, CMD.test], [T.e2e, e2e, CMD.e2e]]) {
@@ -124,14 +135,22 @@ export const declared = (failures, { suite = SUITE_RUNS, e2e = E2E_RUNS, lie = f
         [T.kind]: kind, [T.command]: cmd,
         [T.failures]: failures.filter((f) => (f[kind] || []).includes(k)).map((f) => ({
           [T.test]: f.test, [T.files]: [...f.files], [T.output]: `MARK<${f.test}> ${kind} ${k}: AssertionError`,
-          ...(lie ? { flaky: !f.truthFlaky, class: f.truthFlaky ? 'a' : 'c', piece: 'zz-lie' } : {}),
+          ...(lie ? { flaky: f.cls !== 'c', class: LIE[f.cls], piece: 'zz-lie' } : {}),
         })),
       });
     }
   }
   const isolated = failures.map((f) => ({ [T.test]: f.test, [T.passed]: !!f.isolated, [T.output]: `MARK<${f.test}> isolated: ${f.isolated ? 'pass' : 'AssertionError'}` }));
-  const out = { [T.runs]: runs, [T.isolated]: isolated };
-  if (lie) Object.assign(out, { flaky: failures.filter((f) => !f.truthFlaky).map((f) => f.test), regressions: failures.filter((f) => f.truthFlaky).map((f) => ({ piece: 'zz-lie', test: f.test, output: 'lie' })), passed: true });
+  const main = failures.filter((f) => f.main).map((f) => {
+    const n = f.e2e ? E2E_RUNS : SUITE_RUNS;
+    const results = Array.from({ length: n }, (_, i) => (f.main === 'none' ? true : f.main === 'all' ? false : i % 2 === 0));
+    return { [T.test]: f.test, [T.results]: results, [T.output]: `MARK<${f.test}> main: ${results.map((x) => (x ? 'pass' : 'fail')).join(',')}` };
+  });
+  const out = { [T.runs]: runs, [T.isolated]: isolated, [T.main]: main };
+  if (lie) Object.assign(out, {
+    batch: { verdict: failures.some((f) => f.cls === 'a') ? 'pass' : 'fail', failures: failures.map((f) => ({ test: f.test, class: LIE[f.cls], evidence: 'lie' })) },
+    flaky: failures.filter((f) => f.cls !== 'c').map((f) => f.test), regressions: failures.filter((f) => f.cls !== 'a').map((f) => ({ piece: 'zz-lie', test: f.test, output: 'lie' })), verdict: 'pass', passed: true,
+  });
   return out;
 };
 
@@ -145,13 +164,20 @@ export const fakeImpl = ({ answer = () => declared([]), models = PROBE } = {}) =
   return 'ok';
 };
 
-// ---------- Leitura do retorno (PERGUNTA 2) ----------
+// ---------- Leitura do retorno (R2, R4) ----------
+export const batchOf = (out) => (out && typeof out.batch === 'object' && out.batch ? out.batch : null);
 export const regsOf = (out) => (Array.isArray(out?.regressions) ? out.regressions : null);
-export const flakyOf = (out) => (Array.isArray(out?.flaky) ? out.flaky.map((x) => (typeof x === 'string' ? x : x?.test)) : []);
-const FALSE_FLAGS = ['passed', 'approved', 'ok', 'green'];
-export const approved = (run) => !run.err && Array.isArray(regsOf(run.out)) && regsOf(run.out).length === 0 && !FALSE_FLAGS.some((k) => run.out[k] === false) && !run.out.incomplete;
-export const refused = (run) => run.calls.length === 0 && (!!run.err || !Array.isArray(regsOf(run.out)));
-export const pairs = (out) => (regsOf(out) || []).map((r) => `${r?.piece}|${r?.test}`).sort();
+// teste → classe, a partir de batch.failures (um teste com duas classes diferentes fica com as duas, separadas por «/»)
+export const classesOf = (out) => {
+  const m = {};
+  for (const x of batchOf(out)?.failures || []) m[x?.test] = m[x?.test] && m[x?.test] !== x?.class ? m[x?.test] + '/' + x?.class : x?.class;
+  return m;
+};
+export const verdictOf = (run) => (run.err ? 'erro' : batchOf(run.out)?.verdict);
+export const approved = (run) => verdictOf(run) === 'pass';
+export const reasonOf = (run) => batchOf(run.out)?.reason ?? run.out?.reason;
+export const refused = (run) => run.calls.length === 0 && (!!run.err || !batchOf(run.out));
+export const pairs = (out) => [...new Set((regsOf(out) || []).map((r) => `${r?.piece}|${r?.test}`))].sort();
 export const show = (run) => (run.err ? 'ERRO ' + String(run.err.message ?? run.err) : JSON.stringify(run.out)).slice(0, 1500);
 
 // ---------- Gerador com semente fixa ----------
@@ -160,31 +186,39 @@ export const pick = (r, xs) => xs[Math.floor(r() * xs.length)];
 const subset = (r, total, proper) => { // subconjunto não vazio de 1..total; proper: nunca todos (falha intermitente)
   for (;;) { const s = []; for (let k = 1; k <= total; k++) if (r() < 0.5) s.push(k); if (s.length && (!proper || s.length < total)) return s; }
 };
-// Um lote aleatório e o veredito que o contrato manda (critérios 3 e 4), da definição: flaky ⇔ passa isolado e não toca nos owns
-// do lote; uma falha não flaky que toca nos owns de uma peça é uma regressão dessa peça. Fica de fora o que o contrato não fixa:
-// um teste que toca em 2 peças (PERGUNTA 5) e um teste que falha em TODAS as execuções e passa isolado (PERGUNTA 6).
+// A classe que o contrato manda (critério 4 + R3 + R6; ver a LEITURA DO CONTRATO no topo). null = o contrato não fixa.
+export const classFor = ({ owners, isolated, all, main }) => {
+  if (owners.length) return 'a';
+  if (isolated && !all) return 'c';
+  if (isolated) return main === 'some' ? 'c' : main === 'all' ? 'b' : 'a';
+  return main === 'all' ? 'b' : main === 'some' ? null : 'a';
+};
+// Um lote aleatório: testes dentro (de 1 ou 2 peças), a tocar num ficheiro de uma peça, ou fora do diff; com ou sem prova na main.
 export const genBatch = (r, mode) => {
   const ps = pieces(1 + Math.floor(r() * LIMIT[mode]));
   const nf = Math.floor(r() * 5), failures = [];
   for (let i = 0; i < nf; i++) {
     const kind = r() < 0.6 ? T.suite : T.e2e, total = kind === T.suite ? SUITE_RUNS : E2E_RUNS;
-    const where = pick(r, ['own', 'touches', 'outside']), p = pick(r, ps);
+    const where = pick(r, ['own', 'touches', 'two', 'outside', 'outside']), p = pick(r, ps), q = pick(r, ps);
     const testFile = kind === T.e2e ? `tests/e2e/x${i}.spec.ts` : where === 'own' ? p.owns[1] : `tests/core${i}.test.mjs`;
-    const files = where === 'outside' ? [testFile, `src/core${i}.js`] : where === 'own' ? [testFile, p.owns[0]] : [testFile, p.owns[0], `src/core${i}.js`];
-    const isolated = r() < 0.5;
-    const inDiff = where !== 'outside';
-    failures.push({ test: `${testFile} > caso ${i}`, files, [kind]: subset(r, total, isolated), isolated, truthFlaky: isolated && !inDiff, owner: inDiff ? p.id : null });
+    const files = where === 'outside' ? [testFile, `src/core${i}.js`] : where === 'own' ? [testFile, p.owns[0]] : where === 'two' ? [testFile, p.owns[0], q.owns[0]] : [testFile, p.owns[0], `src/core${i}.js`];
+    const owners = where === 'outside' ? [] : [...new Set(where === 'two' ? [p.id, q.id] : [p.id])];
+    const isolated = r() < 0.5, all = r() < 0.4;
+    const main = where === 'outside' ? pick(r, [undefined, 'all', 'some', 'none']) : undefined;
+    const cls = classFor({ owners, isolated, all, main });
+    if (cls === null) continue;
+    const runsIn = all ? Array.from({ length: total }, (_, k) => k + 1) : subset(r, total, true);
+    failures.push({ test: `${testFile} > caso ${i}`, files, [kind]: runsIn, isolated, main, cls, owners });
   }
   return { ps, failures };
 };
-// O que o contrato manda para um conjunto de falhas: flaky, pares peça|teste das regressões atribuíveis, falhas sem peça, aprovado
+// O que o contrato manda: classes por teste, pares peça|teste das regressões atribuíveis, veredito (null = não verificado: há b sem a)
 export const expected = (failures) => {
-  const flaky = failures.filter((f) => f.truthFlaky).map((f) => f.test).sort();
-  const regs = failures.filter((f) => !f.truthFlaky && f.owner).map((f) => `${f.owner}|${f.test}`).sort();
-  const loose = failures.filter((f) => !f.truthFlaky && !f.owner).map((f) => f.test).sort();
-  return { flaky, regs, loose, approved: failures.every((f) => f.truthFlaky) };
+  const classes = Object.fromEntries(failures.map((f) => [f.test, f.cls]));
+  const regs = failures.filter((f) => f.cls === 'a').flatMap((f) => f.owners.map((o) => `${o}|${f.test}`)).sort();
+  const verdict = failures.some((f) => f.cls === 'a') ? 'fail' : failures.some((f) => f.cls === 'b') ? null : 'pass';
+  return { classes, regs, verdict };
 };
-
 // ---------- Projetos gerados (como os helpers do F-03 e do F-07) ----------
 export const MODELS = () => ({
   developer: { model: 'haiku', effort: 'xhigh', label: 'Dev Logic 1.0', reason: 'logic and server code run well on Haiku xhigh' },

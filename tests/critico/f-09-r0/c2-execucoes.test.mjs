@@ -1,11 +1,11 @@
 // F-09 critério 2: o tester corre a suíte completa 2× e o E2E 3×, com o testCommand e o e2eCommand dos args; sem e2eCommand, a
 // parte do E2E fica «n/a». Oráculo: a contagem das execuções declaradas pelo tester falso e os dois comandos no prompt dele.
-// Leitura (PERGUNTA 4): a contagem conta. Um tester que declara menos execuções do que as do contrato não dá um lote aprovado.
+// R4: a contagem conta. Um tester que declara menos execuções do que as do contrato dá verdict "fail" com reason "runs".
 // O tester reconhece-se pelo par modelo/esforço de models.tester (sondas distintas por papel). Nos dois modos.
 // Depende do F-08: não.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BATCH, MODES, CMD, runWf, batchArgs, pieces, fakeImpl, declared, testerCalls, roleOf, approved, refused, show } from './helpers.mjs';
+import { BATCH, MODES, CMD, runWf, batchArgs, pieces, fakeImpl, declared, testerCalls, roleOf, approved, verdictOf, reasonOf, refused, show } from './helpers.mjs';
 
 const go = (over, answer) => runWf(BATCH, batchArgs(pieces(2), over), fakeImpl({ answer }));
 const prompts = (run) => testerCalls(run).map((c) => c.prompt).join('\n');
@@ -27,9 +27,10 @@ for (const mode of MODES) {
   });
 
   for (const [label, counts] of [['a suíte 1×', { suite: 1 }], ['o E2E 2×', { e2e: 2 }], ['nenhuma execução', { suite: 0, e2e: 0 }]]) {
-    test(`C2 ${mode}: um tester que declara só ${label} não dá um lote aprovado`, async () => {
+    test(`C2 ${mode}: um tester que declara só ${label} dá verdict fail com reason runs`, async () => {
       const run = await go({ mode }, () => declared([], counts));
-      assert.ok(!approved(run), 'aprovou um lote com execuções em falta: ' + show(run));
+      assert.equal(verdictOf(run), 'fail', 'aprovou um lote com execuções em falta: ' + show(run));
+      assert.equal(reasonOf(run), 'runs', show(run));
     });
   }
 

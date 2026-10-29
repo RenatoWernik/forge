@@ -45,6 +45,8 @@ const MUTANTS = [
   ['C3: a atribuição troca a peça (os ficheiros do teste passam a ser os da 1.ª peça)', onAnswer(mapFailures(`f => ({ ...f, ${T.files}: [...((args.pieces[0] || {}).owns || [])] })`)), 1],
   ['C4: a repetição isolada é ignorada (todas passam)', onAnswer(`r => ({ ...r, ${T.isolated}: (r.${T.isolated} || []).map(x => ({ ...x, ${T.passed}: true })) })`), 1],
   ['C4: a repetição isolada é ignorada (nenhuma passa)', onAnswer(`r => ({ ...r, ${T.isolated}: (r.${T.isolated} || []).map(x => ({ ...x, ${T.passed}: false })) })`), 1],
+  ['C4 (R3, R6): a prova na main é ignorada (o lote apaga-a)', onAnswer(`r => ({ ...r, ${T.main}: [] })`), 1],
+  ['C4 (R3, R6): a prova na main é lida ao contrário (cada resultado invertido)', onAnswer(`r => ({ ...r, ${T.main}: (r.${T.main} || []).map(x => ({ ...x, ${T.results}: (x.${T.results} || []).map(y => !y) })) })`), 1],
   ['C4: o diff é ignorado (todos os testes passam a tocar só fora do lote)', onAnswer(mapFailures(`f => ({ ...f, ${T.files}: ['zz-outside/x.test.mjs'] })`)), 1],
 ];
 

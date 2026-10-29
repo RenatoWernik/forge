@@ -2,7 +2,7 @@
 // modelo e schema certos; retoma determinística) e respeita o --render. Oráculo: as linhas do bloco «Workflow API contract» do
 // check.cjs, reescritas aqui e aplicadas ao gauntlet-batch de um projeto gerado; as mesmas 3 linhas com a etiqueta `batch:` na
 // saída do check.cjs; e a ida e volta do --render (mudar models.critic no forge.json → o check falha → --render → o meta do
-// gauntlet-batch tem o texto novo do crítico e o check volta a «All ok.»). O tester NÃO tem de aparecer no meta (PERGUNTA 8): o
+// gauntlet-batch tem o texto novo do crítico e o check volta a «All ok.»). O tester fica FORA do meta (R8): o
 // tests/critico/f-03-r0/c2-check-forge-json.test.mjs («papéis novos sem os opcionais») muda o label do tester sem --render e exige
 // «All ok.», o que só vale enquanto nenhum meta mostra o tester.
 // Nota de regressão: o tests/critico/f-03-r0/c3-render.test.mjs e a linha «render:» do check.cjs exigem em TODOS os workflows os
@@ -73,9 +73,10 @@ test('C6 as 3 linhas da API aparecem na saída do check.cjs com a etiqueta «bat
   assert.match(r.out, /All ok\./);
 });
 
-test('C6 render: no projeto gerado o meta do gauntlet-batch não tem marcadores por preencher, nomeia o developer e o critic do forge.json (f-03 C3a) e a fase Panel (se existir) corre o aux', () => {
+test('C6 render: no projeto gerado o meta do gauntlet-batch não tem marcadores por preencher, nomeia o developer e o critic do forge.json (f-03 C3a), não mostra o tester (R8) e a fase Panel (se existir) corre o aux', () => {
   assert.ok(!src.includes('{{'), 'ficaram marcadores {{…}} no gauntlet-batch gerado');
   for (const r of ['developer', 'critic']) assert.ok(description(src).includes(text(F[r])), `o meta não nomeia o ${r} («${text(F[r])}»): ${description(src)}`);
+  assert.ok(!src.match(META)[1].includes(text(F.tester)) && !/^\/\/ forge render:.*\btester\b/m.test(src), 'R8: o tester aparece no meta ou na linha «forge render» do gauntlet-batch');
   const panel = (src.match(/title:\s*'Panel'[^}]*?model:\s*'([^']*)'/) || [])[1];
   if (panel !== undefined) assert.equal(panel, F.aux.model);
 });

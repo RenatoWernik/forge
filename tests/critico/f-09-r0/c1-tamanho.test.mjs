@@ -1,11 +1,11 @@
 // F-09 critério 1: o lote recusa, antes de qualquer agent(), um tamanho acima do do modo (mais de 3 peças no rigorous, mais de 5 no
 // accelerated). Oráculo: a tabela literal SIZES (3, 4, 5 e 6 peças × 2 modos = 8 casos). Recusa = zero agent() (nem tester nem
-// painel) e nenhum retorno com `regressions`; aceite = o tester corre e o lote dá um retorno com `regressions`.
+// painel) e nenhum retorno com `batch`; aceite = o tester corre e o lote dá um retorno com `batch` (R2).
 // Mais: o limite vem do `mode` dos args, não de um número fixo (as mesmas 4 e 5 peças mudam de destino com o modo).
 // Depende do F-08: não.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BATCH, runWf, batchArgs, pieces, fakeImpl, testerCalls, refused, regsOf, show } from './helpers.mjs';
+import { BATCH, runWf, batchArgs, pieces, fakeImpl, testerCalls, refused, batchOf, show } from './helpers.mjs';
 import { SIZES } from './corpus.mjs';
 
 for (const [mode, k, ok] of SIZES) {
@@ -14,7 +14,7 @@ for (const [mode, k, ok] of SIZES) {
     if (ok) {
       assert.ok(!run.err, show(run));
       assert.ok(testerCalls(run).length >= 1, 'o tester não correu');
-      assert.ok(Array.isArray(regsOf(run.out)), 'o retorno não tem regressions: ' + show(run));
+      assert.ok(batchOf(run.out), 'o retorno não tem batch: ' + show(run));
     } else {
       assert.ok(refused(run), `não recusou: ${run.calls.length} agent(); ${show(run)}`);
     }
