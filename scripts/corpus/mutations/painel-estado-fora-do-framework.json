@@ -1,0 +1,7 @@
+{
+  "base": "en-noplain-published",
+  "file": "FRAMEWORK.md",
+  "find": "painel/estado",
+  "replace": "painel/outro",
+  "line": "panel: same data: FRAMEWORK.md and every panel agent of both workflows say that whoever writes .checkpoints/painel.json writes its exact copy in painel/estado right after it, in the same step"
+}
