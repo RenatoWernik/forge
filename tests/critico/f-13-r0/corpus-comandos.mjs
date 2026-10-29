@@ -1,7 +1,7 @@
 // Corpus de comandos dos hooks (F-13, #14): o oráculo fechado dos critérios 1 e 2, versionado e alargável.
 // Cada comando é só TEXTO que vai no JSON do evento PreToolUse; nenhum é executado. Cada um corre com tool_name Bash e PowerShell,
 // com o mesmo veredito esperado. Os primeiros de cada lista são os do contrato, pela ordem da issue #14.
-// Um comando acrescentado aqui pertence a uma classe do contrato; os casos que o contrato não decide estão em PERGUNTAS, sem veredito.
+// Um comando acrescentado aqui pertence a uma classe do contrato ou das respostas do orquestrador às PERGUNTAS da Ronda −1 (#14, 2026-10-29).
 
 // Critério 1. Matar processos por nome: tem de BLOQUEAR (e a mensagem diz a alternativa, matar por PID)
 export const MATAR_BLOQUEIA = [
@@ -33,6 +33,9 @@ export const MATAR_BLOQUEIA = [
   'cd app && Stop-Process -Name node -Force; npm start', 'npm test\ntaskkill /IM node.exe', 'echo y | taskkill /F /IM node.exe', 'killall node &',
   '(pkill node)', '{ killall node; }', 'if ($true) { Stop-Process -Name node }', '   killall node', 'FOO=1 killall node',
   'timeout 5 && taskkill /F /IM node.exe', 'Start-Sleep 1; Get-Process node | Stop-Process',
+  // resposta 2 do orquestrador (#14): matar QUALQUER processo por nome bloqueia, não só o node
+  'taskkill /IM chrome.exe', 'taskkill /F /IM python.exe', 'pkill python', 'killall vite', 'Stop-Process -Name code', 'killall -9 python3',
+  'Stop-Process -Name chrome -Force', 'Get-Process code | Stop-Process', 'taskkill /F /IM msedge.exe /T', 'pkill -f vitest',
 ];
 
 // Critério 1. Tem de PASSAR: matar por PID, comandos com «node», e o texto dos comandos perigosos como dado (echo, grep, commit, listar)
@@ -75,6 +78,9 @@ export const TESTES = [
   'cd app && npm test', 'npm run build && npm test', 'npm test 2>&1 | tee test.log', 'npm test > test.log 2>&1', 'CI=1 npm test', '$env:CI=1; npx vitest run',
   'cmd /c npm test', 'powershell -c "npm test"', 'timeout 540 npx playwright test', 'NODE_OPTIONS=--max-old-space-size=4096 node --test', '  npm test',
   'cd /d C:\\work\\app && pnpm test',
+  // resposta 3 do orquestrador (#14): jest, bun test, deno test, npm t, test:e2e e mocha também são comandos de teste
+  'npx jest', 'npx jest --ci', 'jest', 'bun test', 'bun test src/', 'deno test', 'deno test -A', 'npm t', 'npm run test:e2e', 'pnpm run test:e2e',
+  'npx mocha', 'mocha tests/',
 ];
 
 // Critério 2. Em segundo plano (run_in_background true) têm de PASSAR: servidores, builds e comandos que só mencionam «test»
@@ -88,10 +94,6 @@ export const FUNDO_PASSA = [
   'node tests/fixtures/server.mjs', 'npx serve test-results', 'tail -f test.log', 'echo "npm test"', 'cat test-results.json', 'git log --grep test',
   // outros trabalhos longos que não são testes
   'npm run build', 'npm install', 'git fetch',
+  // resposta 3 do orquestrador (#14): o show-report do Playwright é um servidor e passa
+  'npx playwright show-report', 'npx playwright show-report playwright-report', 'pnpm exec playwright show-report',
 ];
-
-// Casos que o contrato não decide: sem veredito até o orquestrador responder (test.todo, PERGUNTAS 2 e 3 na #14)
-export const PERGUNTAS = {
-  matarOutrosNomes: ['taskkill /IM chrome.exe', 'taskkill /F /IM python.exe', 'pkill python', 'killall vite', 'Stop-Process -Name code'],
-  testesForaDaLista: ['npx jest', 'bun test', 'deno test', 'npm t', 'npm run test:e2e', 'npx mocha', 'npx playwright show-report'],
-};

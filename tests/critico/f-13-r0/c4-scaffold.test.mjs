@@ -3,14 +3,17 @@
 // Oráculo: as 8 combinações dos três booleanos, mais fixtures com um settings.json prévio (igualdade profunda das chaves antigas).
 // Âmbito: (1) e (2) são PreToolUse sobre Bash e PowerShell; o vigia fica no evento que a ponte declara; cada entrada instalada,
 // corrida como o Claude Code a corre (exec form ou shell form), funciona; a skill new-project pergunta hook a hook.
+// Respostas 5 e 6 do orquestrador na #14 (2026-10-29): a junção é sem --force; um JSON prévio inválido dá saída 1 sem destruir nada;
+// reinstalar com um hook a false tira só a entrada do forge (pelo marcador) e deixa os hooks do utilizador.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ROOT, api, tmp, gerar, hooksDe, COMBOS, QUAIS, CHAVE, settingsDe, readJson, refsAo, cobre, entradaPre, correrComoClaudeCode, veredito, aviso, mostra,
-  mkdirSync, writeFileSync,
+  mkdirSync, writeFileSync, baseAnswers, sandboxEnv, foto,
 } from './helpers.mjs';
+import { spawnSync } from 'node:child_process';
 
 const nomeCombo = (h) => QUAIS.map((q) => `${q}=${h[CHAVE[q]]}`).join(' ');
 
@@ -84,13 +87,66 @@ test('C4: com os três a false e um settings.json prévio, o ficheiro fica igual
   assert.ok(readFileSync(settingsDe(dest)).equals(antes), 'o settings.json mudou');
 });
 
-test('C4: um settings.json prévio que não é JSON válido nunca é destruído (o scaffold recusa ou deixa-o igual, byte a byte)', async () => {
+// Resposta 5 do orquestrador (#14): um JSON prévio inválido nunca é destruído; o scaffold recusa com uma mensagem e sai com 1
+const PARTIDO = '{\n  // comentário do utilizador\n  "model": "sonnet",\n';
+const comPartido = () => {
   const dest = join(tmp(), 'proj');
   mkdirSync(join(dest, '.claude'), { recursive: true });
-  const partido = '{\n  // comentário do utilizador\n  "model": "sonnet",\n';
-  writeFileSync(settingsDe(dest), partido);
-  try { await gerar(hooksDe(true, true, true), { dest }); } catch { /* recusar é aceitável */ }
-  assert.equal(readFileSync(settingsDe(dest), 'utf8'), partido);
+  writeFileSync(settingsDe(dest), PARTIDO);
+  return dest;
+};
+
+test('C4 (resposta 5): com um settings.json prévio inválido, scaffold() recusa e o ficheiro fica igual byte a byte', async () => {
+  const dest = comPartido();
+  await assert.rejects(gerar(hooksDe(true, true, true), { dest }));
+  assert.equal(readFileSync(settingsDe(dest), 'utf8'), PARTIDO);
+});
+
+test('C4 (resposta 5): pela linha de comando, um settings.json prévio inválido dá saída 1, uma mensagem que fala do settings.json, e nada é escrito', () => {
+  const dest = comPartido();
+  const respostas = join(tmp(), 'respostas.json');
+  writeFileSync(respostas, JSON.stringify({ ...baseAnswers(), hooks: hooksDe(true, false, true) }));
+  const r = spawnSync(process.execPath, [join(ROOT, 'scripts/scaffold.mjs'), '--answers', respostas, '--dest', dest], { encoding: 'utf8', env: sandboxEnv(), timeout: 120000 });
+  const out = (r.stdout || '') + (r.stderr || '');
+  assert.equal(r.status, 1, out);
+  assert.match(out, /settings\.json/, out);
+  assert.equal(readFileSync(settingsDe(dest), 'utf8'), PARTIDO);
+  assert.deepEqual(Object.keys(foto(dest)), [join('.claude', 'settings.json')], 'a recusa escreveu ficheiros no projeto');
+});
+
+// Resposta 6 do orquestrador (#14): reinstalar com um hook a false tira só a entrada do forge e deixa os hooks do utilizador
+const MEU = { matcher: 'Bash', hooks: [{ type: 'command', command: 'powershell -File .claude/hooks/zz-do-utilizador.ps1' }] };
+for (const q of QUAIS) {
+  test(`C4 (resposta 6): reinstalar com ${q} a false tira só a entrada dele; os outros hooks do forge e os do utilizador ficam`, async () => {
+    const u = await api();
+    const dest = await gerar(hooksDe(true, true, true));
+    const s1 = readJson(settingsDe(dest));
+    s1.hooks.PreToolUse = [...(s1.hooks.PreToolUse ?? []), MEU];
+    s1.hooks.Stop = PREVIO.hooks.Stop;
+    s1.permissions = PREVIO.permissions;
+    writeFileSync(settingsDe(dest), JSON.stringify(s1, null, 2) + '\n');
+    await gerar({ ...hooksDe(true, true, true), [CHAVE[q]]: false }, { dest, force: true });
+    const s2 = readJson(settingsDe(dest));
+    assert.deepEqual(refsAo(s2, u.scripts[q]), [], q + ' continua instalado');
+    for (const o of QUAIS.filter((x) => x !== q)) assert.ok(refsAo(s2, u.scripts[o]).length > 0, o + ' desapareceu');
+    assert.ok((s2.hooks.PreToolUse ?? []).some((g) => JSON.stringify(g) === JSON.stringify(MEU)), 'perdeu o PreToolUse do utilizador');
+    assert.deepEqual(s2.hooks.Stop, PREVIO.hooks.Stop);
+    assert.deepEqual(s2.permissions, PREVIO.permissions);
+  });
+}
+
+test('C4 (resposta 6): reinstalar com os três a false tira as três entradas do forge e guarda tudo o resto do utilizador', async () => {
+  const u = await api();
+  const dest = await gerar(hooksDe(true, true, true));
+  const s1 = readJson(settingsDe(dest));
+  s1.hooks.PreToolUse = [...(s1.hooks.PreToolUse ?? []), MEU];
+  s1.model = 'sonnet';
+  writeFileSync(settingsDe(dest), JSON.stringify(s1, null, 2) + '\n');
+  await gerar(hooksDe(false, false, false), { dest, force: true });
+  const s2 = readJson(settingsDe(dest));
+  for (const q of QUAIS) assert.deepEqual(refsAo(s2, u.scripts[q]), [], q + ' continua instalado');
+  assert.ok((s2.hooks?.PreToolUse ?? []).some((g) => JSON.stringify(g) === JSON.stringify(MEU)), 'perdeu o PreToolUse do utilizador');
+  assert.equal(s2.model, 'sonnet');
 });
 
 test('C4: instalar duas vezes (scaffold com force por cima) não duplica nenhum hook e guarda o que o utilizador acrescentou entre as duas', async () => {

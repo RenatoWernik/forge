@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { api, gerar, hooksDe, entradaPre, correrMuitos, veredito, mostra } from './helpers.mjs';
-import { MATAR_BLOQUEIA, MATAR_PASSA, PERGUNTAS } from './corpus-comandos.mjs';
+import { MATAR_BLOQUEIA, MATAR_PASSA } from './corpus-comandos.mjs';
 
 let proj;
 const projeto = async () => (proj ??= await gerar(hooksDe(true, true, true)));
@@ -39,5 +39,3 @@ test('C1: a mensagem de cada bloqueio diz a alternativa (matar por PID)', async 
   assert.deepEqual(semAlternativa, []);
 });
 
-// PERGUNTA 2 (na #14): o contrato diz «matar processos por nome», mas todos os exemplos são o node. Sem veredito até à resposta.
-for (const c of PERGUNTAS.matarOutrosNomes) test.todo(`C1 PERGUNTA 2: ${JSON.stringify(c)} (outro nome que não node) bloqueia?`);

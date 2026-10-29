@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { api, gerar, hooksDe, entradaPre, correrMuitos, veredito, mostra } from './helpers.mjs';
-import { TESTES, FUNDO_PASSA, PERGUNTAS } from './corpus-comandos.mjs';
+import { TESTES, FUNDO_PASSA } from './corpus-comandos.mjs';
 
 let proj;
 const projeto = async () => (proj ??= await gerar(hooksDe(true, true, true)));
@@ -40,5 +40,3 @@ test('C2: a mensagem de cada bloqueio diz a alternativa: os blocos de até 9 min
   assert.deepEqual(sem.map((x) => `${JSON.stringify(x.comando)} → ${JSON.stringify(x.v.mensagem.slice(0, 200))}`), []);
 });
 
-// PERGUNTA 3 (na #14): comandos de teste fora da lista do contrato. Sem veredito até à resposta.
-for (const c of PERGUNTAS.testesForaDaLista) test.todo(`C2 PERGUNTA 3: ${JSON.stringify(c)} com run_in_background true bloqueia?`);
