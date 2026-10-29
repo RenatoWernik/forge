@@ -26,9 +26,11 @@ test('dry run lists the generated tree and writes nothing to the destination', a
   const { files } = await scaffold(answers(), { dest, dryRun: true });
   assert.deepEqual([...files].sort(), [
     '.ai-memory.toml',
+    '.checkpoints/painel.json',
     '.claude/check.cjs',
     '.claude/dashboard/panel.html',
     '.claude/forge.json',
+    '.claude/painel-leitor.mjs',
     '.claude/workflows/gauntlet-build.js',
     '.claude/workflows/gauntlet-ponytail.js',
     '.graphifyignore',

@@ -6,7 +6,9 @@ import { parseArgs } from 'node:util';
 const TEMPLATES = fileURLToPath(new URL('../templates/', import.meta.url));
 // copied as is: its comments quote the marker syntax
 const VERBATIM = new Set(['.claude/check.cjs']);
-const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const LEITOR = fileURLToPath(new URL('./painel-leitor.mjs', import.meta.url));
+export const LEITOR_NO_PROJETO = '.claude/painel-leitor.mjs';
+const EFFORTS =['low', 'medium', 'high', 'xhigh', 'max'];
 const ROLES = ['developer', 'critic', 'aux'];
 const PANEL_URL = /^https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+$/;
 const PENDING_URL = 'https://claude.ai/artifact/PANEL-URL-PENDING';
@@ -160,6 +162,9 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
     tree[rel] = VERBATIM.has(rel) ? text : text.replace(/\{\{([\w.]+)\}\}/g, (m, k) => vars[k] ?? m);
   }
   tree['.claude/forge.json'] = JSON.stringify({ language: lang.name, langTag: lang.tag, plainStyle: answers.plainStyle !== false, models: answers.models }, null, 2) + '\n';
+  // shortcut: the mode is always "rigoroso" until the setup asks for it (F-03); then it copies the mode of forge.json
+  tree['.checkpoints/painel.json'] = JSON.stringify({ versao: 1, projeto: answers.projectName, modo: 'rigoroso', tickets: [], agentes: [] }, null, 2) + '\n';
+  tree[LEITOR_NO_PROJETO] = await readFile(LEITOR, 'utf8'); // the single source of the reader, copied as is (its text has no markers to fill)
   const files = Object.keys(tree);
   const conflicts = [];
   for (const rel of files) if (await exists(join(dest, rel))) conflicts.push(rel);
