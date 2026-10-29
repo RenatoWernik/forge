@@ -52,6 +52,7 @@ const MUTANTS = [
   ['C3: dois críticos por peça', [[ATTACKS, wrap('async (p, o) => { if (o && o.schema) await __a(p, o); return __a(p, o) }')]], 1],
   ['C3: o prompt deixa de mandar ler a issue com --json body,comments', [[ATTACKS, wrap("(p, o) => __a(String(p).split('--json body,comments').join('--json body'), o)")]], 1],
   ['C3: as lacunas do crítico perdem-se no retorno', [[ATTACKS, wrap('async (p, o) => { const r = await __a(p, o); return r && typeof r === "object" && Array.isArray(r.gaps) ? { ...r, gaps: [] } : r }')]], 1],
+  ['C3 (resposta 7): a marca guard dos ataques perde-se no retorno', [[ATTACKS, wrap('async (p, o) => { const r = await __a(p, o); return r && typeof r === "object" && Array.isArray(r.attacks) ? { ...r, attacks: r.attacks.map(a => a && typeof a === "object" ? { id: a.id, file: a.file } : a) } : r }')]], 1],
   ['C4: o gauntlet-build salta a Ronda −1 (todas as peças com um resultado limpo)', [[BUILD, R0_BYPASS]], 1],
   ['C4 (resposta 5): o gauntlet-build ignora failingOnBase:false', [[BUILD, FOB]], 1],
   ['C1 (resposta 4): o gauntlet-build aceita mais de 6 critérios (corta-os a 6 antes da validação)', [[BUILD, SIX]], 1],

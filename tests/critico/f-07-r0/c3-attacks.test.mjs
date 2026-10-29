@@ -1,5 +1,6 @@
 // F-07 critério 3: o gauntlet-attacks lança um crítico por peça, com o modelo e o esforço de models.critic; o prompt aponta para o
-// brief da Ronda −1 e para a issue (`gh issue view <issue> --json body,comments`); devolve {id, attacks[], failingOnBase, gaps[]}.
+// brief da Ronda −1 e para a issue (`gh issue view <issue> --json body,comments`); devolve {id, attacks[], failingOnBase, gaps[]},
+// com cada ataque em { id, file, guard?: true } (resposta 7 do orquestrador).
 // Oráculo: a simulação (runtime falso, sem modelos), com modelos de sonda distintos por papel. Dois modos, uma e três peças.
 // Depende do F-06: só o teste «C3 brief» (o caminho e o ficheiro do brief da Ronda −1 vêm do F-06; até lá, o teste exige um
 // ficheiro existente em templates/.claude/briefs/ e o ajuste fica para quando o F-06 entrar na main). Os outros não dependem.
@@ -7,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, ATTACKS, MODES, PROBE, contract, baseArgs, runWf, fakeImpl, resultsOf, isCritic, isDev, belongs } from './helpers.mjs';
+import { ROOT, ATTACKS, MODES, PROBE, contract, baseArgs, runWf, fakeImpl, resultsOf, isCritic, isDev, belongs, atks, normAtks } from './helpers.mjs';
 
 const PIECES = [contract('pa', 9101), contract('pb', 9102), contract('pc', 9103)];
 const GAPS = { pa: [], pb: ['criterion 2: the oracle does not say which rows count'], pc: ['criterion 1: no command', 'criterion 3: threshold not measured'] };
@@ -44,7 +45,9 @@ for (const mode of MODES) {
     for (const p of PIECES) {
       const r = res.find((y) => y && y.id === p.id);
       assert.ok(r, `${p.id}: sem resultado`);
-      assert.ok(Array.isArray(r.attacks) && r.attacks.length > 0, `${p.id}: attacks não é uma lista com os ataques`);
+      // resposta 7: cada ataque é { id, file, guard?: true }, tal como o crítico o devolveu (a guarda não se perde)
+      assert.deepEqual(normAtks(r.attacks), normAtks(atks(p.id)), `${p.id}: attacks ${JSON.stringify(r.attacks)?.slice(0, 200)}`);
+      assert.ok(Array.from(r.attacks).every((a) => a && typeof a === 'object' && typeof a.id === 'string' && typeof a.file === 'string'), `${p.id}: um ataque sem id ou file`);
       assert.equal(r.failingOnBase, true, `${p.id}: failingOnBase`);
       assert.ok(Array.isArray(r.gaps), `${p.id}: gaps não é uma lista`);
       assert.deepEqual(Array.from(r.gaps), GAPS[p.id], `${p.id}: gaps`); // Array.from: a lista pode ter sido copiada dentro da vm (outro realm)
