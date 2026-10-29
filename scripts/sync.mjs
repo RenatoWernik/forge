@@ -102,7 +102,7 @@ function pairs(removed, added) {
 
 async function inferAnswers(projectDir, templates) {
   let forge;
-  try { forge = JSON.parse(await readText(join(projectDir, '.claude/forge.json'))); } catch { throw new Error(`${projectDir} is not a forge project (no readable .claude/forge.json)`); }
+  try { forge = JSON.parse((await readText(join(projectDir, '.claude/forge.json'))).replace(/^\uFEFF/, '')); } catch { throw new Error(`${projectDir} is not a forge project (no readable .claude/forge.json)`); }
   const votes = Object.fromEntries(SCALAR.map((n) => [n, new Map()]));
   for (const [rel, tText] of Object.entries(templates)) {
     let pLines;
@@ -120,15 +120,15 @@ async function inferAnswers(projectDir, templates) {
   let panelStrings;
   try { panelStrings = JSON.parse(w.PANEL_OVERRIDES); } catch { /* left to the built-in texts */ }
   return {
-    projectName: w.PROJECT_NAME, language: forge.language, plainStyle: forge.plainStyle, models: forge.models,
+    projectName: w.PROJECT_NAME, language: forge.language, plainStyle: forge.plainStyle, mode: forge.mode, models: forge.models,
     memory: { workspace: w.MEM_WORKSPACE, project: w.MEM_PROJECT }, script: w.SPECIFY_SCRIPT, dashboardUrl: w.DASHBOARD_URL,
     langTag: w.LANG_TAG, panelStrings,
   };
 }
 
-// An edited line whose template line had a model or effort marker (developer, critic, aux, aux.model) and no longer has it: the edit
+// An edited line whose template line had a model or effort marker (developer, developerUi, critic, tester, aux, aux.model) and no longer has it: the edit
 // froze what the setup answers used to choose, so it is flagged like project data.
-const lostRole = (tLine, text) => [...(tLine ?? '').matchAll(/\{\{((?:developer|critic|aux)[\w.]*)\}\}/g)].some((m) => !text.includes(m[0]));
+const lostRole = (tLine, text) => [...(tLine ?? '').matchAll(/\{\{((?:developer|critic|tester|aux)[\w.]*)\}\}/g)].some((m) => !text.includes(m[0]));
 
 // A common-word value (see unrender) that an added line holds more often than the template line it edits: it may be the name typed by
 // hand, so it is flagged. findLeaks skips these values, since it would flag every "build" of a project called Build.
@@ -206,7 +206,7 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
       files.push(rel);
     }
     const patch = files.length ? git(['diff', '--no-index', '--no-color', '--no-prefix', '--', 'a', 'b'], work) : '';
-    const leaks = findLeaks(patch, inferred, ['developer', 'critic', 'aux'].map((r) => values[r]), [...common].map((n) => values[n]));
+    const leaks = findLeaks(patch, inferred, ['developer', 'developerUi', 'critic', 'tester', 'aux'].map((r) => values[r]), [...common].map((n) => values[n]));
     for (const f of flagged) if (!leaks.some((l) => l.file === f.file && l.line === f.line)) leaks.push(f);
     return { patch, files, missing, leaks };
   } finally {
@@ -234,7 +234,7 @@ export async function main(argv, write = (s) => process.stdout.write(s), warn = 
     warn(`forge sync: ${files.length} file(s) differ from the templates${files.length ? `: ${files.join(', ')}` : ''}`);
     if (missing.length) warn(`not in the project (skipped): ${missing.join(', ')}`);
     for (const l of leaks) warn(`WARNING possible project data in ${l.file}: ${l.line}`);
-    if (leaks.length) warn('A flagged line holds project data, or a model/effort marker ({{developer}}, {{critic}}, {{aux}}) that the edit turned into a fixed value: restore the marker in the patch or revert the edit.');
+    if (leaks.length) warn('A flagged line holds project data, or a model/effort marker ({{developer}}, {{developerUi}}, {{critic}}, {{tester}}, {{aux}}) that the edit turned into a fixed value: restore the marker in the patch or revert the edit.');
     if (v.out) await writeFile(resolve(v.out), patch); else if (patch) write(patch);
     return leaks.length ? 3 : 0;
   } catch (e) {

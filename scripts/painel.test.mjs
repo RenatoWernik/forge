@@ -210,7 +210,14 @@ test('o scaffold gera um painel.json inicial válido, com o projeto, o modo e ze
   const dest = join(tmp(), 'p');
   await scaffold({
     projectName: 'Ação Ünï 2', language: 'English', memory: { workspace: 'acme', project: 'billing' },
-    models: { developer: { model: 'sonnet', effort: 'high' }, critic: { model: 'opus', effort: 'high' }, aux: { model: 'sonnet', effort: 'medium' } },
+    mode: 'rigorous',
+    models: {
+      developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
+      developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
+      critic: { model: 'opus', effort: 'high', reason: 'the critic stays on the strongest model' },
+      tester: { model: 'haiku', effort: 'xhigh', reason: 'the batch suite is mechanical work' },
+      aux: { model: 'sonnet', effort: 'medium', reason: 'panel records only' },
+    },
   }, { dest });
   const raw = readFileSync(join(dest, '.checkpoints/painel.json'), 'utf8');
   assert.deepEqual(validar(JSON.parse(raw)), []);
@@ -244,7 +251,9 @@ test('redefinir um ticket ou um agente existente conserva os seus campos extra (
 
 test('o CLI do scaffold diz «kept» para o painel preservado e «replaced» só para o que foi mesmo substituído', async () => {
   const dest = join(tmp(), 'p');
-  const flags = ['--name', 'Acme', '--language', 'English', '--developer', 'sonnet:high', '--critic', 'opus:high', '--aux', 'sonnet:medium', '--workspace', 'acme', '--project', 'billing', '--dest', dest];
+  const answers = join(tmp(), 'answers.json'); // developerUi, tester and the reasons only come through --answers (F-03)
+  writeFileSync(answers, JSON.stringify({ models: Object.fromEntries(['developer', 'developerUi', 'critic', 'tester', 'aux'].map((r) => [r, { model: 'sonnet', effort: 'high', reason: 'test' }])) }));
+  const flags = ['--answers', answers, '--mode', 'rigorous', '--name', 'Acme', '--language', 'English', '--developer', 'sonnet:high', '--critic', 'opus:high', '--aux', 'sonnet:medium', '--workspace', 'acme', '--project', 'billing', '--dest', dest];
   await main(flags, () => {});
   const out = [];
   assert.equal(await main([...flags, '--force'], (m) => out.push(m)), 0);
@@ -258,7 +267,14 @@ test('scaffold com force não apaga os tickets de um painel.json em uso; o leito
   const dest = join(tmp(), 'p');
   const respostas = {
     projectName: 'Acme', language: 'English', memory: { workspace: 'acme', project: 'billing' },
-    models: { developer: { model: 'sonnet', effort: 'high' }, critic: { model: 'opus', effort: 'high' }, aux: { model: 'sonnet', effort: 'medium' } },
+    mode: 'rigorous',
+    models: {
+      developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
+      developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
+      critic: { model: 'opus', effort: 'high', reason: 'the critic stays on the strongest model' },
+      tester: { model: 'haiku', effort: 'xhigh', reason: 'the batch suite is mechanical work' },
+      aux: { model: 'sonnet', effort: 'medium', reason: 'panel records only' },
+    },
   };
   await scaffold(respostas, { dest });
   const file = join(dest, '.checkpoints/painel.json');

@@ -1,10 +1,13 @@
 // Validates the framework. Usage, from the project root: node .claude/check.cjs [--env]   (exit code 1 if there is a FAIL)
 //   default: .claude/forge.json + a simulation of both workflows (no model is called) + the manual/bootstrap examples that exist
 //   --env:   also the machine and project setup (ai-memory, Spec-Kit, Graphify, git, skills); versions are forge's doctor job
-// .claude/forge.json: { "language": "English", "langTag": "en", "models": { "developer": R, "critic": R, "aux": R } } with R = { model, effort, label?, match? }
-//   model  = alias or ID passed to agent() (sonnet, opus, ...); effort = low | medium | high | xhigh | max
+// .claude/forge.json: { "language": "English", "langTag": "en", "mode": "rigorous", "models": { "developer": R, "developerUi": R, "critic": R, "tester": R, "aux": R }, "escalation": { <condition>: { "value", "description" } } }
+//   with R = { model, effort, reason, label?, match? }
+//   mode   = rigorous | accelerated
+//   model  = alias or ID passed to agent() (sonnet, opus, ...); effort = low | medium | high | xhigh | max; reason = why this model and effort
 //   label  = name shown on the panel (default: model); match = regex the model ID declared by an agent must satisfy (default: model)
-const fs = require('fs'), os = require('os'), path = require('path'), vm = require('vm'), { spawnSync } = require('child_process')
+//   escalation = sameCriterionFailures and minutesWithoutProgress (integer, 1 or more), attacksRedOnDelivery and visualBelowReference (true or false), each with a description
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm'), { spawnSync } = require('node:child_process')
 process.chdir(path.join(__dirname, '..'))
 const H = os.homedir(), AIM = 'ai-memory', ENV = process.argv.includes('--env')
 const sh = (exe, args, input) => spawnSync(exe, args, { input, encoding: 'utf8' })
@@ -21,32 +24,62 @@ async function chk(name, f) {
 
 ;(async () => {
   // forge.json: the models every role runs on. Without a valid one nothing below can be simulated.
-  const ROLES = ['developer', 'critic', 'aux'], EFF = ['low', 'medium', 'high', 'xhigh', 'max']
+  const ROLES = ['developer', 'developerUi', 'critic', 'tester', 'aux'], WFR = ['developer', 'critic', 'aux'] // WFR: the roles the workflows read from args.models
+  const EFF = ['low', 'medium', 'high', 'xhigh', 'max'], TEXT = ['developer', 'developerUi', 'critic', 'tester'] // TEXT: the roles whose "<label> <effort>" the meta can show
   const label = r => r.label || r.model
   const declared = r => r.model + ' ' + label(r) // the model ID a fake agent declares: it must satisfy the role's own match
   let FJ = {}
-  try { FJ = JSON.parse(fs.readFileSync('.claude/forge.json', 'utf8')) } catch (e) {}
+  try { FJ = JSON.parse(fs.readFileSync('.claude/forge.json', 'utf8').replace(/^﻿/, '')) } catch (e) {}
   const F = FJ.models || {}
-  await chk('forge.json: models.developer, models.critic and models.aux each have model, effort (low, medium, high, xhigh or max) and a match that accepts their own label', () => ROLES.every(k => F[k] && typeof F[k].model === 'string' && F[k].model && EFF.includes(F[k].effort) && new RegExp(F[k].match || F[k].model, 'i').test(declared(F[k]))))
+  const matchOk = r => { try { return (r.match === undefined || typeof r.match === 'string') && new RegExp(r.match || r.model, 'i').test(declared(r)) } catch (e) { return false } }
+  const isObj = x =>!!x && typeof x === 'object' && !Array.isArray(x)
+  const LIMITS = { sameCriterionFailures: 'int', attacksRedOnDelivery: 'bool', minutesWithoutProgress: 'int', visualBelowReference: 'bool' }
+  const problems = [] // what is wrong in forge.json, by field, for the detail of the line below
+  if (!['rigorous', 'accelerated'].includes(FJ.mode)) problems.push('mode')
+  for (const k of ROLES) {
+    const r = F[k]
+    if (!isObj(r)) { problems.push('models.' + k); continue }
+    if (typeof r.model !== 'string' || !r.model) problems.push('models.' + k + '.model')
+    else if (!matchOk(r)) problems.push('models.' + k + '.match')
+    if (!EFF.includes(r.effort)) problems.push('models.' + k + '.effort')
+    if (typeof r.reason !== 'string' || !r.reason.trim()) problems.push('models.' + k + '.reason')
+  }
+  const E = FJ.escalation
+  if (!isObj(E)) problems.push('escalation')
+  else for (const [c, t] of Object.entries(LIMITS)) {
+    const v = isObj(E[c]) ? E[c] : {}
+    if (!(t === 'bool' ? typeof v.value === 'boolean' : Number.isInteger(v.value) && v.value >= 1)) problems.push('escalation.' + c + '.value')
+    if (typeof v.description !== 'string' || !v.description.trim()) problems.push('escalation.' + c + '.description')
+  }
+  await chk('forge.json: mode (rigorous or accelerated), the 5 roles (model, effort low, medium, high, xhigh or max, reason, and a match that accepts their own label) and the escalation (4 conditions, each with a value and a description)' + (problems.length ? ' (invalid: ' + problems.join(', ') + ')' : ''), () => !problems.length)
   if (bad) { console.log('\nFix .claude/forge.json first: the workflow simulation needs it.'); process.exit(1) }
-  const fill = { developer: label(F.developer) + ' ' + F.developer.effort, critic: label(F.critic) + ' ' + F.critic.effort, 'aux.model': F.aux.model }
-  const META = /^export const meta = (\{[\s\S]*?^\})/m, matches = src => { const m = src.match(META); if (!m) return false; const meta = vm.runInNewContext('(' + m[1] + ')'); return meta.description.includes(fill.developer) && meta.description.includes(fill.critic) && (meta.phases.find(p => p.title === 'Panel') || {}).model === fill['aux.model'] }
+  const fill = { developer: label(F.developer) + ' ' + F.developer.effort, developerUi: label(F.developerUi) + ' ' + F.developerUi.effort, critic: label(F.critic) + ' ' + F.critic.effort, tester: label(F.tester) + ' ' + F.tester.effort, 'aux.model': F.aux.model }
+  const REC = /^\/\/ forge render:((?: \w+ <[^>\r\n]+>)+)/m, recOf = src => { const m = src.match(REC); return m ? [...m[1].matchAll(/(\w+) <([^>\r\n]+)>/g)].map(x => [x[1], x[2]]) : [] } // the roles the render line records, in the order their texts appear in the meta description
+  const META = /^export const meta = (\{[\s\S]*?^\})/m, matches = src => { const m = src.match(META); if (!m) return false; const meta = vm.runInNewContext('(' + m[1] + ')'); return [...new Set(['developer', 'critic', ...recOf(src).map(x => x[0])])].every(k => fill[k] && meta.description.includes(fill[k])) && (meta.phases.find(p => p.title === 'Panel') || {}).model === fill['aux.model'] }
   if (process.argv.includes('--render')) { // brings the model and effort texts of the workflow meta in line with forge.json, as often as forge.json changes: fills the {{tokens}} of a fresh template copy, or swaps the texts recorded in the "// forge render:" line of an already rendered file
     const unsafe = ROLES.filter(k => !/^[\p{L}\p{N} ._\[\]-]{1,64}$/u.test(label(F[k])) || !/^[A-Za-z0-9][A-Za-z0-9._\[\]-]{0,63}$/.test(F[k].model)) // these texts are written into JS source: a plain charset only
     if (unsafe.length) { console.log('FAIL  render: .claude/forge.json models.' + unsafe.join(', models.') + ' has a model or label with characters outside letters, digits, space, dot, dash, underscore and brackets; nothing was written'); process.exit(1) }
-    const REC = /^\/\/ forge render: developer <([^>\r\n]*)> critic <([^>\r\n]*)>/m
     const renderOne = src => {
-      if (src.includes('{{')) src = src.replace(/\{\{([\w.]+)\}\}/g, (m, k) => fill[k] ?? m)
-      else {
-        const rec = src.match(REC), m = src.match(META)
-        if (!m || (!rec && matches(src))) return src
-        if (!rec) throw new Error('the meta text does not match .claude/forge.json and the file holds neither {{tokens}} nor its "// forge render:" line, so forge cannot tell which texts to replace; restore the file from the forge templates and run --render again')
-        const d = m[1].indexOf('description:'), i = m[1].indexOf(rec[1], d), j = i < 0 ? -1 : m[1].indexOf(rec[2], i + rec[1].length)
-        if (d < 0 || j < 0) throw new Error('the texts recorded in its "// forge render:" line (' + rec[1] + ' and ' + rec[2] + ') are not in the meta description any more; restore the file from the forge templates and run --render again')
-        // ponytail: finds each recorded text by position in the description (developer first), so a role text that also appears in the fixed prose would be misplaced; the check below refuses that, upgrade: wrap each token in a unique delimiter if templates ever need it
-        const meta = m[1].slice(0, i) + fill.developer + m[1].slice(i + rec[1].length, j) + fill.critic + m[1].slice(j + rec[2].length)
-        src = src.slice(0, m.index) + 'export const meta = ' + meta.replace(/(title: 'Panel'[^}]*?model: ')[^']*'/, (x, a) => a + fill['aux.model'] + "'") + src.slice(m.index + m[0].length)
-        src = src.replace(REC, () => '// forge render: developer <' + fill.developer + '> critic <' + fill.critic + '>')
+      if (src.includes('{{')) {
+        const lit = (src.match(META) || [, ''])[1], at = k => lit.indexOf('{{' + k + '}}')
+        const used = TEXT.filter(k => at(k) >= 0).sort((a, b) => at(a) - at(b)) // the roles whose text the meta shows, in the order it shows them
+        src = src.replace(/\{\{([\w.]+)\}\}/g, (m, k) => fill[k] ?? m)
+        if (REC.test(src)) src = src.replace(REC, () => '// forge render:' + used.map(k => ' ' + k + ' <' + fill[k] + '>').join(''))
+      } else {
+        const rec = recOf(src), m = src.match(META)
+        if (!m || (!rec.length && matches(src))) return src
+        if (!rec.length) throw new Error('the meta text does not match .claude/forge.json and the file holds neither {{tokens}} nor its "// forge render:" line, so forge cannot tell which texts to replace; restore the file from the forge templates and run --render again')
+        // ponytail: finds each recorded text by position in the description (in the order of the render line), so a role text that also appears in the fixed prose would be misplaced; the check below refuses that, upgrade: wrap each token in a unique delimiter if templates ever need it
+        let at = m[1].indexOf('description:'), meta = '', from = 0
+        for (const [k, old] of rec) {
+          const i = at < 0 || !fill[k] ? -1 : m[1].indexOf(old, at)
+          if (i < 0) throw new Error('the texts recorded in its "// forge render:" line (' + rec.map(x => x[1]).join(', ') + ') are not in the meta description any more, or name a role forge.json does not have; restore the file from the forge templates and run --render again')
+          meta += m[1].slice(from, i) + fill[k]
+          from = at = i + old.length
+        }
+        meta = (meta + m[1].slice(from)).replace(/(title: 'Panel'[^}]*?model: ')[^']*'/, (x, a) => a + fill['aux.model'] + "'")
+        src = src.slice(0, m.index) + 'export const meta = ' + meta + src.slice(m.index + m[0].length)
+        src = src.replace(REC, () => '// forge render:' + rec.map(([k]) => ' ' + k + ' <' + fill[k] + '>').join(''))
       }
       if (!matches(src)) throw new Error('after rendering, the meta text still does not match .claude/forge.json; nothing was written')
       return src
@@ -125,7 +158,7 @@ async function chk(name, f) {
     return run
   }
   const rejects = async (file, args) => { let n = 0; const x = await wf(file, args, () => ++n); return n === 0 && /incomplete args/.test(x.err?.message) }
-  const [D, C, X] = ROLES.map(k => F[k])
+  const [D, C, X] = WFR.map(k => F[k])
   const base = { checkpoint: { n: 1, title: 'T' }, root: 'C:\\p', dashboardUrl: 'https://x', context: 'CTX-SPEC-PLAN-TASKS', models: F, language: FJ.language }
   const rn = o => +o.label.match(/:r(\d+)$/)[1]
   const flip = l => (l === 'A' ? 'B' : 'A')
@@ -180,7 +213,7 @@ async function chk(name, f) {
   await chk('build: parallel:true runs the pieces together; the one that throws leaves the result and log() records it (ATTENTION), without taking the other down', () => r.calls[1].opts.label === 'build:p:r1' && r.calls[2].opts.label === 'build:q:r1' && r.out.results.length === 1 && r.out.results[0].id === 'p' && r.out.results[0].won && r.logs.some(l => l.startsWith('ATTENTION')))
   await chk('build: args without root, dashboardUrl or pieces, or a piece without id, title, goal, bar or owns, bring the workflow down with incomplete args, before spending an agent', async () => (await Promise.all([{ root: '' }, { dashboardUrl: '' }, { pieces: [] }, ...['id', 'title', 'goal', 'bar', 'owns'].map(k => ({ pieces: [{ ...piece, [k]: undefined }] }))].map(a => rejects('gauntlet-build.js', { ...base, pieces: [piece], ...a })))).every(Boolean))
   // args.models missing or wrong: the workflow stops with an error that names the role and points to forge.json, before spending an agent
-  const badModels = ROLES.flatMap(k => [{ ...F, [k]: undefined }, { ...F, [k]: { ...F[k], model: '' } }, { ...F, [k]: { ...F[k], effort: 'ultra' } }, { ...F, [k]: { ...F[k], effort: undefined } }, { ...F, [k]: { ...F[k], match: '(' } }].map(m => [k, m]))
+  const badModels = WFR.flatMap(k => [{ ...F, [k]: undefined }, { ...F, [k]: { ...F[k], model: '' } }, { ...F, [k]: { ...F[k], effort: 'ultra' } }, { ...F, [k]: { ...F[k], effort: undefined } }, { ...F, [k]: { ...F[k], match: '(' } }].map(m => [k, m]))
   const rejectsModels = async (file, args) => (await Promise.all([[null, undefined], [null, {}], ...badModels].map(async ([k, m]) => { let n = 0; const x = await wf(file, { ...args, models: m }, () => ++n), msg = x.err?.message || ''; return n === 0 && /incomplete args/.test(msg) && msg.includes('.claude/forge.json') && (!k || msg.includes('(review: ' + k + ')')) }))).every(Boolean)
   await chk('build: args without models, or with a role missing model or a valid effort, or with a match that is not a valid regex, bring the workflow down with incomplete args naming the role and pointing to forge.json, before spending an agent', () => rejectsModels('gauntlet-build.js', { ...base, pieces: [piece] }))
   const big = 'x'.repeat(100000)
@@ -287,9 +320,9 @@ async function chk(name, f) {
       } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
     }
     await chk('render: with forge.json unchanged, --render changes nothing and says so; after forge.json changes (developer probe-dev, xhigh), --render rewrites the model and effort in the workflow meta, the check is green in both configurations and a second --render changes nothing again', () => trip(({ run, wfText, tmp }) => {
-      const [dev, same] = [{ model: 'probe-dev', effort: 'xhigh', label: 'Probe Dev 9.9' }, run('--render')]
+      const [dev, same] = [{ model: 'probe-dev', effort: 'xhigh', label: 'Probe Dev 9.9', reason: 'probe' }, run('--render')]
       const first = run()
-      fs.writeFileSync(path.join(tmp, '.claude/forge.json'), JSON.stringify({ ...FJ, models: { ...F, developer: dev } }))
+      fs.writeFileSync(path.join(tmp, '.claude/forge.json'), JSON.stringify({ ...FJ, mode: FJ.mode === 'rigorous' ? 'accelerated' : 'rigorous', models: { ...F, developer: dev, developerUi: { ...dev, label: 'Probe UI 9.9' }, tester: { ...dev, label: 'Probe Tester 9.9' } } })) // the other roles and the mode change too: the check stays green, and no meta text of them is written until a workflow shows them
       const [again, second, after, third] = [run('--render'), run(), wfText(), run('--render')]
       return same.code === 0 && /nothing to render/.test(same.text) && !/^rendered/m.test(same.text) && first.code === 0
         && again.code === 0 && /^rendered/m.test(again.text) && after.every(t => t.includes('Probe Dev 9.9 xhigh') && !t.includes(label(D) + ' ' + D.effort + ' builds') && !t.includes(label(D) + ' ' + D.effort + ' cuts'))
@@ -298,7 +331,7 @@ async function chk(name, f) {
     await chk('render: a workflow whose meta is stale and that holds neither {{tokens}} nor its "forge render" record makes --render fail with a clear error and write nothing', () => trip(({ run, wfText, tmp }) => {
       const f = path.join(tmp, '.claude/workflows/gauntlet-build.js')
       fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^\/\/ forge render:.*\r?\n/m, '').replace(label(D) + ' ' + D.effort, 'Old Dev 1.0 low'))
-      fs.writeFileSync(path.join(tmp, '.claude/forge.json'), JSON.stringify({ ...FJ, models: { ...F, developer: { model: 'probe-dev', effort: 'xhigh' } } }))
+      fs.writeFileSync(path.join(tmp, '.claude/forge.json'), JSON.stringify({ ...FJ, models: { ...F, developer: { model: 'probe-dev', effort: 'xhigh', reason: 'probe' } } }))
       const before = wfText(), x = run('--render')
       return x.code === 1 && /gauntlet-build\.js/.test(x.text) && /forge render/.test(x.text) && wfText().join() === before.join()
     }))
