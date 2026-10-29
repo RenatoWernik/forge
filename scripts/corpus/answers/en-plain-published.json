@@ -1,0 +1,25 @@
+{
+  "projectName": "Acme Billing",
+  "language": "English",
+  "models": {
+    "developer": {
+      "model": "sonnet",
+      "effort": "high"
+    },
+    "critic": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "aux": {
+      "model": "sonnet",
+      "effort": "medium"
+    }
+  },
+  "script": "sh",
+  "plainStyle": true,
+  "dashboardUrl": "https://claude.ai/artifact/AbC123_x-y",
+  "memory": {
+    "workspace": "acme",
+    "project": "billing"
+  }
+}

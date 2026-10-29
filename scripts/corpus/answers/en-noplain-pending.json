@@ -1,0 +1,24 @@
+{
+  "projectName": "Acme Billing",
+  "language": "English",
+  "models": {
+    "developer": {
+      "model": "sonnet",
+      "effort": "high"
+    },
+    "critic": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "aux": {
+      "model": "sonnet",
+      "effort": "medium"
+    }
+  },
+  "script": "ps",
+  "plainStyle": false,
+  "memory": {
+    "workspace": "acme",
+    "project": "billing"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "\"checkpoint\":\"${CP.n}\",\"status\":\"backlog\"",
+  "replace": "\"checkpoint\":${CP.n},\"status\":\"backlog\"",
+  "line": "panel: the seed of both workflows records pieces.checkpoint as text (a numeric 0 vanishes from the panel)"
+}
