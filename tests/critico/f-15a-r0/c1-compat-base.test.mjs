@@ -1,0 +1,87 @@
+// F-15a critério 1 (base verificada): o compat.json tem exatamente as 10 entradas do registo, cada uma com o verifiedWith do
+// contrato, a surface com o URL de origem na tag ou no sha verificados, e o aviso do ai-memory 3.0.0. Não depende do F-05.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { COMPAT, IDS, VERIFIED, entries, readJson, registry, stripV, surfaceNames, surfaceUrls, strings, personalHits } from './helpers.mjs';
+
+const compat = () => {
+  assert.ok(existsSync(COMPAT), 'falta compat.json na raiz do pacote');
+  return readJson(COMPAT);
+};
+
+test('C1: o compat.json tem exatamente as 10 entradas, uma por componente do registo (nem a mais nem a menos)', () => {
+  const ids = Object.keys(entries(compat())).sort();
+  assert.deepEqual(ids, [...IDS].sort());
+  assert.deepEqual([...registry().components.map((c) => c.id)].sort(), [...IDS].sort(), 'o registo deixou de ter os 10 ids');
+});
+
+test('C1: o verifiedWith de cada entrada é o do contrato (uv 0.13.6, gauntlet-loop 9b1975a, ai-memory 3.2.10, ponytail 5.3.3, specify-cli 1.2.5, sdd 2.1.0, mattpocock 1.3.2, graphifyy 0.9.97)', () => {
+  const e = entries(compat());
+  const errados = [];
+  for (const id of IDS) {
+    const v = e[id]?.verifiedWith;
+    const ok = id === 'gauntlet-loop' ? typeof v === 'string' && /^9b1975a[0-9a-f]{0,33}$/.test(v) : stripV(v) === VERIFIED[id];
+    if (!ok) errados.push(`${id}: ${JSON.stringify(v)} (esperado ${VERIFIED[id]})`);
+  }
+  assert.deepEqual(errados, []);
+});
+
+// O URL de cada lista aponta para o repositório da componente, na tag ou no sha verificados (nunca main, master ou HEAD)
+const ref = (id) => (id === 'gauntlet-loop' ? '9b1975a' : id === 'sdd' ? 'eba9606' : null);
+test('C1: cada surface com nomes traz o URL de origem, no repositório da componente e na tag ou no sha verificados', () => {
+  const e = entries(compat());
+  const src = Object.fromEntries(registry().components.map((c) => [c.id, c.source.replace(/^https:\/\/github\.com\//, '').toLowerCase()]));
+  const falhas = [];
+  for (const id of IDS) {
+    const names = surfaceNames(e[id]);
+    if (!names.length) continue;
+    const urls = surfaceUrls(e[id]);
+    if (!urls.length) { falhas.push(`${id}: surface sem URL de origem`); continue; }
+    const tag = ref(id);
+    for (const u of urls) {
+      const low = u.toLowerCase();
+      const repoOk = low.includes(src[id]) || (id === 'spec-kit' && low.includes('github/spec-kit'));
+      const refOk = tag ? new RegExp(`[/=@]${tag}[0-9a-f]*([/?#]|$)`).test(u) : new RegExp(`[/=@]v?${VERIFIED[id].replace(/\./g, '\\.')}([/?#]|$)`).test(u);
+      if (!/^https:\/\//.test(u)) falhas.push(`${id}: URL sem https: ${u}`);
+      if (!repoOk) falhas.push(`${id}: URL fora do repositório ${src[id]}: ${u}`);
+      if (!refOk) falhas.push(`${id}: URL fora da tag/sha verificados: ${u}`);
+      if (/[/=@](main|master|HEAD)([/?#]|$)/.test(u)) falhas.push(`${id}: URL num ramo móvel: ${u}`);
+    }
+  }
+  assert.deepEqual(falhas, []);
+});
+
+test('C1: as componentes que os templates usam têm surface com nomes (mattpocock-skills, spec-kit, ponytail, graphify, ai-memory)', () => {
+  const e = entries(compat());
+  for (const id of ['mattpocock-skills', 'spec-kit', 'ponytail', 'graphify', 'ai-memory']) assert.ok(surfaceNames(e[id]).length > 0, id + ' sem nomes na surface');
+});
+
+test('C1: notes do ai-memory tem o aviso da 3.0.0: migração da base de dados, backup obrigatório e docs/upgrading-to-3.0.md', () => {
+  const notes = entries(compat())['ai-memory']?.notes;
+  assert.ok(notes && typeof notes === 'object' && !Array.isArray(notes), 'notes do ai-memory tem de ser um mapa versão → aviso');
+  const key = Object.keys(notes).find((k) => stripV(k) === '3.0.0');
+  assert.ok(key, 'falta a chave 3.0.0 em notes do ai-memory: ' + Object.keys(notes).join(', '));
+  const txt = strings(notes[key]).join(' ');
+  assert.match(txt, /migra/i, 'o aviso não fala da migração da base de dados');
+  assert.match(txt, /backup/i, 'o aviso não fala do backup');
+  assert.match(txt, /docs\/upgrading-to-3\.0\.md/, 'o aviso não cita docs/upgrading-to-3.0.md');
+});
+
+test('C1: notes é sempre um mapa cujas chaves são versões (x.y.z), em todas as entradas que o têm', () => {
+  for (const [id, e] of Object.entries(entries(compat()))) {
+    if (e.notes === undefined) continue;
+    assert.ok(e.notes && typeof e.notes === 'object' && !Array.isArray(e.notes), id + ': notes não é um mapa');
+    for (const k of Object.keys(e.notes)) assert.match(stripV(k), /^\d+\.\d+\.\d+$/, `${id}: chave de notes que não é versão: ${k}`);
+  }
+});
+
+test('reprova sempre: o compat.json não tem caminhos da máquina, dados pessoais nem tokens', () => {
+  assert.deepEqual(personalHits(readFileSync(COMPAT, 'utf8')), []);
+});
+
+test('D1: sem pins — o components.json continua sem "version" e nenhum comando (install, update nem o update de um detector) fixa versão', () => {
+  const real = registry().components;
+  assert.ok(!/"version"\s*:/.test(JSON.stringify(real)), 'o components.json ganhou um "version"');
+  assert.ok(!/(@v?[0-9]+[.][0-9]+|==[0-9]|--tag|\/download\/v[0-9])/.test(JSON.stringify(real.map((c) => [c.install, c.update, c.installed.map((i) => i.update)]))), 'um comando do registo fixa uma versão');
+});
