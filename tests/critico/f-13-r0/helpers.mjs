@@ -188,12 +188,12 @@ export const translatePt = (text) => {
     if (/^\s*```/.test(l)) { fence = !fence; return l; }
     if (fence || !l.trim() || /^[|\s:-]+$/.test(l)) return l;
     if (l.startsWith('#')) return NATURAL[l] ?? l.replace(/^(#{2,} )(\d+\. )?.*$/, '$1$2Seção');
-    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + LINE_PT + ' ' + (l.match(/`[^`]*`/g) ?? []).join(' ');
+    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + LINE_PT + (l.includes('Verifies:') ? ' Verifica: ' : ' ') + (l.match(/`[^`]*`/g) ?? []).join(' ');
   }).join('\n');
 };
 export const traduzSePt = (proj) => {
   if (!/^pt/i.test(readJson(join(proj, '.claude/forge.json')).langTag)) return;
-  for (const rel of ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(proj, rel), translatePt(readFileSync(join(proj, rel), 'utf8')));
+  for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(proj, rel), translatePt(readFileSync(join(proj, rel), 'utf8')));
 };
 
 // ---- Fotografia de uma pasta: { caminho relativo: sha256 } ----
