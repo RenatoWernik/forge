@@ -66,20 +66,21 @@ test('C1 fixture: JSON, sem caminhos da máquina, dados pessoais nem tokens', ()
   assert.doesNotMatch(txt, /"(token|authorization|cookie|set-cookie|x-github-request-id)"/i, 'a fixture guarda cabeçalhos ou credenciais');
 });
 
-test('C1 fixture: tem o URL de cada fonte latest do registo e uma do alvo forge, e só os campos usados (sem respostas inteiras da API)', () => {
+test('C1 fixture: tem o URL de cada fonte latest do registo (o gauntlet-loop no fork), uma do alvo forge e uma do original robonuggets, e só os campos usados (sem respostas inteiras da API)', () => {
   const txt = readFileSync(FIXTURE, 'utf8');
   const fontes = [
     'https://api.github.com/repos/astral-sh/uv/releases/latest',
     'https://api.github.com/repos/akitaonrails/ai-memory/releases/latest',
     'https://api.github.com/repos/DietrichGebert/ponytail/releases/latest',
     'https://api.github.com/repos/mattpocock/skills/releases/latest',
-    'https://api.github.com/repos/robonuggets/gauntlet-loop/commits/HEAD',
+    'https://api.github.com/repos/RenatoWernik/gauntlet-loop/commits/HEAD',
     'https://raw.githubusercontent.com/SpillwaveSolutions/sdd-skill/HEAD/skill.md',
     'https://pypi.org/pypi/specify-cli/json',
     'https://pypi.org/pypi/graphifyy/json',
   ];
   assert.deepEqual(fontes.filter((u) => !txt.includes(u)), [], 'fontes do registo sem entrada na fixture');
   assert.match(txt, /github(usercontent)?\.com\/(repos\/)?RenatoWernik\/forge\b/i, 'a fixture não tem a fonte do alvo forge');
+  assert.match(txt, /github(usercontent)?\.com\/(repos\/)?robonuggets\/gauntlet-loop\b/i, 'a fixture não tem a fonte do original robonuggets (aviso de commits novos, emenda do fork)');
   // campos que o doctor nunca usa: uma resposta inteira da API do GitHub ou do PyPI foi gravada
   assert.doesNotMatch(txt, /"(node_id|assets_url|upload_url|zipball_url|tarball_url|uploader|vulnerabilities|requires_dist|project_urls)"\s*:/, 'a fixture tem campos que nenhuma sonda usa');
 });

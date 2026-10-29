@@ -75,7 +75,7 @@ export const posix = (p) => p.split(sep).join('/');
 export const IDS = ['uv', 'gauntlet-loop', 'ai-memory', 'ai-memory-mcp', 'ponytail', 'spec-kit', 'sdd', 'mattpocock-skills', 'graphify', 'graphify-skill'];
 export const ALVOS = [...IDS, 'forge']; // o --check inclui o alvo forge; o speckit-project só existe no --apply
 export const VERIFIED = {
-  uv: '0.13.6', 'gauntlet-loop': '9b1975a', 'ai-memory': '3.2.10', 'ai-memory-mcp': '3.2.10', ponytail: '5.3.3',
+  uv: '0.13.6', 'gauntlet-loop': 'fc6b2fc', 'ai-memory': '3.2.10', 'ai-memory-mcp': '3.2.10', ponytail: '5.3.3',
   'spec-kit': '1.2.5', sdd: '2.1.0', 'mattpocock-skills': '1.3.2', graphify: '0.9.97', 'graphify-skill': '0.9.97',
 };
 export const REFERENCIA = { uv: '0.12.21', 'ai-memory': '2.5.0', ponytail: '4.10.0', 'spec-kit': '1.0.13', sdd: '2.1.0', 'mattpocock-skills': '1.2.3', graphify: '0.9.73' };
@@ -85,7 +85,8 @@ export const PONYTAIL_SKILLS = ['ponytail', 'ponytail-audit', 'ponytail-debt', '
 // sha256 do upstream nas versões verificadas, calculados pelo crítico a 2026-10-29 com o ghp (contents API, uma vez; os testes
 // não vão à rede). [LF, LF sem espaços nas pontas]: o contrato diz «normalizado para LF»; aceita-se também a variante aparada.
 export const UPSTREAM = {
-  'gauntlet-loop': { ref: '9b1975a', files: { 'gauntlet-loop': ['6a345a43bf58966c83d50b6caf8be34a3fee725fb3c75778ed33fa206352b835', 'e3653566c6c1fa3125c0a3c48586367dc76ab62c18b5cf5e9d449d067fde8638'] } },
+  // emenda de 2026-10-29 (#38): o gauntlet-loop vem do fork RenatoWernik/gauntlet-loop em fc6b2fc (190 linhas)
+  'gauntlet-loop': { ref: 'fc6b2fc', files: { 'gauntlet-loop': ['cf03e23b661e543cf2df113e2c2bc140c2a1d710cd716265b21643b0e657ce25', '7ee54fa150c6eb1af07e7069e7fafcaceb00b71ca346cd4f2a5a988918e496b9'] } },
   sdd: { ref: 'eba9606', files: { sdd: ['f5bfd88cb0e494345427e5c4a3eb6883b46bc6d85f32f991657db895afa3080f', '907acd1f19f9d697fc2f9a813ed0fed1656d336a302cafbd77bd86ec2f18f0c1'] } },
   ponytail: {
     ref: '5.3.3',
@@ -101,8 +102,10 @@ export const UPSTREAM = {
 };
 
 // Versões publicadas ANTERIORES (o pristine tem «cada versão publicada»): o ponytail v4.10.0, a referência de 2026-09-30, e a
-// sdd 2.0.0 (último commit com essa versão no frontmatter, 0ec5955). Mesmo cálculo e mesma data. PERGUNTA P9 para a sdd.
+// sdd 2.0.0 (último commit com essa versão no frontmatter, 0ec5955) e o gauntlet-loop do original robonuggets@9b1975a, que o forge
+// instalou até à emenda do fork. Mesmo cálculo e mesma data. PERGUNTAS P9 (sdd) e P10 (gauntlet original).
 export const ANTIGAS = {
+  'gauntlet-loop': { ref: '9b1975a', files: { 'gauntlet-loop': ['6a345a43bf58966c83d50b6caf8be34a3fee725fb3c75778ed33fa206352b835', 'e3653566c6c1fa3125c0a3c48586367dc76ab62c18b5cf5e9d449d067fde8638'] } },
   ponytail: {
     ref: '4.10.0',
     files: {
@@ -169,26 +172,28 @@ export function notaComo(compat, texto, requiresBackup = false) {
 export const marcaBackup = (nota) => nota && typeof nota === 'object' && nota.requiresBackup === true;
 
 // ---------- fontes de versão (sem rede) ----------
-export const HEADSHA = '9b1975a1b8f01981f3f1e6b667ad3aaf907178ea';
+export const HEADSHA = 'fc6b2fc604ff37fdf4da67ed76980e6af1722629'; // HEAD do fork
+export const UPSTREAM_SHA = '9b1975a1b8f01981f3f1e6b667ad3aaf907178ea'; // HEAD do original robonuggets em que o fork assenta
+export const NOVO_UPSTREAM = 'abcdef0123456789abcdef0123456789abcdef01';
 export const REL = (repo, tag) => [`https://api.github.com/repos/${repo}/releases/latest`, JSON.stringify({ tag_name: tag })];
 export const PYPI = (pkg, v) => [`https://pypi.org/pypi/${pkg}/json`, JSON.stringify({ info: { version: v } })];
 export const RAW = (repo, ref, path) => `https://raw.githubusercontent.com/${repo}/${ref}/${path}`;
 export const URL_PONYTAIL = REL('DietrichGebert/ponytail', 'x')[0];
 export const FORGE_ULTIMA = '0.2.0';
 // v: versão → tag/versão de cada fonte. Por omissão, tudo no verifiedWith.
-export function latest({ uv = '0.13.6', aim = '3.2.10', ponytail = '5.3.3', mattpocock = '1.3.2', specify = '1.2.5', graphify = '0.9.97', sdd = SYN.sdd, gauntlet = SYN['gauntlet-loop'], pony = SYN.ponytail, forge = FORGE_ULTIMA, sem = [] } = {}) {
+export function latest({ uv = '0.13.6', aim = '3.2.10', ponytail = '5.3.3', mattpocock = '1.3.2', specify = '1.2.5', graphify = '0.9.97', sdd = SYN.sdd, gauntlet = SYN['gauntlet-loop'], pony = SYN.ponytail, forge = FORGE_ULTIMA, upstream = UPSTREAM_SHA, sem = [] } = {}) {
   const urls = {
     ...Object.fromEntries([
       REL('astral-sh/uv', 'v' + uv), REL('akitaonrails/ai-memory', 'v' + aim), REL('DietrichGebert/ponytail', 'v' + ponytail), REL('mattpocock/skills', 'v' + mattpocock),
       PYPI('specify-cli', specify), PYPI('graphifyy', graphify),
     ]),
-    'https://api.github.com/repos/robonuggets/gauntlet-loop/commits/HEAD': JSON.stringify({ sha: HEADSHA }),
-    [RAW('robonuggets/gauntlet-loop', HEADSHA, '.claude/skills/gauntlet-loop/SKILL.md')]: gauntlet,
+    'https://api.github.com/repos/RenatoWernik/gauntlet-loop/commits/HEAD': JSON.stringify({ sha: HEADSHA }),
+    [RAW('RenatoWernik/gauntlet-loop', HEADSHA, '.claude/skills/gauntlet-loop/SKILL.md')]: gauntlet,
     [RAW('SpillwaveSolutions/sdd-skill', 'HEAD', 'skill.md')]: sdd,
     [RAW('DietrichGebert/ponytail', 'v' + ponytail, 'skills/ponytail/SKILL.md')]: pony,
   };
   for (const u of sem) delete urls[u];
-  return { urls, forge };
+  return { urls, forge, upstream };
 }
 // O alvo forge (PERGUNTA P6): o repositório não tem releases nem tags; os ataques respondem a qualquer fonte plausível dele.
 const forgeResponde = (url, v) => {
@@ -198,6 +203,19 @@ const forgeResponde = (url, v) => {
   if (/\/commits\//.test(url)) return JSON.stringify({ sha: 'f'.repeat(40) });
   if (/marketplace\.json\b/.test(url)) return JSON.stringify({ name: 'forge', plugins: [{ name: 'forge', source: './', version: v }] });
   if (/plugin\.json\b/.test(url)) return JSON.stringify({ name: 'forge', version: v });
+  return undefined;
+};
+
+// O original robonuggets/gauntlet-loop (só para o aviso de commits novos; PERGUNTA P11): responde à HEAD, à lista de commits e à
+// comparação com a base do fork. up = sha da HEAD do original; igual a UPSTREAM_SHA = sem novidades.
+const upstreamResponde = (url, up) => {
+  if (!/github(usercontent)?\.com\/(repos\/)?robonuggets\/gauntlet-loop\b/i.test(url)) return undefined;
+  if (up === null) return undefined; // original inacessível (404)
+  const novos = up === UPSTREAM_SHA ? [] : [{ sha: up, commit: { message: 'critico: commit novo no original', committer: { date: '2026-10-29T12:00:00Z' } } }];
+  if (/\/compare\//.test(url)) return JSON.stringify({ status: novos.length ? 'ahead' : 'identical', ahead_by: novos.length, behind_by: 0, total_commits: novos.length, commits: novos });
+  if (/\/commits\/[^/?]+$/.test(url)) return JSON.stringify({ sha: up });
+  if (/\/commits\b/.test(url)) return JSON.stringify([...novos, { sha: UPSTREAM_SHA, commit: { message: 'base do fork', committer: { date: '2026-08-05T00:00:00Z' } } }]);
+  if (/\/branches\/main\b/.test(url)) return JSON.stringify({ name: 'main', commit: { sha: up } });
   return undefined;
 };
 
@@ -258,7 +276,7 @@ export function maquina({ platform = 'win32', cfg = null, env = {}, fontes = lat
     async fetchText(url) {
       m.fetches.push(String(url));
       if (url in m.fontes.urls) return m.fontes.urls[url];
-      const f = forgeResponde(String(url), m.fontes.forge);
+      const f = forgeResponde(String(url), m.fontes.forge) ?? upstreamResponde(String(url), m.fontes.upstream);
       if (f !== undefined) return f;
       throw new Error('HTTP 404 ' + url);
     },
@@ -373,8 +391,9 @@ export const PERSONAL = [
   /\bgh[pousr]_[A-Za-z0-9]{20,}/, /github_pat_[A-Za-z0-9_]{20,}/, /\bbearer\s+[A-Za-z0-9._-]{10,}/i, /"authorization"\s*:/i, /\btoken_pepper\b/i,
   /[\w.+-]+@(?!example\.)[\w-]+\.(com|pt|br|org|net|io)\b/i,
 ];
-// O URL do próprio repositório do forge (github.com/<dono>/forge) é público e permitido
-export const personalHits = (text) => PERSONAL.filter((re) => re.test(text.replace(/github(usercontent)?\.com\/(repos\/)?[A-Za-z0-9-]+\/forge\b/gi, 'github.com/OWNER/forge'))).map(String);
+// Os URLs dos repositórios públicos do forge e do fork do gauntlet-loop (github.com/<dono>/forge|gauntlet-loop) são permitidos;
+// o nome do dono noutro sítio continua a reprovar
+export const personalHits = (text) => PERSONAL.filter((re) => re.test(text.replace(/github(usercontent)?\.com\/(repos\/)?[A-Za-z0-9-]+\/(forge|gauntlet-loop)\b/gi, 'github.com/OWNER/REPO'))).map(String);
 
 // PRNG com semente fixa (mulberry32)
 export const prng = (seed) => () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
