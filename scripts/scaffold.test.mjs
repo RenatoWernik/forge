@@ -10,10 +10,13 @@ import { fileURLToPath } from 'node:url';
 const answers = (over = {}) => ({
   projectName: 'Acme Billing',
   language: 'English',
+  mode: 'rigorous',
   models: {
-    developer: { model: 'sonnet', effort: 'high' },
-    critic: { model: 'opus', effort: 'high' },
-    aux: { model: 'sonnet', effort: 'medium' },
+    developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
+    developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
+    critic: { model: 'opus', effort: 'high', reason: 'the critic stays on the strongest model' },
+    tester: { model: 'haiku', effort: 'xhigh', reason: 'the batch suite is mechanical work' },
+    aux: { model: 'sonnet', effort: 'medium', reason: 'panel records only' },
   },
   memory: { workspace: 'acme', project: 'billing' },
   ...over,
@@ -45,12 +48,16 @@ const read = (dest, rel) => readFile(join(dest, rel), 'utf8');
 test('a real run writes forge.json with the chosen models and fills every marker of the templates', async () => {
   const dest = await tmp();
   await scaffold(answers(), { dest });
-  assert.deepEqual(JSON.parse(await read(dest, '.claude/forge.json')), {
+  const { escalation, ...saved } = JSON.parse(await read(dest, '.claude/forge.json'));
+  assert.deepEqual(saved, {
     language: 'English',
     langTag: 'en',
     plainStyle: true,
+    mode: 'rigorous',
     models: answers().models,
   });
+  assert.deepEqual(Object.fromEntries(Object.entries(escalation).map(([k, c]) => [k, c.value])), { sameCriterionFailures: 2, attacksRedOnDelivery: true, minutesWithoutProgress: 30, visualBelowReference: true });
+  for (const [k, c] of Object.entries(escalation)) assert.match(c.description, /^[^\r\n]+$/, `${k}: one line`);
   const toml = await read(dest, '.ai-memory.toml');
   assert.match(toml, /^workspace = "acme"$/m);
   assert.match(toml, /^project = "billing"$/m);
@@ -77,6 +84,26 @@ test('invalid answers are all reported at once and nothing is written', async ()
     return true;
   });
   assert.deepEqual(await readdir(dest), []);
+});
+
+test('mode, the 5 roles and their reasons are validated all at once, naming each field; a flag never drops the reason of the file', async () => {
+  const dest = await tmp();
+  const a = answers({ mode: 'turbo' });
+  delete a.models.developerUi;
+  a.models.critic.reason = '   ';
+  a.models.tester.effort = 'ultra';
+  await assert.rejects(scaffold(a, { dest }), (e) => {
+    for (const part of ['mode:', 'models.developerUi:', 'models.critic.reason:', 'models.tester.effort:']) assert.ok(e.message.includes(part), `${part} missing in: ${e.message}`);
+    for (const ok of ['models.developer:', 'models.developer.', 'models.aux']) assert.ok(!e.message.includes(ok), `false alarm ${ok} in: ${e.message}`);
+    return true;
+  });
+  assert.deepEqual(await readdir(dest), []);
+  const out = [];
+  const code = await main(['--answers', ANSWERS_FILE, '--mode', 'accelerated', '--developer', 'sonnet:max:Lab', '--dest', dest], (m) => out.push(m));
+  assert.equal(code, 0, out.join('\n'));
+  const saved = JSON.parse(await read(dest, '.claude/forge.json'));
+  assert.equal(saved.mode, 'accelerated');
+  assert.deepEqual(saved.models.developer, { model: 'sonnet', effort: 'max', label: 'Lab', reason: answers().models.developer.reason });
 });
 
 test('an existing file is never overwritten without force; a dry run reports the conflict', async () => {
@@ -220,7 +247,8 @@ test('an explicit langTag refines the region of the language and is refused when
 test('the check follows the langTag of forge.json, not the spelling of the name; an older forge.json without langTag keeps working', async () => {
   const dest = await tmp();
   await scaffold(answers(), { dest });
-  const write = (o) => writeFile(join(dest, '.claude/forge.json'), JSON.stringify({ plainStyle: true, models: answers().models, ...o }));
+  const { mode, models, escalation } = JSON.parse(await read(dest, '.claude/forge.json'));
+  const write = (o) => writeFile(join(dest, '.claude/forge.json'), JSON.stringify({ plainStyle: true, mode, models, escalation, ...o }));
   await write({ language: 'Anglais', langTag: 'en' });
   assert.equal(CHECK(dest).status, 0, 'English body, tag en');
   await write({ language: 'Anglais', langTag: 'pt-BR' });
@@ -388,7 +416,10 @@ test('no generated file carries personal or company data, and the manual keeps i
   assert.ok(upToBlocks < 80, 'CLAUDE.md is ' + upToBlocks + ' lines up to its generated blocks');
 });
 
-const FLAGS = ['--name', 'Acme Billing', '--language', 'English', '--developer', 'sonnet:high', '--critic', 'opus:high:Opus', '--aux', 'sonnet:medium', '--workspace', 'acme', '--project', 'billing'];
+// developerUi, tester and the reasons only come through --answers; the flags still override the roles of the file
+const ANSWERS_FILE = join(await tmp(), 'answers.json');
+await writeFile(ANSWERS_FILE, JSON.stringify(answers()));
+const FLAGS = ['--answers', ANSWERS_FILE, '--mode', 'rigorous', '--name', 'Acme Billing', '--language', 'English', '--developer', 'sonnet:high', '--critic', 'opus:high:Opus', '--aux', 'sonnet:medium', '--workspace', 'acme', '--project', 'billing'];
 
 test('the command line: a dry run lists the tree, a real run writes it, and a missing answer exits 2 with the usage', async () => {
   const dest = await tmp();
@@ -405,6 +436,7 @@ test('the command line: a dry run lists the tree, a real run writes it, and a mi
   const missing = spawnSync(process.execPath, [script, '--dest', await tmp(), '--name', 'X'], { encoding: 'utf8' });
   assert.equal(missing.status, 2);
   assert.match(missing.stdout, /models\.developer: missing[\s\S]*usage: node scaffold\.mjs/);
+  assert.match(missing.stdout, /^- mode: /m);
 });
 
 test('--answers reads a JSON file and a flag overrides the same key', async () => {

@@ -1,18 +1,32 @@
 {
   "projectName": "Clube do Livro",
   "language": "Portuguese (Brazil)",
+  "mode": "rigorous",
   "models": {
     "developer": {
       "model": "sonnet",
-      "effort": "high"
+      "effort": "high",
+      "reason": "logic and server code run well on this model, measured in the Guild"
+    },
+    "developerUi": {
+      "model": "opus",
+      "effort": "high",
+      "reason": "rich UI needs a stronger model than the logic developer"
     },
     "critic": {
       "model": "opus",
-      "effort": "high"
+      "effort": "high",
+      "reason": "the critic stays on the strongest model, in a fresh context every round"
+    },
+    "tester": {
+      "model": "haiku",
+      "effort": "xhigh",
+      "reason": "the batch suite is mechanical work"
     },
     "aux": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "reason": "the panel only records, it needs no deep reasoning"
     }
   },
   "script": "sh",

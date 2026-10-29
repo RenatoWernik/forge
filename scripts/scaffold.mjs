@@ -7,8 +7,18 @@ const TEMPLATES = fileURLToPath(new URL('../templates/', import.meta.url));
 // copied as is: its comments quote the marker syntax
 const VERBATIM = new Set(['.claude/check.cjs']);
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
-const ROLES = ['developer', 'critic', 'aux'];
-const PANEL_URL = /^https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+$/;
+const ROLES = ['developer', 'developerUi', 'critic', 'tester', 'aux'];
+const WORKFLOW_ROLES = ['developer', 'critic', 'aux']; // the roles the workflows read from args.models today
+const MODES = ['rigorous', 'accelerated'];
+// The escalation rules measured in the Guild; written as they are into every forge.json (the user may tune the values there).
+const ESCALATION = {
+  sameCriterionFailures: { value: 2, description: 'Rounds that may fail the same criterion before the orchestrator redesigns the mechanism instead of asking for another patch' },
+  attacksRedOnDelivery: { value: true, description: 'A delivery with any critic attack still red goes back to the developer before the critic sees it' },
+  minutesWithoutProgress: { value: 30, description: 'Minutes an agent may go without progress before the orchestrator wakes it' },
+  visualBelowReference: { value: true, description: 'A visual result below the reference counts as a failed criterion' },
+};
+const STYLE_CHARS = /[–—→☀-➿\u{1F300}-\u{1FAFF}]/gu; // what the plainStyle line of check.cjs refuses
+const PANEL_URL =/^https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+$/;
 const PENDING_URL = 'https://claude.ai/artifact/PANEL-URL-PENDING';
 
 // Panel texts in Portuguese (Brazil); English lives in the panel page itself. Any other language comes in as answers.panelStrings.
@@ -110,9 +120,11 @@ function validate(a) {
   const str = (v) => typeof v === 'string';
   need('projectName', str(a.projectName) && /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,59}$/u.test(a.projectName), 'letters, digits, space, dot, dash or underscore (1 to 60 characters)');
   for (const k of ['workspace', 'project']) need(`memory.${k}`, str(a.memory?.[k]) && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(a.memory[k]), 'letters, digits, dot, dash or underscore, no spaces');
+  need('mode', MODES.includes(a.mode), `one of ${MODES.join(', ')}`);
   for (const role of ROLES) {
     const r = a.models?.[role];
-    if (!r) { bad.push(`models.${role}: missing (model and effort)`); continue; }
+    if (!r || typeof r !== 'object') { bad.push(`models.${role}: missing (model, effort and reason)`); continue; }
+    need(`models.${role}.reason`, str(r.reason) && r.reason.trim() !== '', 'why this model and effort (a text that is not empty)');
     need(`models.${role}.model`, str(r.model) && /^[A-Za-z0-9][A-Za-z0-9._[\]-]{0,63}$/.test(r.model), 'a model alias or ID, for example sonnet');
     need(`models.${role}.effort`, EFFORTS.includes(r.effort), `one of ${EFFORTS.join(', ')}`);
     need(`models.${role}.label`, r.label === undefined || (str(r.label) && /^[\p{L}\p{N} ._-]{1,40}$/u.test(r.label)), 'letters, digits, space, dot, dash or underscore');
@@ -141,7 +153,7 @@ function markers(a, lang) {
     MEM_PROJECT: a.memory.project,
     DASHBOARD_URL: a.dashboardUrl ?? PENDING_URL,
     SPECIFY_SCRIPT: a.script ?? 'sh',
-    MODELS_JSON: JSON.stringify(m),
+    MODELS_JSON: JSON.stringify(m).replace(STYLE_CHARS, (c) => [...Array(c.length).keys()].map((i) => `\\u${c.charCodeAt(i).toString(16).padStart(4, '0')}`).join('')), // a reason is free text: the dash or emoji the style check forbids is written as a JSON escape
     STYLE_RULE: a.plainStyle !== false ? 'No dash, arrow or emoji in the prose of CLAUDE.md, FRAMEWORK.md and BOOTSTRAP.md. ' : '',
     LANG_TAG: lang.tag,
     PANEL_OVERRIDES: JSON.stringify(a.panelStrings ?? (/^pt(-|$)/.test(lang.tag) ? PANEL_PT : {})).replace(/</g, '\\u003c'), // safe inside <script>
@@ -159,7 +171,7 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
     const text = await readFile(TEMPLATES + rel, 'utf8');
     tree[rel] = VERBATIM.has(rel) ? text : text.replace(/\{\{([\w.]+)\}\}/g, (m, k) => vars[k] ?? m);
   }
-  tree['.claude/forge.json'] = JSON.stringify({ language: lang.name, langTag: lang.tag, plainStyle: answers.plainStyle !== false, models: answers.models }, null, 2) + '\n';
+  tree['.claude/forge.json'] = JSON.stringify({ language: lang.name, langTag: lang.tag, plainStyle: answers.plainStyle !== false, mode: answers.mode, models: answers.models, escalation: ESCALATION }, null, 2) + '\n';
   const files = Object.keys(tree);
   const conflicts = [];
   for (const rel of files) if (await exists(join(dest, rel))) conflicts.push(rel);
@@ -192,16 +204,18 @@ export async function setPanelUrl(dest, url) {
 const USAGE = `usage: node scaffold.mjs --dest <folder> --name <project> --language <language>
          --developer <model:effort[:label]> --critic <model:effort[:label]> --aux <model:effort[:label]>
          --workspace <ai-memory workspace> --project <ai-memory project>
+         --mode <rigorous|accelerated>
          [--script sh|ps] [--panel-url <url>] [--lang-tag <tag>] [--no-plain-style] [--answers <file.json>]
          [--dry-run] [--force]
        node scaffold.mjs --dest <folder> --set-panel-url <url>
-       Flags override the same keys of --answers; models are never defaulted: the user chooses them.`;
+       Flags override the same keys of --answers; models are never defaulted: the user chooses them.
+       The roles developerUi and tester, and the reason of every role, come only through --answers.`;
 
 export async function main(argv, write) {
   try {
     const v = parseArgs({ args: argv, options: {
       dest: { type: 'string' }, answers: { type: 'string' }, name: { type: 'string' }, language: { type: 'string' }, 'lang-tag': { type: 'string' },
-      developer: { type: 'string' }, critic: { type: 'string' }, aux: { type: 'string' }, workspace: { type: 'string' }, project: { type: 'string' },
+      mode: { type: 'string' }, developer: { type: 'string' }, critic: { type: 'string' }, aux: { type: 'string' }, workspace: { type: 'string' }, project: { type: 'string' },
       script: { type: 'string' }, 'panel-url': { type: 'string' }, 'set-panel-url': { type: 'string' },
       'no-plain-style': { type: 'boolean' }, 'dry-run': { type: 'boolean' }, force: { type: 'boolean' },
     } }).values;
@@ -211,16 +225,18 @@ export async function main(argv, write) {
       write(`forge scaffold: panel URL set in ${changed.length} files: ${changed.join(', ')}`);
       return 0;
     }
-    const base = v.answers ? JSON.parse(await readFile(v.answers, 'utf8')) : {};
+    const base = v.answers ? JSON.parse((await readFile(v.answers, 'utf8')).replace(/^﻿/, '')) : {};
     const models = { ...base.models };
-    for (const role of ROLES) {
+    for (const role of WORKFLOW_ROLES) {
       if (v[role]) {
         const [m, effort, label] = v[role].split(':');
-        models[role] = { model: m, effort, ...(label && { label }) };
+        const { reason } = base.models?.[role] ?? {}; // a flag has no room for the reason: it stays the one of the answers file
+        models[role] = { model: m, effort, ...(label && { label }), ...(reason !== undefined && { reason }) };
       }
     }
     const answers = {
       ...base,
+      mode: v.mode ?? base.mode,
       projectName: v.name ?? base.projectName, language: v.language ?? base.language, langTag: v['lang-tag'] ?? base.langTag,
       memory: { workspace: v.workspace ?? base.memory?.workspace, project: v.project ?? base.memory?.project },
       models, script: v.script ?? base.script, dashboardUrl: v['panel-url'] ?? base.dashboardUrl,

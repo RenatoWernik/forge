@@ -12,10 +12,13 @@ const PKG = fileURLToPath(new URL('../', import.meta.url));
 const ANSWERS = {
   projectName: 'Acme Billing',
   language: 'English',
+  mode: 'rigorous',
   models: {
-    developer: { model: 'sonnet', effort: 'high' },
-    critic: { model: 'opus', effort: 'high' },
-    aux: { model: 'sonnet', effort: 'medium' },
+    developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
+    developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
+    critic: { model: 'opus', effort: 'high', reason: 'the critic stays on the strongest model' },
+    tester: { model: 'haiku', effort: 'xhigh', reason: 'the batch suite is mechanical work' },
+    aux: { model: 'sonnet', effort: 'medium', reason: 'panel records only' },
   },
   memory: { workspace: 'acmeworks', project: 'invoicing' },
   script: 'sh',
@@ -99,7 +102,7 @@ test('a project nobody edited gives an empty patch, whatever the setup answers w
   const variants = [
     {},
     { language: 'Portuguese (Brazil)', script: 'ps', plainStyle: false },
-    { dashboardUrl: undefined, models: { ...ANSWERS.models, critic: { model: 'claude-opus-4-1', effort: 'max', label: 'Opus 4.1' }, aux: { model: 'haiku', effort: 'low' } } },
+    { dashboardUrl: undefined, models: { ...ANSWERS.models, critic: { model: 'claude-opus-4-1', effort: 'max', label: 'Opus 4.1', reason: 'a stronger critic' }, aux: { model: 'haiku', effort: 'low', reason: 'cheaper panel' } } },
     { language: 'Spanish', langTag: 'es', panelStrings: { running: 'En ejecucion', live: 'en vivo</script>' } },
     { projectName: 'sonnet', memory: { workspace: 'sh', project: 'en' } },
   ];
@@ -214,7 +217,7 @@ test('a line inserted in the same hunk as an edited marker line does not steal i
 });
 
 test('developer and critic on the same model and effort keep their own markers when the line is edited', async () => {
-  const same = { ...ANSWERS, models: { ...ANSWERS.models, critic: { model: 'sonnet', effort: 'high' } } };
+  const same = { ...ANSWERS, models: { ...ANSWERS.models, critic: { model: 'sonnet', effort: 'high', reason: 'same model as the developer' } } };
   const dir = await project(same);
   const wf = '.claude/workflows/gauntlet-build.js';
   await edit(dir, wf, 'or the user stops', 'or the user stops it');
