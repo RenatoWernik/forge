@@ -1,12 +1,12 @@
 ---
 name: new-project
 description: >-
-  Sets up a complete forge project in the current folder: checks the machine against the latest public release of every tool and offers to install or update what is missing (with your yes), asks for the project name, language, models and ai-memory scope, generates the manual, workflows, checker and live panel, then runs the CP0 bootstrap. Use when the user says "new forge project", "set up the framework here", "/forge:new-project" or starts a session in an empty folder to build with the gauntlet loop, Spec-Kit, TDD and Ponytail.
+  Sets up a complete forge project in the current folder: checks the machine against the latest public release of every tool and offers to install or update what is missing (with your yes), interviews you about the project, proposes the mode and the model of each role with its reason, asks the setup questions, generates the manual, workflows, checker and live panel, then runs the CP0 bootstrap. Use when the user says "new forge project", "set up the framework here", "/forge:new-project" or starts a session in an empty folder to build with the gauntlet loop, Spec-Kit, TDD and Ponytail.
 ---
 
 # forge: new-project
 
-You are the orchestrator of a new project. This skill takes a folder from nothing to a project whose `node .claude/check.cjs` passes and whose CP0 (`BOOTSTRAP.md`) is running. Everything below happens in the current working directory, which must be the folder of the new project. Speak the user's language in chat. The generated project follows the language the user chooses in step 2: `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md`, `BOOTSTRAP.md` and the panel come out in it (the templates are English, so step 3 translates the four documents), and so do notes and commits.
+You are the orchestrator of a new project. This skill takes a folder from nothing to a project whose `node .claude/check.cjs` passes and whose CP0 (`BOOTSTRAP.md`) is running. Everything below happens in the current working directory, which must be the folder of the new project. Speak the user's language in chat. The generated project follows the language the user chooses in step 3: `CLAUDE.md`, `AGENTS.md`, `FRAMEWORK.md`, `BOOTSTRAP.md` and the panel come out in it (the templates are English, so step 5 translates the four documents), and so do notes and commits.
 
 Ground rules:
 
@@ -33,31 +33,62 @@ Show the user a short table (component, installed, latest, status). For every `m
 - The `ai-memory` MCP registration and the ai-memory hooks are machine-level and done once; do not run `ai-memory init` or `install-instructions`.
 - If the user declines a component, note it and go on; the bootstrap will stop at the step that needs it.
 
-## 2. Ask the setup questions
+## 2. Interview
 
-Ask in chat, in this order, waiting for the answers. You may propose a value, but the user decides; no model is chosen for them.
+Before any setup question, understand the project, so the proposal at the end of this step rests on what the user said and not on a default. Ask in chat, one question at a time, in the user's language, and wait for each answer. Cover five dimensions (the terms are fixed names, whatever the language of the chat):
+
+1. **UI rica**: how much rich interface the project needs (screens, interaction, design bar).
+2. **lógica e servidor**: the logic, the data and the server code behind it.
+3. **riscos (segredos, dados, dinheiro, segurança)**: secrets, personal or lost data, money, security exposure.
+4. **dimensão e prazo**: how big the project is and by when it must exist.
+5. **quota**: the usage quota of the user's accounts, and how much of it this project may spend.
+
+State your certainty for each dimension as a percentage. Do it after every question, as a short line (for example: `UI rica 60 %, lógica e servidor 90 %, ...`), and aim the next question at the lowest one.
+
+Stop asking when every dimension is at 95 % or more, or when the user says "enough" ("chega"). If the user stops early, say which dimensions are below 95 % and what the proposal assumes for them.
+
+Then propose, from what you learned:
+
+- The **mode**: `rigorous` (the full process: the critic's attacks before the code, several rounds, the full regression once per batch) or `accelerated` (fewer rounds, less quality margin, security never relaxes). Lean to `rigorous` when the risks or the size are high, to `accelerated` when the project is small or the deadline is tight.
+- A **model**, an **effort** (`low`, `medium`, `high`, `xhigh` or `max`) and a **reason** for each of the five roles: `developer` (builds logic and server code with TDD), `developerUi` (builds the rich interface), `critic` (judges blind, fresh context, ideally the strongest model available), `tester` (runs the batch suite and the end-to-end checks) and `aux` (panel agent and readers). Start from the pattern measured in the Guild and adjust it to the answers and to the quota; the reason is one line that ties the choice to what the user said:
+
+| Role | Model and effort | Why it is the default |
+|---|---|---|
+| `developer` | Haiku xhigh | builds from a closed contract, and the effort replaces the size |
+| `developerUi` | Opus high | rich UI work needs a strong model |
+| `critic` | Opus high | judges blind, so it gets the strongest model |
+| `tester` | Haiku xhigh | the batch suite is mechanical work |
+| `aux` | Opus 5.5 high | panel agent and readers, where a slip is costly |
+
+Never choose a model for the user: propose it with its reason and write it to the answers only after the user says yes. The user may change any model, effort or reason; a model is an alias or ID the `Workflow` tool accepts (`haiku`, `sonnet`, `opus`, or a full model ID). Optionally add a display label and a `match` regex the model ID must satisfy (default: the model itself).
+
+## 3. Ask the setup questions
+
+Ask in chat, in this order, waiting for the answers. You may propose a value, but the user decides.
 
 1. **Project name.** Suggest the folder name.
 2. **Language** of the documents, panel texts, notes and commits (for example English or Portuguese (Brazil)). Suggest the language the user writes in.
-3. **Mode**: `rigorous` (the full process: the critic's attacks before the code, several rounds, the full regression once per batch) or `accelerated` (fewer rounds, less quality margin, security never relaxes). Suggest `rigorous`.
-4. **Models and effort** for five roles: the developer (builds logic and server code with TDD), the UI developer (`developerUi`: builds the rich interface), the critic (judges blind, fresh context, ideally the strongest model available), the tester (runs the batch suite and the end-to-end checks) and the auxiliaries (panel agent and readers). For each: a model alias or ID accepted by the `Workflow` tool (for example `sonnet`, `opus`, `haiku`, or a full model ID), an effort (`low`, `medium`, `high`, `xhigh` or `max`) and a `reason`: one line on why this model and effort (propose one, the user may edit it; it is required). Optionally a display label and a `match` regex the model ID must satisfy (default: the model itself). Defaults to propose for the two new roles: `developerUi` on `opus` with `high` ("rich UI work needs a strong model"), `tester` on `haiku` with `xhigh` ("the batch suite is mechanical work, and Haiku xhigh is the measured default"). The full interview comes with a later release; here, ask for these five and nothing more.
-5. **ai-memory scope**: a workspace and a project name (letters, digits, dot, dash, underscore). Suggest a slug of the project name for the project.
-6. **GitHub repository** of the project as `owner/name` (for example `acme/billing`): the contract of every piece lives in its issues. The user's own account must be able to read and write issues there. Suggest the owner and the project slug when the user has no repository yet, and ask the user to create it.
-7. **Shell for the Spec Kit scripts**: `sh` (macOS, Linux, Git Bash) or `ps` (PowerShell). Suggest `sh` when `bash` is on the PATH, else `ps`.
-8. **Plain style**: forbid dashes, arrows and emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (the checker enforces it). Suggest yes.
-9. **Global rules to switch off** for this project, if the user has global `~/.claude/CLAUDE.md` rules that conflict with the framework. Optional; if any, you will record them in the `## User global rules` section of CLAUDE.md after generation.
+3. **ai-memory scope**: a workspace and a project name (letters, digits, dot, dash, underscore). Suggest a slug of the project name for the project.
+4. **GitHub repository** of the project as `owner/name` (for example `acme/billing`): the contract of every piece lives in its issues. The user's own account must be able to read and write issues there. Suggest the owner and the project slug when the user has no repository yet, and ask the user to create it.
+5. **Shell for the Spec Kit scripts**: `sh` (macOS, Linux, Git Bash) or `ps` (PowerShell). Suggest `sh` when `bash` is on the PATH, else `ps`.
+6. **Plain style**: forbid dashes, arrows and emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (the checker enforces it). Suggest yes.
+7. **Global rules to switch off** for this project, if the user has global `~/.claude/CLAUDE.md` rules that conflict with the framework. Optional; if any, you will record them in the `## User global rules` section of CLAUDE.md after generation.
 
 For a language other than English or Portuguese, also translate the panel page: take the values of the `EN` object in `${CLAUDE_PLUGIN_ROOT}/templates/.claude/dashboard/panel.html`, translate them keeping the keys, the `{n}`-style placeholders and the separators between words, and pass the result as `panelStrings`, with a BCP 47 `langTag`. Identifiers such as `ganhou`, `pergunta` or `ativo` are never translated.
 
-Write the answers as JSON to a file in the operating system's temp folder (not in the project):
+Write the answers as JSON to a file in the operating system's temp folder (not in the project), with the mode and the models the user said yes to in step 2 and the answers of this step:
 
 ```json
-{"projectName":"My Project","language":"English","mode":"rigorous","repo":"my-owner/my-project","models":{"developer":{"model":"sonnet","effort":"high","reason":"logic and server code"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"sonnet","effort":"medium","reason":"the panel only records"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
+{"projectName":"My Project","language":"English","mode":"rigorous","repo":"my-owner/my-project","models":{"developer":{"model":"haiku","effort":"xhigh","reason":"builds from a closed contract, and the effort replaces the size"},"developerUi":{"model":"opus","effort":"high","reason":"rich UI work needs a strong model"},"critic":{"model":"opus","effort":"high","reason":"judges blind, so it gets the strongest model"},"tester":{"model":"haiku","effort":"xhigh","reason":"the batch suite is mechanical work, and Haiku xhigh is the measured default"},"aux":{"model":"opus","effort":"high","reason":"panel agent and readers, where a slip is costly"}},"memory":{"workspace":"my-workspace","project":"my-project"},"script":"sh","plainStyle":true}
 ```
 
 The values above are an example: replace every one with the user's answers. `mode`, `repo` and the five roles, each with a non-empty `reason`, are required; `label` and `match` are optional per role.
 
-## 3. Generate the files
+## 4. Install the protection hooks
+
+The protection hooks of the project come with a later ticket of forge (F-13). Until they exist there is nothing to install here: tell the user so and go on. Once they do, install them only with the user's yes, asked for this action alone (they change what the agents may do in this folder), and show what each hook blocks before asking.
+
+## 5. Generate the files
 
 The seam is `scaffold.mjs`: answers in, file tree out. Preview first, then ask the user's yes to write:
 
@@ -80,9 +111,9 @@ Skip this when the language is English (any variant). Otherwise `.claude/forge.j
 
 ### Check
 
-Run `node .claude/check.cjs`. Its `language` line reads the language from `.claude/forge.json` and measures the words of each document's prose (code blocks, backtick spans and links left out): it fails while a document still reads as English (or, for Portuguese, not yet as Portuguese), whatever its headings say, so an untranslated project never passes. If it fails, it names the documents: finish translating the prose of those files (never just rename headings) and run it again. It must end with `All ok.`; if any other line fails, stop and show the failing lines. Add the user's switched-off global rules (question 9) under `## User global rules` in CLAUDE.md, in the project language.
+Run `node .claude/check.cjs`. Its `language` line reads the language from `.claude/forge.json` and measures the words of each document's prose (code blocks, backtick spans and links left out): it fails while a document still reads as English (or, for Portuguese, not yet as Portuguese), whatever its headings say, so an untranslated project never passes. If it fails, it names the documents: finish translating the prose of those files (never just rename headings) and run it again. It must end with `All ok.`; if any other line fails, stop and show the failing lines. Add the user's switched-off global rules (question 7) under `## User global rules` in CLAUDE.md, in the project language.
 
-## 4. Publish and seed the panel
+## 6. Publish and seed the panel
 
 The panel is a live page (an Artifact with a small database) that shows agents, pieces, checkpoints, events, notes and an inbox.
 
@@ -91,11 +122,11 @@ The panel is a live page (an Artifact with a small database) that shows agents, 
   - `meta/project`: `{name, description, phase:"constituicao", phaseNote, updatedAt}`
   - `meta/framework`: `{items:[{key,name,status,note} x 7], updatedAt}` with keys `gauntlet`, `ai-memory`, `ponytail`, `sdd`, `tdd`, `mattpocock`, `graphify`, status `ocioso` and a note saying it waits for CP0
   - `checkpoints/cp0`: `{n:0, title:"Step 0: framework", status:"planejado", ponytail:"pendente"}`
-  - `notes/n0001`: kind `decisao`, the setup decisions (language, models, scope)
+  - `notes/n0001`: kind `decisao`, a title in the project language and, as the body, the `body` of the JSON printed by `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --dest . --decision-note` (the language, the mode and the model, effort and reason of each role, read back from `.claude/forge.json`)
 - Put the URL in the generated files: `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --dest . --set-panel-url "<url>"`.
 - Without the `Artifact` tool, or if the user declines: go on without a panel and warn the user clearly. The files keep a pending URL, the workflows still run and their panel writes end in a WARNING. The page in `.claude/dashboard/panel.html` can be published later by hand, followed by the `--set-panel-url` command.
 
-## 5. Run the bootstrap
+## 7. Run the bootstrap
 
 Read `BOOTSTRAP.md` and `FRAMEWORK.md` in full (you are the orchestrator). Present the BOOTSTRAP checklist once and ask the user to approve it as a whole: that approval covers steps 1 to 6 and the pieces and bars of step 8, as the file says. Then run the steps in order, with the tools the files name:
 

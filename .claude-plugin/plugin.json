@@ -8,6 +8,7 @@
   "homepage": "https://github.com/RenatoWernik/forge",
   "repository": "https://github.com/RenatoWernik/forge",
   "license": "MIT",
+  "types": "./types/index.d.ts",
   "keywords": [
     "gauntlet-loop",
     "spec-driven-development",
