@@ -4,10 +4,10 @@
 // A base de dados falsa devolve a fixture em `painel/estado`. Também a barra: o progresso desenhado é a percentagem do modelo.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { FIXTURES, sessao, paginaDe, docsDe, esperado, rng, gerado } from './helpers.mjs';
+import { FIXTURES, comBrowser, testePagina, paginaDe, docsDe, esperado, rng, gerado } from './helpers.mjs';
 
 let B, pagina;
-before(async () => { B = await sessao(); pagina = await paginaDe(); });
+before(async () => { B = await comBrowser(); pagina = await paginaDe(); });
 after(async () => { await B?.fechar(); });
 
 const comparar = async (nome, painel) => {
@@ -25,7 +25,7 @@ const comparar = async (nome, painel) => {
   return falhas.map((f) => `${nome}: ${f}`);
 };
 
-test('C2: modelos escritos à mão: o painel completo e o de todos os estados', async () => {
+testePagina('C2: modelos escritos à mão: o painel completo e o de todos os estados', async () => {
   await B.abrir(pagina, { docs: docsDe(FIXTURES.base) });
   const v = await B.vista();
   assert.deepEqual(v.contagens, [['main', 1], ['aprovado', 1], ['critico', 1], ['dev', 0], ['reprovado', 0], ['espera', 0], ['falta', 1]]);
@@ -37,13 +37,13 @@ test('C2: modelos escritos à mão: o painel completo e o de todos os estados', 
   assert.equal(w.percentagem, 20);
 });
 
-test('C2: cada fixture do corpus dá as contagens, a lista de agentes e o progresso do modelo do F-10', async () => {
+testePagina('C2: cada fixture do corpus dá as contagens, a lista de agentes e o progresso do modelo do F-10', async () => {
   const falhas = [];
   for (const [nome, p] of Object.entries(FIXTURES)) falhas.push(...await comparar(nome, p));
   assert.deepEqual(falhas, []);
 });
 
-test('C2: 30 painéis gerados (semente 1212, com < > & " \' acentos e emoji) dão o modelo do F-10', async () => {
+testePagina('C2: 30 painéis gerados (semente 1212, com < > & " \' acentos e emoji) dão o modelo do F-10', async () => {
   const r = rng(1212), falhas = [];
   for (let i = 0; i < 30; i++) falhas.push(...await comparar(`gerado #${i} (semente 1212)`, gerado(r)));
   assert.deepEqual(falhas, []);

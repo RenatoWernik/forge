@@ -8,8 +8,8 @@ import { join, extname } from 'node:path';
 import { builtinModules } from 'node:module';
 import { ROOT, BASE, git } from './helpers.mjs';
 
-// Testes estáticos (`^test(`) por ficheiro em 4d437e8
-const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 27, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
+// Testes estáticos (`^test(`) por ficheiro em e083b6a (main com o F-03)
+const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
 
 test('regressão: nenhum ficheiro de teste existente perde testes', () => {
   for (const [f, n] of Object.entries(BASELINE)) {

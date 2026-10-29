@@ -4,7 +4,7 @@
 // a mesma que com texto benigno no mesmo sítio (nada de elementos novos), e os nomes aparecem tal e qual.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { sessao, paginaDe, docsDe, base, AGORA } from './helpers.mjs';
+import { comBrowser, testePagina, paginaDe, docsDe, base, AGORA } from './helpers.mjs';
 
 const CARGAS = [
   '<img src=x onerror=__xss(1)>',
@@ -36,10 +36,10 @@ const extras = (c) => ({
 const ARVORE = '[...document.querySelectorAll("*")].map((e) => e.tagName).sort().join(",")';
 
 let B, pagina;
-before(async () => { B = await sessao(); pagina = await paginaDe(); });
+before(async () => { B = await comBrowser(); pagina = await paginaDe(); });
 after(async () => { await B?.fechar(); });
 
-test('C7: cada carga em cada campo do painel, nas notas e nos pedidos entra como texto (12 cargas)', async () => {
+testePagina('C7: cada carga em cada campo do painel, nas notas e nos pedidos entra como texto (12 cargas)', async () => {
   const falhas = [];
   for (const [i, c] of CARGAS.entries()) {
     const benigno = 'benigno' + i;
@@ -57,7 +57,7 @@ test('C7: cada carga em cada campo do painel, nas notas e nos pedidos entra como
   assert.deepEqual(falhas, []);
 });
 
-test('C7: a mensagem de erro do leitor, que cita um id repetido, também entra como texto', async () => {
+testePagina('C7: a mensagem de erro do leitor, que cita um id repetido, também entra como texto', async () => {
   const falhas = [];
   for (const c of CARGAS) {
     const p = base();

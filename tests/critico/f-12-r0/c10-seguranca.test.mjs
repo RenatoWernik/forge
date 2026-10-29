@@ -4,7 +4,7 @@
 // escritas registadas pela base de dados falsa e todos os pedidos de rede registados pelo browser (a rede está bloqueada).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { sessao, paginaDe, docsDe, FIXTURES, base, corpusAnswers, api } from './helpers.mjs';
+import { comBrowser, testePagina, paginaDe, docsDe, FIXTURES, base, corpusAnswers, api } from './helpers.mjs';
 
 const FONTES = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//; // a página atual já carrega a fonte por CSS; nunca um script
 const PROIBIDOS = new Set(['Script', 'XHR', 'Fetch', 'EventSource', 'WebSocket', 'Manifest', 'Ping', 'Prefetch', 'Document']);
@@ -21,12 +21,12 @@ test('C10: em nenhuma página do corpus há <script src>, import de URL, iframe,
 });
 
 let B, pagina;
-before(async () => { B = await sessao(); pagina = await paginaDe(); });
+before(async () => { B = await comBrowser(); pagina = await paginaDe(); });
 after(async () => { await B?.fechar(); });
 
 const pedidosMaus = () => B.estado.pedidos.filter((p) => !/^(file|data|blob|about):/.test(p.url) && (PROIBIDOS.has(p.type) || !FONTES.test(p.url))).map((p) => `${p.type} ${p.url}`);
 
-test('C10: numa sessão completa sem usar a caixa de entrada, a página não escreve nada e não pede scripts nem dados à rede', async () => {
+testePagina('C10: numa sessão completa sem usar a caixa de entrada, a página não escreve nada e não pede scripts nem dados à rede', async () => {
   const invalido = base(); invalido.tickets[0].estado = 'feito';
   const falhas = [];
   for (const [nome, p] of [...Object.entries(FIXTURES), ['inválido', invalido], ['ausente', undefined]]) {
@@ -51,7 +51,7 @@ test('C10: numa sessão completa sem usar a caixa de entrada, a página não esc
   assert.deepEqual(falhas, []);
 });
 
-test('C10: enviar um pedido só escreve em inbox; nunca em painel/ nem noutra coleção', async () => {
+testePagina('C10: enviar um pedido só escreve em inbox; nunca em painel/ nem noutra coleção', async () => {
   const u = await api();
   await B.abrir(pagina, { docs: docsDe(base()) });
   for (const t of ['um', 'dois']) {

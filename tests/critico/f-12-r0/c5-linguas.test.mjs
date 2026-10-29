@@ -1,18 +1,20 @@
 // F-12, critério 5 (e barra): a página continua em português e em inglês. Os textos novos (os blocos dos tickets e dos agentes)
 // também vêm traduzidos: um texto visível igual na página em inglês e na página em português, que já não era igual antes do F-12
 // e não é um dado do painel, é um texto por traduzir. Oráculo: o mesmo projeto gerado nas duas línguas, com o mesmo painel, pelo
-// pacote atual e pelo pacote em 4d437e8 (git archive), comparando os nós de texto, placeholders, aria-labels, títulos e o title.
+// pacote atual e pelo pacote antes do F-12 (merge-base com a origin/main, por git archive), comparando os nós de texto, placeholders, aria-labels, títulos e o title.
 // Os identificadores puros do esquema (estado, papel, modo) aceitam-se iguais nas duas línguas.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { ROOT, BASE, PAGINA, tmp, git, gerar, respostas, sessao, docsDe, todosEstados, base } from './helpers.mjs';
+import { ROOT, PAGINA, tmp, git, antes as pacoteAntes, gerar, respostas, comBrowser, testePagina, docsDe, docVida, todosEstados, comAgentes, AGORA, MIN } from './helpers.mjs';
 
 const EN = respostas('en-noplain-published');
 const PT = { ...EN, language: 'Portuguese (Brazil)' };
-const PAINEL = { ...todosEstados(), agentes: base().agentes };
+// 4 agentes, um por vida (ativo, sem sinal, parado?, a começar), com o documento painel/vida da resposta 2 (resposta 8: as vidas traduzidas)
+const PAINEL = { ...todosEstados(), agentes: comAgentes(4).agentes };
+const MTIMES = { 'ag-1.md': AGORA - 2 * MIN, 'ag-2.md': AGORA - 15 * MIN, 'ag-3.md': AGORA - 40 * MIN };
 const IDS = new Set(['main', 'aprovado', 'critico', 'dev', 'reprovado', 'espera', 'falta', 'tester', 'outro', 'acelerado', 'rigoroso']);
 const DADOS = [EN.projectName, ...JSON.stringify(PAINEL).match(/"(?:[^"\\]|\\.)*"/g).map((s) => JSON.parse(s)).filter((s) => s.length > 2)];
 
@@ -27,19 +29,19 @@ const letras = (s) => { let r = s; for (const d of DADOS) r = r.split(d).join(''
 const iguais = (a, b) => { const sb = new Set(b); return new Set(a.filter((s) => sb.has(s) && !IDS.has(s) && letras(s) >= 3)); };
 
 let B;
-before(async () => { B = await sessao(); });
+before(async () => { B = await comBrowser(); });
 after(async () => { await B?.fechar(); });
 
 const textos = async (answers, scaffoldPath) => {
   const dest = await gerar(answers, scaffoldPath);
-  await B.abrir(readFileSync(join(dest, PAGINA), 'utf8'), { docs: docsDe(PAINEL) });
+  await B.abrir(readFileSync(join(dest, PAGINA), 'utf8'), { docs: { ...docsDe(PAINEL), ...await docVida(PAINEL, MTIMES) } });
   return B.avaliar(TEXTOS);
 };
 
-test('C5: nenhum texto novo da página fica igual em inglês e em português (por traduzir)', async () => {
+testePagina('C5: nenhum texto novo da página fica igual em inglês e em português (por traduzir)', async () => {
   const antigo = tmp('critico-f12-base-');
   const tar = join(antigo, 'base.tar');
-  const a = git('archive', '--format=tar', '-o', tar, BASE, 'scripts', 'templates');
+  const a = git('archive', '--format=tar', '-o', tar, pacoteAntes(), 'scripts', 'templates');
   assert.equal(a.status, 0, a.stderr);
   const x = spawnSync('tar', ['-xf', tar, '-C', antigo], { encoding: 'utf8' });
   assert.equal(x.status, 0, x.stderr);
@@ -49,7 +51,7 @@ test('C5: nenhum texto novo da página fica igual em inglês e em português (po
   assert.deepEqual([...agora].filter((s) => !antes.has(s)), []);
 });
 
-test('C5: a página em português mostra a língua certa (lang pt-BR) e a inglesa en', async () => {
+testePagina('C5: a página em português mostra a língua certa (lang pt-BR) e a inglesa en', async () => {
   for (const [ans, lang] of [[PT, 'pt-BR'], [EN, 'en']]) {
     const dest = await gerar(ans);
     await B.abrir(readFileSync(join(dest, PAGINA), 'utf8'), { docs: docsDe(PAINEL) });

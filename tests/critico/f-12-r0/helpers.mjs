@@ -4,26 +4,28 @@
 //
 // BROWSER. A página corre num Chrome ou Edge já instalado na máquina, sem headless de terceiros: o teste fala com ele pelo
 // protocolo DevTools num pipe (--remote-debugging-pipe), sem portas e sem dependências. O executável vem de FORGE_BROWSER
-// ou dos caminhos habituais (PERGUNTA 5). O processo é fechado pelo PID que o teste lançou, nunca por nome.
+// ou dos caminhos habituais (resposta 5). O processo é fechado pelo PID que o teste lançou, nunca por nome.
 //
 // BASE DE DADOS FALSA. O `claude.use("db")` da página é simulado segundo o contrato 0.2.47 (db.d.ts): doc/collection, get, set,
 // update, delete, add, where/orderBy/limit, onSnapshot com entrega assíncrona, snapshots congelados e TypeError num caminho
-// inválido. O documento `painel/estado` guarda a cópia exata do painel.json: o seu `data()` é o objeto do painel.json (PERGUNTA 1).
+// inválido. O documento `painel/estado` guarda a cópia exata do painel.json: o seu `data()` é o objeto do painel.json (resposta 1).
+// O documento `painel/vida` é `{ t, agentes: { <nome>: { minutos, vida } } }`, calculado pelo leitor a partir dos mtimes (resposta 2).
+// Sem browser, os ataques de página fazem skip com o motivo «sem browser» (resposta 5); nesta máquina há browser e correm.
 // Todas as escritas da página ficam em window.__fake.writes. O relógio da página (Date e Date.now) fica parado em AGORA.
 //
-// PONTE (PERGUNTA 4). O contrato não fixa a marcação da página. Para os ataques não fixarem classes nem ids, o dev escreve na
+// PONTE (resposta 4). O contrato não fixa a marcação da página. Para os ataques não fixarem classes nem ids, o dev escreve na
 // Ronda 0 a ponte `tests/ponte/f-12.mjs`, que só lê o DOM. Exporta:
 //   vista               function () -> { erro, percentagem, contagens, agentes }, corre DENTRO da página (é serializada com
 //                       toString) e lê só o `document`: erro = texto do erro que a página mostra, ou null; percentagem = o progresso
 //                       mostrado (número 0-100) ou null; contagens = [[estado, n], ...] como a página as mostra, ou null quando a
 //                       página não mostra contagens; agentes = [{ nome, vida }] pela ordem mostrada, com vida em 'a começar' |
 //                       'ativo' | 'sem sinal' | 'parado?' ou null se a página não a mostra
-//   seletorResumo       string  seletor CSS do bloco com o progresso e as contagens por estado (o «primeiro ecrã» da barra)
+//   seletorResumo       string  seletor CSS do resumo: o progresso, as contagens por estado e o objetivo (o «primeiro ecrã», resposta 9)
 //   seletorInboxTexto   string  seletor CSS do campo de texto da caixa de entrada
 //   seletorInboxEnviar  string  seletor CSS do botão que envia o pedido
-//   docsVida            (opcional, PERGUNTA 2) function (mtimes) -> { <caminho do documento>: dados }: os documentos extra que o
-//                       protocolo escreve para a página conhecer a idade de cada checkpoint ({ <ficheiro>: mtime em ms })
-import { after } from 'node:test';
+//   docsVida            function (texto do painel.json, mtimes, agora) -> { 'painel/vida': { t, agentes } }: reexportação da função
+//                       do pacote que calcula o documento `painel/vida` escrito logo a seguir a `painel/estado` (resposta 2)
+import { test, after } from 'node:test';
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,7 +34,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 export const PONTE = join(ROOT, 'tests/ponte/f-12.mjs');
-export const BASE = '4d437e8';
+export const BASE = 'e083b6a';
 export const LEITOR = join(ROOT, 'scripts/painel-leitor.mjs');
 export const PAGINA = '.claude/dashboard/panel.html';
 
@@ -212,12 +214,12 @@ const esperarMs = (ms) => new Promise((r) => setTimeout(r, ms));
 // Abre um browser e um separador. Devolve { abrir, avaliar, vista, esperarVista, ... , fechar }.
 export async function sessao() {
   const exe = acharBrowser();
-  if (!exe) throw new Error('sem Chrome nem Edge instalados (PERGUNTA 5): defina FORGE_BROWSER com o caminho do executável');
+  if (!exe) throw new Error('sem browser: nem Chrome nem Edge instalados (resposta 5); defina FORGE_BROWSER com o caminho do executável');
   const perfil = mkdtempSync(join(tmpdir(), 'critico-f12-perfil-'));
   const pasta = tmp('critico-f12-pagina-');
   const p = spawn(exe, ['--headless=new', '--remote-debugging-pipe', `--user-data-dir=${perfil}`, '--no-first-run', '--no-default-browser-check',
     '--disable-extensions', '--disable-background-networking', '--disable-sync', '--disable-component-update', '--disable-default-apps', '--mute-audio',
-    '--allow-file-access-from-files', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], env: { ...process.env, USERPROFILE: ENV_ORIGINAL.USERPROFILE } });
+    '--allow-file-access-from-files', '--disable-crash-reporter', '--disable-breakpad', '--disable-gpu', '--no-service-autorun', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], env: { ...process.env, USERPROFILE: ENV_ORIGINAL.USERPROFILE } });
   // ^ o Chrome no Windows recusa o pipe de DevTools com um USERPROFILE falso («requires a non-default data directory»); o perfil
   //   que ele usa é sempre o --user-data-dir temporário acima, e HOME e CLAUDE_CONFIG_DIR continuam falsos
   if (process.env.F12_DEBUG) p.stderr.on('data', (d) => process.stderr.write('[browser] ' + d));
@@ -298,19 +300,34 @@ export async function sessao() {
       do { v = await api_.vista(); if (ok(v)) return v; await esperarMs(60); } while (Date.now() < fim);
       return v;
     },
+    // Fecha a árvore do browser pelo PID que este teste lançou (nunca por nome) e apaga o perfil temporário;
+    // os processos filhos do Chrome largam o perfil uns instantes depois, por isso a remoção tenta durante até 20 s
     async fechar() {
-      try { await Promise.race([send('Browser.close'), esperarMs(5000)]); } catch { /* já fechado */ }
-      const saiu = p.exitCode !== null || await Promise.race([new Promise((r) => p.once('exit', () => r(true))), esperarMs(5000).then(() => false)]);
-      if (!saiu) {
-        if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' });
-        else p.kill('SIGKILL');
+      const saida = p.exitCode !== null ? Promise.resolve() : new Promise((r) => p.once('exit', r));
+      if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' });
+      else { try { await Promise.race([send('Browser.close'), esperarMs(5000)]); } catch { /* já fechado */ } if (p.exitCode === null) p.kill('SIGKILL'); }
+      await Promise.race([saida, esperarMs(10000)]);
+      for (let i = 0; ; i++) {
+        try { rmSync(perfil, { recursive: true, force: true }); return; } catch (e) { if (i >= 40) throw e; await esperarMs(500); }
       }
-      rmSync(perfil, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
     },
   };
   return api_;
 }
 
+// Resposta 5: sem browser, os testes de página fazem skip com o motivo escrito
+export const SEM_BROWSER = acharBrowser() ? false : 'sem browser: nem Chrome nem Edge instalados (defina FORGE_BROWSER com o caminho do executável)';
+export const testePagina = (nome, fn) => test(nome, { skip: SEM_BROWSER }, fn);
+// Abre a sessão no before do ficheiro, só quando há browser
+export const comBrowser = async () => (SEM_BROWSER ? null : sessao());
+
 // O modelo esperado de um painel (o leitor do pacote, com mtimes vazios e o relógio parado)
 export const esperado = async (painel, mtimes = {}) => (await leitor()).ler(JSON.stringify(painel), mtimes, AGORA);
 export const docsDe = (painel) => (painel === undefined ? {} : { 'painel/estado': painel });
+// O documento painel/vida da resposta 2, calculado pelo leitor do pacote: { t, agentes: { <nome>: { minutos, vida } } }
+export const docVida = async (painel, mtimes) => {
+  const m = await esperado(painel, mtimes);
+  return { 'painel/vida': { t: new Date(AGORA).toISOString(), agentes: Object.fromEntries(m.agentes.map((a) => [a.nome, { minutos: a.minutos, vida: a.vida }])) } };
+};
+// O pacote antes do F-12: o merge-base com a origin/main (sem origin, BASE)
+export const antes = () => { const m = git('merge-base', 'HEAD', 'origin/main'); return m.status === 0 ? m.stdout.trim() : BASE; };

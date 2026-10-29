@@ -1,20 +1,21 @@
 // F-12 (brief da Ronda −1): acessibilidade. 1) Sem dependências: na árvore de acessibilidade do browser, cada botão, campo, ligação,
 // separador e caixa tem nome acessível, e o documento tem lang, a 390 e a 1440, com dados e com erro. 2) O axe sem nenhuma violação
-// serious ou critical: o axe-core não faz parte do pacote (PERGUNTA 3); corre quando FORGE_AXE aponta para o axe.min.js.
+// serious ou critical: o axe-core é opcional (resposta 3); corre quando FORGE_AXE aponta para o axe.min.js, senão faz skip com o motivo.
+// O teste 1 é obrigatório.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { sessao, paginaDe, docsDe, FIXTURES, base } from './helpers.mjs';
+import { SEM_BROWSER, comBrowser, testePagina, paginaDe, docsDe, FIXTURES, base } from './helpers.mjs';
 
 const COM_NOME = new Set(['button', 'textbox', 'link', 'tab', 'checkbox', 'combobox', 'searchbox', 'switch', 'radio', 'menuitem', 'slider', 'spinbutton', 'img', 'progressbar', 'meter']);
 const invalido = base(); invalido.tickets[0].estado = 'feito';
 const CASOS = [['9 agentes', FIXTURES['9 agentes']], ['nomes com HTML', FIXTURES['nomes longos, com acentos e com HTML']], ['inválido', invalido]];
 
 let B, pagina;
-before(async () => { B = await sessao(); pagina = await paginaDe(); });
+before(async () => { B = await comBrowser(); pagina = await paginaDe(); });
 after(async () => { await B?.fechar(); });
 
-test('C11: todo o controlo e imagem tem nome acessível e o documento tem lang (390 e 1440, com dados e com erro)', async () => {
+testePagina('C11: todo o controlo e imagem tem nome acessível e o documento tem lang (390 e 1440, com dados e com erro)', async () => {
   const falhas = [];
   for (const w of [390, 1440]) for (const [nome, p] of CASOS) {
     await B.abrir(pagina, { docs: docsDe(p), largura: w, altura: w === 390 ? 844 : 900 });
@@ -28,7 +29,7 @@ test('C11: todo o controlo e imagem tem nome acessível e o documento tem lang (
   assert.deepEqual(falhas, []);
 });
 
-test('C11: axe sem violações serious nem critical (390 e 1440, com dados e com erro)', { skip: !(process.env.FORGE_AXE && existsSync(process.env.FORGE_AXE)) && 'PERGUNTA 3: o axe-core não está no pacote; defina FORGE_AXE com o caminho do axe.min.js' }, async () => {
+test('C11: axe sem violações serious nem critical (390 e 1440, com dados e com erro)', { skip: SEM_BROWSER || (!(process.env.FORGE_AXE && existsSync(process.env.FORGE_AXE)) && 'sem axe-core: dependência opcional (resposta 3); defina FORGE_AXE com o caminho do axe.min.js') }, async () => {
   const axe = readFileSync(process.env.FORGE_AXE, 'utf8');
   const falhas = [];
   for (const w of [390, 1440]) for (const [nome, p] of CASOS) {

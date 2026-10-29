@@ -6,7 +6,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, LEITOR, PAGINA, corpusAnswers, respostas, paginaDe, sessao, docsDe, base } from './helpers.mjs';
+import { ROOT, LEITOR, PAGINA, corpusAnswers, respostas, paginaDe, comBrowser, testePagina, docsDe, base } from './helpers.mjs';
 
 const fonte = () => readFileSync(LEITOR, 'utf8');
 const ocorrencias = (txt, sub) => txt.split(sub).length - 1;
@@ -29,10 +29,10 @@ test('C1: o template da página não traz uma cópia do leitor (a única fonte �
 });
 
 let B;
-before(async () => { B = await sessao(); });
+before(async () => { B = await comBrowser(); });
 after(async () => { await B?.fechar(); });
 
-test('C1: é a cópia embutida que corre: mutar só essa cópia (cada ticket conta 100) muda as contagens desenhadas', async () => {
+testePagina('C1: é a cópia embutida que corre: mutar só essa cópia (cada ticket conta 100) muda as contagens desenhadas', async () => {
   const L = fonte();
   const DE = 'for (const t of o.tickets) n[t.estado]++;';
   assert.ok(L.includes(DE), 'pré-condição: o leitor do F-10 tem a linha das contagens');

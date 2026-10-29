@@ -3,16 +3,16 @@
 // 30 agentes, válido A), cada um entregue pela subscrição da base de dados falsa; cada passo tem de aparecer em 3 s ou menos.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { sessao, paginaDe, docsDe, base, todosEstados, comAgentes, esperado } from './helpers.mjs';
+import { comBrowser, testePagina, paginaDe, docsDe, base, todosEstados, comAgentes, esperado } from './helpers.mjs';
 
 let B, pagina;
-before(async () => { B = await sessao(); pagina = await paginaDe(); });
+before(async () => { B = await comBrowser(); pagina = await paginaDe(); });
 after(async () => { await B?.fechar(); });
 
 const igual = (m) => (v) => !v.erro && JSON.stringify(v.contagens) === JSON.stringify(m.contagens) && JSON.stringify((v.agentes ?? []).map((a) => a.nome)) === JSON.stringify(m.agentes.map((a) => a.nome)) && v.percentagem === m.percentagem;
 const erro = (v) => typeof v.erro === 'string' && !!v.erro.trim() && v.contagens === null && !(v.agentes ?? []).length;
 
-test('C8: a sequência A → B → inválido → ausente → 30 agentes → A aparece passo a passo, na mesma carga da página', async () => {
+testePagina('C8: a sequência A → B → inválido → ausente → 30 agentes → A aparece passo a passo, na mesma carga da página', async () => {
   const A = base(), Bp = { ...todosEstados(), agentes: comAgentes(9).agentes }, C30 = comAgentes(30);
   const invalido = base(); invalido.tickets[0].estado = 'feito';
   await B.abrir(pagina, { docs: docsDe(A) });
