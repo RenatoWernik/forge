@@ -1,25 +1,26 @@
-// F-06: «as mutações no corpus» (âmbito do ticket). Os oráculos dos critérios 1, 2, 3, 4 e 6 são mutações corridas pelo
-// `node --test scripts/corpus.test.mjs` (que prova que cada uma faz falhar a sua linha); aqui verifica-se que elas existem no corpus
-// versionado (scripts/corpus/mutations) e que cada uma, aplicada ao projeto gerado da sua base, tira de facto o que diz tirar,
-// medido com a tabela literal do helpers.mjs:
-//   critério 1: por brief, duas mutações: uma que retira o aviso do hook do ficheiro e outra que o deixa no ficheiro mas abaixo
-//               da linha 5 (8 no total);
-//   critério 2: por cláusula de cada brief, uma mutação com a linha «briefs» que retira essa cláusula;
-//   critério 3: por regra operacional, uma mutação num brief que a retira;
-//   critério 4: uma mutação num brief que retira um literal do contrato;
-//   critério 6: uma mutação da linha «language» com o ficheiro num brief e a base em português.
+// F-06: «as mutações no corpus» (âmbito do ticket), com a resposta 6 na #7: entram NO MÁXIMO 10 mutações novas no corpus
+// partilhado, UMA POR CLASSE; os outros casos de cada classe ficam nos testes do F-06 (c1 a c5 e c7). O
+// `node --test scripts/corpus.test.mjs` prova que cada mutação faz falhar a sua linha; aqui verifica-se que cada classe tem a sua
+// mutação no corpus versionado (scripts/corpus/mutations) e que ela, aplicada ao projeto gerado da sua base, tira de facto o que
+// diz tirar, medido com a tabela literal do helpers.mjs. As classes:
+//   aviso retirado; aviso abaixo da linha 5 (critério 1); uma cláusula (critério 2); uma regra operacional (critério 3); o
+//   contrato (critério 4); a regra das sessões reais (resposta 4); um brief por traduzir num projeto em português (critério 6).
+// As mutações das classes do aviso, das cláusulas, das regras, do contrato e das sessões declaram a linha `briefs` (resposta 3).
+// «Nova» = uma mutação cujo ficheiro é um brief ou o .checkpoints/README.md.
 // Não depende do F-05.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROLES, HOOK, CLAUSES, OPS, CONTRACT, BRIEFS_DIR, hookAtTop, missing, generate, briefsByRole, loadCorpus } from './helpers.mjs';
+import { ROLES, HOOK, CLAUSES, OPS, CONTRACT, SESSIONS, BRIEFS_DIR, README, hookAtTop, missing, generate, briefsByRole, loadCorpus } from './helpers.mjs';
 
-const starts = (line, p) => line === p || [' ', ':', '('].some((c) => line.startsWith(p + c));
+const starts = (line, p) => line === p || line.startsWith(p + ':') || line.startsWith(p + ' (');
+const MAX_NEW = 10;
 
-test('C8: o corpus de mutações tem as mutações dos critérios 1, 2, 3, 4 e 6 e cada uma tira o que diz tirar', async () => {
+test(`C8: o corpus tem no máximo ${MAX_NEW} mutações novas e uma por classe, e cada uma tira o que diz tirar`, async () => {
   const answers = new Map(loadCorpus('answers').map((a) => [a.name, a.value]));
-  const ms = loadCorpus('mutations').map((m) => ({ name: m.name, ...m.value })).filter((m) => String(m.file).startsWith(BRIEFS_DIR + '/'));
+  const ms = loadCorpus('mutations').map((m) => ({ name: m.name, ...m.value })).filter((m) => String(m.file).startsWith(BRIEFS_DIR + '/') || m.file === README);
+  assert.ok(ms.length <= MAX_NEW, `mutações novas no corpus: ${ms.length} (${ms.map((m) => m.name).join(', ')}); o máximo é ${MAX_NEW}`);
   // o projeto gerado (e «traduzido», se for português) de cada base, uma vez por base
   const bases = new Map();
   const project = async (base) => {
@@ -38,18 +39,16 @@ test('C8: o corpus de mutações tem as mutações dos critérios 1, 2, 3, 4 e 6
     if (!before.includes(m.find)) continue;
     applied.push({ m, role, before, after: before.replaceAll(m.find, m.replace) });
   }
-  const want = [];
-  for (const r of ROLES) {
-    want.push([`critério 1: ${r}, aviso retirado`, (x) => x.role === r && hookAtTop(x.before) && !HOOK.slice(0, 2).every((re) => re.test(x.after))]);
-    want.push([`critério 1: ${r}, aviso abaixo da linha 5`, (x) => x.role === r && hookAtTop(x.before) && !hookAtTop(x.after) && HOOK.slice(0, 2).every((re) => re.test(x.after))]);
-    for (const [c, res] of Object.entries(CLAUSES[r])) {
-      want.push([`critério 2: ${r}, ${c}`, (x) => x.role === r && starts(x.m.line, 'briefs') && missing(x.before, { c: res }).length === 0 && missing(x.after, { c: res }).length === 1]);
-    }
-  }
-  for (const [rule, res] of Object.entries(OPS)) {
-    want.push([`critério 3: ${rule}`, (x) => missing(x.before, { rule: res }).length === 0 && missing(x.after, { rule: res }).length === 1]);
-  }
-  want.push(['critério 4: um literal do contrato', (x) => missing(x.before, CONTRACT).length === 0 && missing(x.after, CONTRACT).length > 0]);
-  want.push(['critério 6: language, brief, base pt', (x) => starts(x.m.line, 'language') && /^pt/.test(x.m.base)]);
-  assert.deepEqual(want.filter(([, ok]) => !applied.some(ok)).map(([k]) => k), [], 'mutações em falta no corpus (ou que não tiram o que dizem)');
+  const B = (x) => starts(x.m.line, 'briefs');
+  const lost = (x, table) => missing(x.before, table).length === 0 && missing(x.after, table).length > 0;
+  const want = [
+    ['critério 1: aviso retirado', (x) => B(x) && hookAtTop(x.before) && !HOOK.slice(0, 2).every((re) => re.test(x.after))],
+    ['critério 1: aviso abaixo da linha 5', (x) => B(x) && hookAtTop(x.before) && !hookAtTop(x.after) && HOOK.slice(0, 2).every((re) => re.test(x.after))],
+    ['critério 2: uma cláusula', (x) => B(x) && lost(x, CLAUSES[x.role])],
+    ['critério 3: uma regra operacional', (x) => B(x) && lost(x, OPS)],
+    ['critério 4: o contrato', (x) => B(x) && lost(x, CONTRACT)],
+    ['resposta 4: a regra das sessões reais', (x) => B(x) && lost(x, SESSIONS)],
+    ['critério 6: language, brief, base pt', (x) => starts(x.m.line, 'language') && /^pt/.test(x.m.base)],
+  ];
+  assert.deepEqual(want.filter(([, ok]) => !applied.some(ok)).map(([k]) => k), [], 'classes sem mutação no corpus (ou com uma que não tira o que diz)');
 });

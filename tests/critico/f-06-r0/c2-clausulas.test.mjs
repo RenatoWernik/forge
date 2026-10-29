@@ -8,13 +8,14 @@
 //   Lote: fusão aditiva; a regra dos flaky; a regressão volta à peça que a causou; nenhum push, PR ou merge sem o sim do utilizador.
 // Oráculo: a tabela literal das cláusulas (helpers.mjs CLAUSES; a lista do MENOR vem da história 28 da spec: cosmética, leitura
 // literal, ambiguidade, erro do próprio ataque), nas 4 combinações língua × modo; e uma mutação por cláusula (os literais dela
-// neutralizados no brief), em cada modo, que faz falhar a linha `briefs` do check.cjs.
+// neutralizados no brief), em cada modo, que faz falhar a linha `briefs` do check.cjs. Estas mutações por cláusula correm aqui e
+// não no corpus partilhado, que leva uma só por classe (resposta 6 na #7).
 // Não depende do F-05.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { COMBOS, ANSWERS, ROLES, CLAUSES, missing, neutralize, generate, briefsByRole, check, lineState, fails } from './helpers.mjs';
+import { COMBOS, ANSWERS, ROLES, CLAUSES, missing, neutralize, generate, briefsByRole, check, lineState, fails, oneBriefsLine } from './helpers.mjs';
 
 for (const [name, answers] of COMBOS) {
   test(`C2 ${name}: cada brief tem as suas cláusulas obrigatórias`, async () => {
@@ -30,6 +31,7 @@ for (const mode of ['rigorous', 'accelerated']) {
     const by = briefsByRole(dest);
     const before = check(dest);
     assert.equal(lineState(before.out, 'briefs'), 'ok', 'pré-condição: a linha «briefs» existe e está ok no projeto sem mutação\n' + fails(before.out));
+    assert.ok(oneBriefsLine(before.out), 'pré-condição: há uma e uma só linha `briefs` no check.cjs');
     const bad = [];
     for (const r of ROLES) {
       const f = join(dest, by[r]), orig = readFileSync(f, 'utf8');

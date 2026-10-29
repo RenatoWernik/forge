@@ -4,15 +4,15 @@
 // para <pasta>/home e TMP, TEMP e TMPDIR para <pasta>/tmp (também nos processos filhos). Tudo o que os ataques criam fica dentro
 // dela, e ela é apagada no after() e, de reserva, no exit. Nenhum ataque abre uma sessão `claude` real.
 //
-// Leitura do contrato que estes ataques assumem (as PERGUNTAS na #7 dizem onde é leitura minha):
-//   - os 4 briefs gerados são os ficheiros .md de `.claude/briefs/` (os «Ficheiros prováveis» do ticket: templates/.claude/briefs/*.md);
-//     o papel de cada um sai do nome do ficheiro (ROLE_BY_NAME), cada papel uma só vez;
-//   - os literais das cláusulas são verificados na saída do scaffold (inglês, antes da tradução da skill), nas duas línguas do
-//     corpus e nos dois modos, como o F-05 faz com o CLAUDE.md. Cada cláusula aceita a forma inglesa ou o literal português do
-//     ticket (por exemplo VERDICT ou VEREDITO);
-//   - as linhas do check.cjs são verificadas no projeto «traduzido» com o mesmo substituto do scripts/corpus.test.mjs, aplicado
-//     também ao AGENTS.md (F-05), aos 4 briefs e ao .checkpoints/README.md;
-//   - «a linha X» do check.cjs = as linhas cujo nome é X ou começa por «X », «X:» ou «X (»: o detalhe do nome é livre.
+// Contrato: a #7 com as respostas do orquestrador às 7 PERGUNTAS (comentário de 2026-10-29), que estes ataques seguem:
+//   - resposta 2: os 4 briefs são `.claude/briefs/<papel>.md`; o papel sai do nome do ficheiro (ROLE_BY_NAME), cada papel uma vez;
+//   - resposta 1: os literais são verificados na saída do scaffold, antes da tradução, contra o template em inglês, nas duas
+//     línguas do corpus e nos dois modos (cada cláusula aceita também o literal português do ticket, por exemplo VEREDITO, que
+//     um template em inglês não usa); as linhas do check.cjs são verificadas no projeto «traduzido» com o mesmo substituto do
+//     scripts/corpus.test.mjs, aplicado também ao AGENTS.md (F-05), aos 4 briefs e ao .checkpoints/README.md;
+//   - resposta 3: os critérios 1 a 4 e a regra das sessões são verificados por UMA linha, chamada `briefs`; nos critérios 1, 3 e 4
+//     e na regra das sessões, a linha FAIL diz qual o brief (o nome do ficheiro) e qual a regra em falta (BRIEF_RULES);
+//   - «a linha X» do check.cjs = a linha cujo nome é X ou começa por «X:» ou «X (»: o detalhe é livre.
 import { after } from 'node:test';
 import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -121,19 +121,33 @@ export const check = (cwd, args = []) => {
   const r = spawnSync(process.execPath, ['.claude/check.cjs', ...args], { cwd, encoding: 'utf8', env: sandboxEnv(), timeout: 240000 });
   return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
 };
-// Estado das linhas cujo nome é `prefix` ou começa por `prefix` seguido de espaço, «:» ou « (»: "FAIL" se alguma falha, "ok" se
-// existem e estão todas ok, undefined se não há nenhuma
+// As linhas cujo nome é `prefix` ou começa por `prefix:` ou `prefix (`: [{ state, text }]
+export const linesOf = (out, prefix) => out.split(/\r?\n/).map((l) => l.match(/^(ok|FAIL) {2,4}(.*)$/))
+  .filter((m) => m && (m[2] === prefix || m[2].startsWith(prefix + ':') || m[2].startsWith(prefix + ' ('))).map((m) => ({ state: m[1], text: m[2] }));
+// "FAIL" se alguma dessas linhas falha, "ok" se existem e estão todas ok, undefined se não há nenhuma
 export const lineState = (out, prefix) => {
-  const ls = [];
-  for (const l of out.split(/\r?\n/)) {
-    const m = l.match(/^(ok|FAIL) {2,4}(.*)$/);
-    if (m && (m[2] === prefix || [' ', ':', '('].some((c) => m[2].startsWith(prefix + c)))) ls.push(m[1]);
-  }
+  const ls = linesOf(out, prefix).map((x) => x.state);
   return !ls.length ? undefined : ls.includes('FAIL') ? 'FAIL' : 'ok';
 };
-export const fails = (out) => out.split(/\r?\n/).filter((l) => l.startsWith('FAIL')).map((l) => l.slice(0, 220)).join('\n');
-// Há uma linha FAIL cujo nome fala de briefs (os critérios 1, 3 e 4 não nomeiam a linha: PERGUNTA na #7)
-export const briefLineFails = (out) => out.split(/\r?\n/).some((l) => /^FAIL {2,4}.*brief/i.test(l));
+export const fails = (out) => out.split(/\r?\n/).filter((l) => l.startsWith('FAIL')).map((l) => l.slice(0, 400)).join('\n');
+
+// Resposta 3: o que a linha FAIL `briefs` tem de dizer, por regra (oráculo finito de palavras, em inglês ou em português)
+export const BRIEF_RULES = {
+  hook: /CONTEXT WARNING|\bhook\b|\bwarning\b|\baviso\b/i,
+  kill: /\bkill|taskkill|killall|pkill|\bPID\b|\bprocess|\bmatar\b|\bprocesso/i,
+  foreground: /foreground|background|run_in_background|primeiro plano|segundo plano/i,
+  checkpoint: /checkpoint/i,
+  contract: /gh issue view|\bcontract\b|\bcontrato\b|\bissue\b/i,
+  sessions: /\bsessions?\b|\bsess(ão|ões)\b|claude -p|\breal\b/i,
+};
+// Há exatamente uma linha `briefs` (resposta 3: «é uma só»)?
+export const oneBriefsLine = (out) => linesOf(out, 'briefs').length === 1;
+// A linha `briefs` falha, o check.cjs sai com 1 e a linha FAIL nomeia o brief (nome do ficheiro, com ou sem .md) e a regra
+export const briefsFailNames = (r, file, rule) => {
+  const base = basename(file, '.md').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const named = new RegExp(`(^|[^\\w-])${base}(\\.md)?($|[^\\w-])`, 'i');
+  return r.status === 1 && linesOf(r.out, 'briefs').some((x) => x.state === 'FAIL' && named.test(x.text) && BRIEF_RULES[rule].test(x.text));
+};
 
 export const edit = (dest, rel, fn) => {
   const f = join(dest, rel);

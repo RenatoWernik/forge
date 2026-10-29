@@ -3,13 +3,13 @@
 // Oráculo:
 //   - literais (helpers.mjs HOOK), todos dentro das 5 primeiras linhas de cada brief, nas 4 combinações língua × modo;
 //   - 8 mutações por modo, duas por brief (o aviso retirado; o aviso passado para depois da linha 5), cada uma a fazer o
-//     check.cjs sair com 1 e uma linha cujo nome fala de briefs falhar (o ticket não nomeia a linha: PERGUNTA 3 na #7).
+//     check.cjs sair com 1 e a linha `briefs` falhar a dizer qual o brief e que falta o aviso (resposta 3 na #7).
 // Não depende do F-05.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { COMBOS, ANSWERS, ROLES, HOOK, HOOK_LINES, hookAtTop, generate, briefsByRole, check, fails, briefLineFails } from './helpers.mjs';
+import { COMBOS, ANSWERS, ROLES, HOOK, HOOK_LINES, hookAtTop, generate, briefsByRole, check, fails, oneBriefsLine, briefsFailNames } from './helpers.mjs';
 
 for (const [name, answers] of COMBOS) {
   test(`C1 ${name}: os 4 briefs têm o aviso do hook nas primeiras ${HOOK_LINES} linhas`, async () => {
@@ -34,6 +34,7 @@ for (const mode of ['rigorous', 'accelerated']) {
     const by = briefsByRole(dest);
     const before = check(dest);
     assert.equal(before.status, 0, 'pré-condição: o projeto sem mutação passa o check.cjs\n' + fails(before.out));
+    assert.ok(oneBriefsLine(before.out), 'pré-condição: há uma e uma só linha `briefs` no check.cjs');
     const bad = [];
     for (const r of ROLES) {
       const f = join(dest, by[r]), orig = readFileSync(f, 'utf8');
@@ -44,7 +45,7 @@ for (const mode of ['rigorous', 'accelerated']) {
         writeFileSync(f, text);
         const post = check(dest);
         writeFileSync(f, orig);
-        if (post.status !== 1 || !briefLineFails(post.out)) bad.push(`${by[r]} (aviso ${kind}): status ${post.status}\n${fails(post.out) || '(nenhuma linha FAIL)'}`);
+        if (!briefsFailNames(post, by[r], 'hook')) bad.push(`${by[r]} (aviso ${kind}): status ${post.status}\n${fails(post.out) || '(nenhuma linha FAIL)'}`);
       }
     }
     assert.deepEqual(bad, [], 'mutações sem verificação');
