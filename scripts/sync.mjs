@@ -17,6 +17,7 @@ const hasMarker = (line) => /\{\{[\w.]+\}\}/.test(line);
 const readText = async (p) => (await readFile(p, 'utf8')).replace(/\r\n/g, '\n');
 // The panel page embeds the shared reader of painel.json in place of {{PAINEL_LEITOR}} (scaffold.mjs). Whatever reader version sits there
 // goes back to the marker, so the reader (one source: scripts/painel-leitor.mjs) never travels into a template.
+// shortcut: the end of the reader is found by the "// The page code." line after it; a project that edits that line gets the reader in its patch.
 const READER = /^(<script type="module">\n)[\s\S]*?\n(\/\/ The page code\.)/m;
 const collapse = (text) => text.replace(READER, '$1{{PAINEL_LEITOR}}\n$2');
 const split = (text) => (text ? text.replace(/\n$/, '').split('\n') : []);
