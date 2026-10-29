@@ -51,6 +51,9 @@ const PANEL_PT = {
   inboxSent: 'Recado enviado.', inboxRead: 'lido pelo Claude', inboxWaiting: 'aguardando leitura', inboxReadOnly: 'Você só tem acesso de leitura a este painel.',
   inboxFail: 'Não foi possível enviar. Tente de novo em instantes.', inboxUnavailable: 'Recados indisponíveis nesta visualização.',
   agoNow: 'agora', agoMin: 'há {n} min', agoHour: 'há {n} h',
+  painelTitle: 'Tickets e agentes', painelDone: 'concluído', painelGoal: 'Objetivo', painelMissing: 'Ainda sem dados do painel: falta a cópia do painel.json.', painelInvalid: 'Os dados do painel são inválidos: {erro}',
+  tk_main: 'Na main', tk_aprovado: 'Aprovados', tk_critico: 'No crítico', tk_dev: 'Em desenvolvimento', tk_reprovado: 'Reprovados', tk_espera: 'Em espera', tk_falta: 'Por fazer',
+  lifeStarting: 'a começar', lifeActive: 'ativo', lifeNoSignal: 'sem sinal', lifeStalled: 'parado?',
 };
 
 const templateFiles = async () => (await readdir(TEMPLATES, { recursive: true, withFileTypes: true }))
@@ -169,7 +172,8 @@ function markers(a, lang) {
 
 export async function scaffold(answers, { dest, dryRun = false, force = false } = {}) {
   const lang = validate(answers);
-  const vars = markers(answers, lang);
+  const leitor = await readFile(LEITOR, 'utf8'); // the single source of the reader, copied as is (its text has no markers to fill)
+  const vars = { ...markers(answers, lang), PAINEL_LEITOR: leitor }; // the panel page embeds it in its module script (filled in one pass, never re-scanned)
   const tree = {};
   for (const rel of await templateFiles()) {
     const text = await readFile(TEMPLATES + rel, 'utf8');
@@ -177,7 +181,7 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
   }
   tree['.claude/forge.json'] = JSON.stringify({ language: lang.name, langTag: lang.tag, plainStyle: answers.plainStyle !== false, mode: answers.mode, models: answers.models, escalation: ESCALATION }, null, 2) + '\n';
   tree[PAINEL] = JSON.stringify({ versao: 1, projeto: answers.projectName, modo: MODO_DO_PAINEL[answers.mode], tickets: [], agentes: [] }, null, 2) + '\n';
-  tree[LEITOR_NO_PROJETO] = await readFile(LEITOR, 'utf8'); // the single source of the reader, copied as is (its text has no markers to fill)
+  tree[LEITOR_NO_PROJETO] = leitor;
   const files = Object.keys(tree);
   const conflicts = [];
   for (const rel of files) if (await exists(join(dest, rel))) conflicts.push(rel);
