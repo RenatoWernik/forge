@@ -251,7 +251,7 @@ test('the generated check.cjs passes with no FAIL, in English and in Portuguese,
   }
 });
 
-test('the --env check names the machine and project tools that remain, with nothing from claude-mem', async () => {
+test('the --env check names the machine and project tools that remain, and no line of the removed memory plugin', async () => {
   const dest = await tmp();
   await scaffold(answers(), { dest });
   // no tool on PATH and no reachable ai-memory server: only the line names are read, nothing real is called
