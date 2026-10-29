@@ -116,6 +116,11 @@ test('the fixture records each source at the verified tag or sha', () => {
   }
 });
 
+test('the gauntlet-loop, a fork, records the original repository and the commit it was taken from; no other entry has an upstream', () => {
+  assert.deepEqual(compat['gauntlet-loop'].upstream, { repo: 'robonuggets/gauntlet-loop', base: '9b1975a' });
+  assert.deepEqual(Object.entries(compat).filter(([id, e]) => id !== 'gauntlet-loop' && 'upstream' in e), []);
+});
+
 test('the notes of every entry are a map from a version to a warning; the ai-memory 3.0.0 one tells about the migration and the backup', () => {
   for (const [id, e] of Object.entries(compat)) for (const [k, v] of Object.entries(e.notes ?? {})) assert.ok(/^\d+\.\d+\.\d+$/.test(k) && typeof v === 'string' && v, `${id} ${k}`);
   const note = compat['ai-memory'].notes['3.0.0'];

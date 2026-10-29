@@ -1,5 +1,5 @@
 {
-  "$comment": "What forge's integration was last verified against (decision D1: no pins, the doctor still compares with the newest release; this only records the tested version). verifiedWith is the version or sha tested; source is the upstream at that tag or sha; surface lists the skill names (skills) and the subcommands and flags (commands) that templates/** and check.cjs use, checked by scripts/compat.test.mjs against scripts/fixtures/compat/surface-2026-10-29.json; notes maps a version to a warning shown when updating across it.",
+  "$comment": "What forge's integration was last verified against (decision D1: no pins, the doctor still compares with the newest release; this only records the tested version). verifiedWith is the version or sha tested; source is the upstream at that tag or sha; surface lists the skill names (skills) and the subcommands and flags (commands) that templates/** and check.cjs use, checked by scripts/compat.test.mjs against scripts/fixtures/compat/surface-2026-10-29.json; notes maps a version to a warning shown when updating across it; upstream (only the gauntlet-loop, a fork) is the original repository and the commit the fork was taken from.",
   "components": {
     "uv": {
       "verifiedWith": "0.13.6",
@@ -9,6 +9,7 @@
     "gauntlet-loop": {
       "verifiedWith": "fc6b2fc",
       "source": "https://github.com/RenatoWernik/gauntlet-loop/tree/fc6b2fc",
+      "upstream": { "repo": "robonuggets/gauntlet-loop", "base": "9b1975a" },
       "surface": { "skills": ["gauntlet-loop"], "commands": [] }
     },
     "ai-memory": {
