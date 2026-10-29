@@ -17,7 +17,7 @@ const USAGE = 'Usage: update.mjs [--check] [--json] [--versions <fixture.json>]\
 const CONTROL_RE = new RegExp('[\\p{Cc}\\u2028\\u2029]', 'gu');
 // A value that came from a file, the environment or a command never ends a line or starts a new one.
 const show = (v) => String(v).replace(CONTROL_RE, (ch) => '\\u' + ch.codePointAt(0).toString(16).padStart(4, '0'));
-const quote = (v) => `'${String(v).replaceAll("'", "'\\''")}'`;
+const quote = (v) => `'${show(v).replaceAll("'", "'\\''")}'`;
 
 const norm = (text) => text.replaceAll('\r\n', '\n').trim();
 const sha256 = (text) => createHash('sha256').update(norm(text)).digest('hex');
@@ -93,7 +93,8 @@ const crossed = (notes, installed, latest) => (!isSemver(latest ?? '') ? [] : Ob
   .sort(([a], [b]) => compareVersions(a, b))
   .map(([version, n]) => ({ version, text: typeof n === 'string' ? n : n.text, requiresBackup: n.requiresBackup === true })));
 
-// The skill folders whose SKILL.md matches no published version. A plugin install is never customized, and neither is the file that the\n// doctor found equal to the latest content (a release the pristine does not list yet).
+// The skill folders whose SKILL.md matches no published version. A plugin install is never customized, and neither is the file that the
+// doctor found equal to the latest content (a release the pristine does not list yet).
 async function customFolders(c, entry, r, sys) {
   if (!entry?.pristine || !r.installed) return [];
   const plugin = c.installed.find((d) => d.method === 'plugin' && d.id);

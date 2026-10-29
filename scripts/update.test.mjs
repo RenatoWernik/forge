@@ -13,7 +13,7 @@ const registry = json('components.json');
 const compat = json('compat.json');
 
 const posix = (p) => String(p).replaceAll('\\', '/');
-const CFG = '/home/u/.claude';
+const CFG = '/h/u/.claude';
 const skillPath = (name) => `${CFG}/skills/${name}/SKILL.md`;
 const plugins = (map) => ({ [`${CFG}/plugins/installed_plugins.json`]: JSON.stringify({ plugins: Object.fromEntries(Object.entries(map).map(([id, v]) => [id, [{ version: v }]])) }) });
 
@@ -21,7 +21,7 @@ const plugins = (map) => ({ [`${CFG}/plugins/installed_plugins.json`]: JSON.stri
 function machine({ files = {}, probes = {}, urls = {}, failRun, platform = 'linux' } = {}) {
   const m = { calls: [], copies: [], fetches: [], events: [] };
   m.sys = {
-    platform, home: '/home/u', env: {},
+    platform, home: '/h/u', env: {},
     exec: async (cmd, args) => { const k = [cmd, ...args].join(' '); if (k in probes) return probes[k]; throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
     run: async (cmd, args, opts) => { m.calls.push({ cmd, args, opts }); m.events.push('run'); if (failRun) throw new Error(failRun); return ''; },
     readFile: async (p) => {
@@ -158,7 +158,7 @@ test('--apply: a requires that is not ok, and a sameAs with its owner outdated, 
   const r = await run(m, '--apply', 'spec-kit', '--yes');
   assert.equal(r.code, 1);
   assert.match(r.out, /requires uv/);
-  const n = machine({ urls: urls(), ...aim('2.5.0'), files: { '/home/u/.claude.json': JSON.stringify({ mcpServers: { 'ai-memory': {} } }) } });
+  const n = machine({ urls: urls(), ...aim('2.5.0'), files: { '/h/u/.claude.json': JSON.stringify({ mcpServers: { 'ai-memory': {} } }) } });
   const s = await run(n, '--apply', 'ai-memory-mcp', '--yes', '--backup-confirmed');
   assert.equal(s.code, 1);
   assert.match(s.out, /--apply ai-memory\b/);
@@ -244,6 +244,15 @@ test('the upstream refusal of speckit-project is reported and not retried', asyn
   assert.equal(r.code, 1);
   assert.match(r.out, /refusing to upgrade/);
   assert.equal(m.calls.length, 1);
+});
+
+test('a config folder with control characters never reaches the diff line raw', async () => {
+  const cfg = '/h/cfg\u001b[31m\nFAKE';
+  const m = withCompat(machine({ urls: urls(), files: { [`${cfg}/skills/gauntlet-loop/SKILL.md`]: 'my edits' } }), pristineCompat(original));
+  m.sys.env.CLAUDE_CONFIG_DIR = cfg;
+  const r = await run(m, '--check');
+  assert.match(r.out, /\[customized\]/);
+  assert.doesNotMatch(r.out, /\u001b|\nFAKE/);
 });
 
 test('control characters in a value read from a file never reach the output raw', async () => {
