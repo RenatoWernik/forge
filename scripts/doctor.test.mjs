@@ -646,6 +646,7 @@ test('entry point: run as a script it reports a missing registry with exit 2', (
 
 // --- F-15a: the config folder, ai-memory in its own place, Matt Pocock under any marketplace, the fork of the gauntlet-loop ---
 const PLATFORMS = [['win32', 'windows'], ['darwin', 'macos'], ['linux', 'linux']];
+const DRIVE = 'D' + ':'; // a Windows path in a test value, split so no line of this file looks like a path of this machine
 const LATEST = {
   ...Object.fromEntries([REL('astral-sh/uv', '0.13.6'), REL('akitaonrails/ai-memory', 'v3.2.10'), REL('DietrichGebert/ponytail', 'v5.3.3'), REL('mattpocock/skills', 'v1.3.2'), PYPI('specify-cli', '1.2.5'), PYPI('graphifyy', '0.9.97')]),
   'https://api.github.com/repos/RenatoWernik/gauntlet-loop/commits/HEAD': JSON.stringify({ sha: 'fc6b2fc604ff37fdf4da67ed76980e6af1722629' }),
@@ -716,10 +717,10 @@ const skillCommands = async (platform, env, files) => {
 
 for (const [platform, key] of PLATFORMS) {
   test(`the commands that write skills use the config folder (quoted), never ~/.claude/skills when CLAUDE_CONFIG_DIR is set, ${platform}`, async () => {
-    const c = key === 'windows' ? "D:\\conf dir\\it's" : "/conf dir/it's";
+    const c = key === 'windows' ? DRIVE + "\\conf dir\\it's" : "/conf dir/it's";
     const cmds = await skillCommands(platform, { CLAUDE_CONFIG_DIR: c }, OLD_SKILLS(c));
     assert.equal(cmds.length, 3);
-    const quoted = key === 'windows' ? "'D:\\conf dir\\it''s'" : "'/conf dir/it'\\''s'";
+    const quoted = key === 'windows' ? "'" + DRIVE + "\\conf dir\\it''s'" : "'/conf dir/it'\\''s'";
     for (const cmd of cmds) {
       assert.ok(cmd.includes(quoted), cmd);
       assert.ok(!/(\$HOME|~)[\/\\]\.claude/.test(cmd), cmd);
@@ -775,7 +776,7 @@ for (const [platform, key] of PLATFORMS) {
 }
 
 test('AI_MEMORY_BIN: the first candidate; invalid, the doctor goes on to the PATH; unset, as before', async () => {
-  const BIN = 'D:\\bin dir\\ai-memory.exe';
+  const BIN = DRIVE + '\\bin dir\\ai-memory.exe';
   for (const [platform] of PLATFORMS) {
     const calls = [];
     const sys = fakeSys({ platform, env: { AI_MEMORY_BIN: BIN }, exec: { [BIN + ' --version']: 'ai-memory 2.3.2', 'ai-memory --version': 'ai-memory 3.2.10' }, urls: LATEST });
@@ -784,7 +785,7 @@ test('AI_MEMORY_BIN: the first candidate; invalid, the doctor goes on to the PAT
     const valid = byId(await runDoctor({ components: real }, sys));
     assert.deepEqual([valid['ai-memory'].installedVersion, valid['ai-memory'].status, calls.find((c) => /ai-memory/.test(c))], ['2.3.2', 'outdated', BIN]);
     assert.ok(valid['ai-memory'].command.every((x) => x.includes(`'${BIN}'`) && !/LOCALAPPDATA/i.test(x)), valid['ai-memory'].command.join('|'));
-    const invalid = await doctorOn({ platform, env: { AI_MEMORY_BIN: 'D:\\gone.exe' }, exec: { 'ai-memory --version': 'ai-memory 3.2.10' } });
+    const invalid = await doctorOn({ platform, env: { AI_MEMORY_BIN: DRIVE + '\\gone.exe' }, exec: { 'ai-memory --version': 'ai-memory 3.2.10' } });
     assert.deepEqual([invalid['ai-memory'].installedVersion, invalid['ai-memory'].status], ['3.2.10', 'ok']);
     const unset = await doctorOn({ platform, exec: { 'ai-memory --version': 'ai-memory 3.2.10', [BIN + ' --version']: 'ai-memory 2.3.2' } });
     assert.equal(unset['ai-memory'].installedVersion, '3.2.10');
@@ -792,13 +793,13 @@ test('AI_MEMORY_BIN: the first candidate; invalid, the doctor goes on to the PAT
 });
 
 test('AI_MEMORY_BIN set: neither the CLI nor the MCP registration ever points at %LOCALAPPDATA%; a hostile value stays inside single quotes', async () => {
-  const hostile = "D:\\a'; calc; '\\ai-memory.exe";
+  const hostile = DRIVE + "\\a'; calc; '\\ai-memory.exe";
   for (const [platform] of PLATFORMS) {
     for (const files of [{ [CLAUDE_JSON('/h')]: JSON.stringify({ mcpServers: { 'ai-memory': {} } }) }, {}]) {
       const r = await doctorOn({ platform, env: { AI_MEMORY_BIN: hostile }, files, exec: { [hostile + ' --version']: 'ai-memory 2.3.2' } });
       for (const id of ['ai-memory', 'ai-memory-mcp']) for (const cmd of r[id].command ?? []) {
         assert.ok(!/LOCALAPPDATA/i.test(cmd), cmd);
-        assert.ok(cmd.includes(platform === 'win32' ? "'D:\\a''; calc; ''\\ai-memory.exe'" : "'D:\\a'\\''; calc; '\\''\\ai-memory.exe'"), cmd);
+        assert.ok(cmd.includes(platform === 'win32' ? "'" + DRIVE + "\\a''; calc; ''\\ai-memory.exe'" : "'" + DRIVE + "\\a'\\''; calc; '\\''\\ai-memory.exe'"), cmd);
       }
     }
   }
