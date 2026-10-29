@@ -2,7 +2,8 @@
 // ida e volta (mudar o forge.json, --render, check) acaba em «All ok.».
 // Oráculo: a ida e volta, num projeto gerado. Hoje o meta só usa developer, critic e aux.model; para provar que o --render cobre os 5
 // papéis, o ataque C3b põe no meta uma cópia fresca do template com os marcadores {{developerUi}} e {{tester}}, na convenção dos que já
-// existem ({{developer}}, {{critic}}: o nome do papel; o texto é «<label ou model> <effort>»). Ver a PERGUNTA sobre estes nomes.
+// existem ({{developer}}, {{critic}}: o nome do papel; o texto é «<label ou model> <effort>»), e a linha «// forge render:» passa a
+// registá-los (resposta à PERGUNTA 3 na #4).
 // C3c: os textos dos papéis novos passam a ser escritos em código JS, por isso um label ou model fora do conjunto seguro não pode ser
 // escrito (injeção: reprova sempre).
 import { test } from 'node:test';
@@ -17,6 +18,7 @@ const text = (r) => `${r.label ?? r.model} ${r.effort}`;
 const wfFiles = (d) => readdirSync(join(d, WF)).filter((f) => f.endsWith('.js')).sort();
 const snapshot = (d) => wfFiles(d).map((f) => [f, readFileSync(join(d, WF, f), 'utf8')]);
 const description = (src) => (src.match(/^\s*description:\s*'((?:[^'\\]|\\.)*)'/m) || [])[1] ?? '';
+const recordLine = (src) => (src.match(/^\/\/ forge render:.*$/m) || [''])[0];
 const panelModel = (src) => (src.match(/title:\s*'Panel'[^}]*?model:\s*'([^']*)'/) || [])[1];
 const setForge = (d, f) => { const fj = readJson(join(d, FJ)); f(fj); writeFileSync(join(d, FJ), JSON.stringify(fj, null, 2) + '\n'); };
 
@@ -69,6 +71,8 @@ test('C3b os 5 papéis: com {{developerUi}} e {{tester}} no meta, o --render pre
   let d = description(readFileSync(file, 'utf8'));
   assert.ok(!readFileSync(file, 'utf8').includes('{{'), 'ficaram marcadores por preencher:\n' + d);
   for (const r of ['developer', 'developerUi', 'critic', 'tester']) assert.ok(d.includes(text(a.models[r])), `o meta não tem o texto de ${r} («${text(a.models[r])}»):\n${d}`);
+  let rec = recordLine(readFileSync(file, 'utf8'));
+  for (const r of ['developer', 'developerUi', 'critic', 'tester']) assert.ok(rec.includes(text(a.models[r])), `a linha «// forge render:» não regista ${r} («${text(a.models[r])}»): ${rec}`);
   const r2 = check(dest);
   assert.equal(r2.status, 0, fails(r2.out));
 
@@ -82,6 +86,8 @@ test('C3b os 5 papéis: com {{developerUi}} e {{tester}} no meta, o --render pre
     assert.ok(!d.includes(text(a.models[r])), `depois de mudar o forge.json, o meta ainda tem o texto antigo de ${r} («${text(a.models[r])}»):\n${d}`);
   }
   assert.equal(panelModel(src), CHANGED.aux.model);
+  rec = recordLine(src);
+  for (const r of ['developer', 'developerUi', 'critic', 'tester']) assert.ok(rec.includes(text(CHANGED[r])) && !rec.includes(text(a.models[r])), `a linha «// forge render:» não regista o texto novo de ${r}: ${rec}`);
   const r4 = check(dest);
   assert.equal(r4.status, 0, fails(r4.out));
   assert.match(r4.out, /All ok\./);

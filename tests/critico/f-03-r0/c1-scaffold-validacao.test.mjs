@@ -20,6 +20,7 @@ const CASES = [
     [`${r} em falta`, (a) => { delete a.models[r]; }, [`models.${r}`]],
     [`${r} sem reason`, (a) => { delete a.models[r].reason; }, [`models.${r}.reason`]],
     [`${r} com reason vazia`, (a) => { a.models[r].reason = ''; }, [`models.${r}.reason`]],
+    [`${r} com reason só com espaços`, (a) => { a.models[r].reason = ' \t  '; }, [`models.${r}.reason`]],
     [`${r} com reason que não é texto (42)`, (a) => { a.models[r].reason = 42; }, [`models.${r}.reason`]],
     [`${r} com reason null`, (a) => { a.models[r].reason = null; }, [`models.${r}.reason`]],
     [`${r} com effort «ultra»`, (a) => { a.models[r].effort = 'ultra'; }, [`models.${r}.effort`]],
@@ -66,6 +67,8 @@ for (const [mode, language] of [['rigorous', 'English'], ['accelerated', 'Englis
     const a = ANSWERS({ mode, language });
     const dest = tmp('c1-');
     await scaffold(a, { dest });
+    const raw = readFileSync(join(dest, '.claude/forge.json'), 'utf8');
+    assert.ok(!raw.startsWith('﻿'), 'o forge.json foi escrito com BOM');
     const fj = readJson(join(dest, '.claude/forge.json'));
     assert.equal(fj.mode, mode);
     assert.deepEqual(fj.models, a.models);
@@ -91,4 +94,52 @@ test('C1 linha de comandos: --answers com CRLF é aceite e grava o mode; --answe
   assert.equal(await main(['--answers', dup, '--dest', destBad], (s) => { out += s + '\n'; }), 2, out);
   assert.ok(names(out, 'mode'), 'a saída não nomeia mode:\n' + out);
   assert.deepEqual(readdirSync(destBad), []);
+});
+
+// Resposta à PERGUNTA 6 na #4: flag nova --mode; developerUi, tester e as reason só por --answers (sem elas, recusa com a lista de
+// todos os campos em falta); as flags existentes continuam a funcionar e sobrepõem-se ao ficheiro de respostas.
+const FLAGS = ['--name', 'Acme Billing', '--language', 'English', '--developer', 'sonnet:high', '--critic', 'opus:high', '--aux', 'sonnet:medium', '--workspace', 'acme', '--project', 'billing'];
+const NEW_FIELDS = ['models.developerUi', 'models.tester', 'models.developer.reason', 'models.critic.reason', 'models.aux.reason'];
+const cli = async (argv) => { const { main } = await loadScaffold(); let out = ''; const code = await main(argv, (s) => { out += s + '\n'; }); return { code, out }; };
+const answersFile = (over) => { const f = join(tmp('c1-cli-'), 'answers.json'); writeFileSync(f, JSON.stringify(ANSWERS(over), null, 2)); return f; };
+
+test('C1 linha de comandos: só flags, com --mode rigorous e sem --answers → sai com 2, nomeia developerUi, tester e as 3 reason (e não o mode) e não escreve nada', async () => {
+  const dest = tmp('c1-');
+  const { code, out } = await cli([...FLAGS, '--mode', 'rigorous', '--dest', dest]);
+  assert.equal(code, 2, out);
+  for (const f of NEW_FIELDS) assert.ok(names(out, f), `a saída não nomeia «${f}»:\n${out}`);
+  assert.ok(!names(out, 'mode'), 'alarme falso: o --mode foi dado e a saída nomeia mode:\n' + out);
+  assert.deepEqual(readdirSync(dest), []);
+});
+
+test('C1 linha de comandos: só flags, sem --mode e sem --answers → sai com 2 e nomeia também o mode, de uma vez', async () => {
+  const dest = tmp('c1-');
+  const { code, out } = await cli([...FLAGS, '--dest', dest]);
+  assert.equal(code, 2, out);
+  for (const f of ['mode', ...NEW_FIELDS]) assert.ok(names(out, f), `a saída não nomeia «${f}»:\n${out}`);
+  assert.deepEqual(readdirSync(dest), []);
+});
+
+test('C1 linha de comandos: --mode sobrepõe-se ao --answers (rigorous no ficheiro, accelerated na flag)', async () => {
+  const dest = tmp('c1-');
+  const { code, out } = await cli(['--answers', answersFile({ mode: 'rigorous' }), '--mode', 'accelerated', '--dest', dest]);
+  assert.equal(code, 0, out);
+  assert.equal(readJson(join(dest, '.claude/forge.json')).mode, 'accelerated');
+});
+
+test('C1 linha de comandos: --mode turbo com um --answers válido → sai com 2, nomeia mode e não escreve nada', async () => {
+  const dest = tmp('c1-');
+  const { code, out } = await cli(['--answers', answersFile(), '--mode', 'turbo', '--dest', dest]);
+  assert.equal(code, 2, out);
+  assert.doesNotMatch(out, /unknown option/i, 'o --mode é uma flag do contrato, não uma opção desconhecida');
+  assert.ok(names(out, 'mode'), out);
+  assert.deepEqual(readdirSync(dest), []);
+});
+
+test('C1 linha de comandos: as flags existentes continuam a funcionar sobre um --answers v2 (--developer sonnet:max:Lab sobrepõe-se ao papel do ficheiro)', async () => {
+  const dest = tmp('c1-');
+  const { code, out } = await cli(['--answers', answersFile(), '--developer', 'sonnet:max:Lab', '--dest', dest]);
+  assert.equal(code, 0, out);
+  const d = readJson(join(dest, '.claude/forge.json')).models.developer;
+  assert.deepEqual([d.model, d.effort, d.label], ['sonnet', 'max', 'Lab']);
 });

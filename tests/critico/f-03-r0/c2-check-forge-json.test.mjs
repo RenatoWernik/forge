@@ -21,6 +21,13 @@ const parsed = () => JSON.parse(original);
 const asText = (o) => JSON.stringify(o, null, 2) + '\n';
 const withForge = (text) => { writeFileSync(join(dest, FJ), text); try { return check(dest); } finally { writeFileSync(join(dest, FJ), original); } };
 const edit = (f) => () => { const o = parsed(); f(o); return asText(o); };
+const escOf = (o) => {
+  assert.ok(o.escalation && typeof o.escalation === 'object' && !Array.isArray(o.escalation), 'pré-condição: o forge.json gerado não tem a escalation em objeto');
+  return o.escalation;
+};
+// Resposta à PERGUNTA 8 na #4: a linha verifica a estrutura da escalation (as 4 condições, value inteiro ≥ 1 ou booleano, description
+// não vazia), não os limiares; um limiar afinado pelo utilizador passa.
+const escBad = (label, f) => [`escalation: ${label}`, edit((o) => f(escOf(o)))];
 
 const BAD = [
   ['mode desconhecido «turbo»', edit((o) => { o.mode = 'turbo'; })],
@@ -32,6 +39,7 @@ const BAD = [
   ...ROLES.flatMap((r) => [
     [`${r} sem reason`, edit((o) => { delete o.models[r].reason; })],
     [`${r} com reason vazia`, edit((o) => { o.models[r].reason = ''; })],
+    [`${r} com reason só com espaços`, edit((o) => { o.models[r].reason = '   '; })],
     [`${r} com reason numérica`, edit((o) => { o.models[r].reason = 42; })],
     [`${r} com effort «ultra»`, edit((o) => { o.models[r].effort = 'ultra'; })],
     [`${r} com effort «HIGH»`, edit((o) => { o.models[r].effort = 'HIGH'; })],
@@ -42,6 +50,18 @@ const BAD = [
   ['escalation vazia (objeto)', edit((o) => { o.escalation = {}; })],
   ['escalation em falta', edit((o) => { delete o.escalation; })],
   ['escalation null', edit((o) => { o.escalation = null; })],
+  ['escalation em texto', edit((o) => { o.escalation = 'x'; })],
+  ['escalation em lista, com as mesmas 4 condições', edit((o) => { o.escalation = Object.entries(escOf(o)).map(([k, c]) => ({ condition: k, ...c })); })],
+  escBad('sem a condição visualBelowReference', (e) => { delete e.visualBelowReference; }),
+  escBad('sameCriterionFailures.value em texto ("2")', (e) => { e.sameCriterionFailures.value = '2'; }),
+  escBad('sameCriterionFailures.value 0', (e) => { e.sameCriterionFailures.value = 0; }),
+  escBad('sameCriterionFailures.value 1.5', (e) => { e.sameCriterionFailures.value = 1.5; }),
+  escBad('minutesWithoutProgress.value null', (e) => { e.minutesWithoutProgress.value = null; }),
+  escBad('minutesWithoutProgress sem value', (e) => { delete e.minutesWithoutProgress.value; }),
+  escBad('attacksRedOnDelivery.value em texto ("true")', (e) => { e.attacksRedOnDelivery.value = 'true'; }),
+  escBad('visualBelowReference.value null', (e) => { e.visualBelowReference.value = null; }),
+  escBad('sameCriterionFailures.description vazia', (e) => { e.sameCriterionFailures.description = ''; }),
+  escBad('attacksRedOnDelivery sem description', (e) => { delete e.attacksRedOnDelivery.description; }),
   ['forge.json v1 (o que o scaffold gera hoje: sem mode, 3 papéis sem reason, sem escalation)', () => asText({
     language: 'English', langTag: 'en', plainStyle: true,
     models: { developer: { model: 'sonnet', effort: 'high' }, critic: { model: 'opus', effort: 'high' }, aux: { model: 'sonnet', effort: 'medium' } },
@@ -54,6 +74,12 @@ const GOOD = [
   ['mode accelerated', edit((o) => { o.mode = 'accelerated'; })],
   ['o mesmo forge.json com fins de linha CRLF', () => original.replace(/\n/g, '\r\n')],
   ['papéis novos sem os opcionais label e match', edit((o) => { delete o.models.developerUi.label; delete o.models.tester.label; })],
+  // Resposta à PERGUNTA 7: o BOM é aceite na leitura
+  ['o mesmo forge.json com BOM UTF-8', () => '﻿' + original],
+  // Resposta à PERGUNTA 8: limiares afinados pelo utilizador passam
+  ['limiares afinados (sameCriterionFailures 3, minutesWithoutProgress 60, visualBelowReference false)', edit((o) => {
+    const e = escOf(o); e.sameCriterionFailures.value = 3; e.minutesWithoutProgress.value = 60; e.visualBelowReference.value = false;
+  })],
 ];
 
 test('C2 pré-condição: o projeto gerado com mode e os 5 papéis passa o check com a linha forge.json em ok e «All ok.»', () => {

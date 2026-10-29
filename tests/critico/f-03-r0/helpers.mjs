@@ -3,7 +3,7 @@
 // para <pasta>/home e TMP, TEMP e TMPDIR para <pasta>/tmp (também nos processos filhos: o check.cjs e os node --test aninhados
 // criam lá as suas pastas). Tudo o que os ataques criam fica dentro dela, e ela é apagada no after() e, de reserva, no exit.
 //
-// Leitura do contrato que estes ataques assumem (ver as PERGUNTAS na issue #4):
+// Leitura do contrato que estes ataques assumem (com as respostas do orquestrador às 8 PERGUNTAS na issue #4):
 //   respostas e forge.json: `mode` no topo; os 5 papéis em `models.<papel>` ({ model, effort, reason, label?, match? }), como hoje;
 //   a linha «forge.json» do check.cjs é a linha (ou linhas) cujo nome começa por «forge.json»; o detalhe do nome é livre.
 import { after } from 'node:test';
@@ -114,31 +114,12 @@ export const loadCorpus = (kind) => {
 };
 
 // Um campo é nomeado na mensagem quando aparece como caminho inteiro: «mode» não conta dentro de «models», nem
-// «models.developer» dentro de «models.developerUi»; um sufixo «.algo» depois do caminho conta (models.tester → models.tester.model).
+// «models.developer» dentro de «models.developerUi», nem a flag «--mode» do texto de uso; um sufixo «.algo» depois do caminho conta
+// (models.tester → models.tester.model).
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-export const names = (msg, field) => new RegExp('(?<![\\w.])' + esc(field) + '(?![\\w])').test(msg);
+export const names = (msg, field) => new RegExp('(?<![\\w.-])' + esc(field) + '(?![\\w])').test(msg);
 
-// Critério 4, sem impor a forma interna (a issue não a fixa; ver PERGUNTA): aceita
-//   uma lista de entradas, cada uma com o nome da condição como chave ({ sameCriterionFailures: 2, description }) ou como valor
-//   ({ id|name|condition|...: 'sameCriterionFailures', value|threshold|...: 2, description|...: '...' }), ou
-//   um objeto indexado pelo nome da condição cujo valor é uma entrada dessas.
-// Numa entrada, o limiar é o único valor número/booleano e a descrição o único texto que não é um nome de condição.
-const CONDS = Object.keys(ESCALATION);
-const entry = (e, known) => {
-  if (!e || typeof e !== 'object' || Array.isArray(e)) return { name: known };
-  let name = known, value, texts = [], vals = [];
-  for (const [k, v] of Object.entries(e)) {
-    if (CONDS.includes(k)) { name = k; value = v; } else if (typeof v === 'string' && CONDS.includes(v)) name = v;
-    else if (typeof v === 'string') texts.push(v);
-    else if (typeof v === 'number' || typeof v === 'boolean') vals.push(v);
-  }
-  if (value === undefined && vals.length === 1) value = vals[0];
-  return { name, value, description: texts.length === 1 ? texts[0] : undefined };
-};
-export const normalizeEscalation = (x) => {
-  const list = Array.isArray(x) ? x.map((e) => entry(e)) : x && typeof x === 'object' ? Object.entries(x).map(([k, e]) => entry(e, CONDS.includes(k) ? k : undefined)) : [];
-  return { count: list.length, map: Object.fromEntries(list.map((e) => [e.name, e.value])), descriptions: Object.fromEntries(list.map((e) => [e.name, e.description])) };
-};
+// Forma da escalation (resposta à PERGUNTA 2 na #4): um objeto com uma chave por condição, cada uma { value, description }.
 export const isEmptyEscalation = (x) => (Array.isArray(x) ? x.length === 0 : !!x && typeof x === 'object' && Object.keys(x).length === 0);
 
 // As 4 classes de defeito do critério 2, lidas de um forge.json já parseado
@@ -148,7 +129,7 @@ export const defects = (fj) => {
   for (const r of ROLES) {
     const x = fj?.models?.[r];
     if (!x || typeof x !== 'object') continue;
-    if (typeof x.reason !== 'string' || !x.reason) out.add('papel sem reason');
+    if (typeof x.reason !== 'string' || !x.reason.trim()) out.add('papel sem reason');
     if (!EFF.includes(x.effort)) out.add('effort inválido');
   }
   if (isEmptyEscalation(fj?.escalation)) out.add('escalation vazia');
