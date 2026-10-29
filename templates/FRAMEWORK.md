@@ -38,7 +38,7 @@ Every role except the orchestrator is its own `agent()`, with a separate context
 | Test, bug, design | `mattpocock-skills:tdd` (the global `~/.claude/skills/tdd` is identical: cite it with the prefix), `mattpocock-skills:diagnosing-bugs` (a test that fails twice), `mattpocock-skills:codebase-design` (module, interface, seam) |
 | Code review | Opus-class critic gauntlet (piece), Ponytail gauntlet (excess), `/speckit-analyze` (before coding), `/speckit-converge` (after) |
 | Unknown API or library; prototype | `mattpocock-skills:research` in an auxiliary reader (the output goes through the gauntlet); `mattpocock-skills:prototype` |
-| Human-only step; CLAUDE.md, skills and prompts; merge | `mattpocock-skills:wizard` (the agent never types a credential), `mattpocock-skills:writing-for-agents`, `mattpocock-skills:resolving-merge-conflicts` |
+| Human-only step; CLAUDE.md, skills and prompts; merge conflicts | `mattpocock-skills:wizard` (the agent never types a credential), `mattpocock-skills:writing-for-agents`; a merge conflict: resolve conflicts by hand, keeping both changes, then rerun the full regression |
 
 Do not use:
 

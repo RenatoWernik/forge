@@ -442,6 +442,14 @@ test('no generated file carries personal or company data, and the manual keeps i
   assert.ok(upToBlocks < 80, 'CLAUDE.md is ' + upToBlocks + ' lines up to its generated blocks');
 });
 
+test('no generated file, in English or Portuguese, cites the skill resolving-merge-conflicts (removed from the Matt Pocock skills)', async () => {
+  for (const language of ['English', 'Portuguese (Brazil)']) {
+    const dest = await tmp();
+    const { files } = await scaffold(answers({ language }), { dest });
+    for (const rel of files) assert.doesNotMatch(await read(dest, rel), /resolving-merge-conflicts/, `${language}: ${rel}`);
+  }
+});
+
 // developerUi, tester and the reasons only come through --answers; the flags still override the roles of the file
 const ANSWERS_FILE = join(await tmp(), 'answers.json');
 await writeFile(ANSWERS_FILE, JSON.stringify(answers()));
