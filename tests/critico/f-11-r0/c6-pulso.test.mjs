@@ -34,8 +34,36 @@ test('C6: o estado só depende da última ação e a autonomia só da diferença
   assert.deepEqual(auto, ['autónomo', 'autónomo', 'autónomo']);
 });
 
-// PERGUNTA 5 da Ronda −1: sem nenhuma ação, ou sem nenhuma mensagem do utilizador na sessão, o que mostra o pulso?
-test('C6 (PERGUNTA 5): sem ação ou sem mensagem, o pulso não rebenta', { todo: 'PERGUNTA 5 da Ronda −1, por responder' }, async () => {
+// Resposta 5: sem nenhuma ação, ou sem nenhuma mensagem do utilizador, a linha do pulso mostra as 15 barras vazias (o «·» da
+// referência) e «sem atividade»; nunca rebenta, nunca mostra NaN/undefined e nunca dá alarme (nem «parado»).
+const VAZIOS = [[[], AGORA - M], [[AGORA - 30 * S], undefined], [[], undefined], [[AGORA - 45 * M], undefined]];
+test('C6 (resposta 5): sem ação ou sem mensagem, a linha do pulso tem 15 «·», «sem atividade», e nem NaN, undefined ou parado', async () => {
   const u = await api();
-  for (const [a, m] of [[undefined, AGORA], [AGORA, undefined], [undefined, undefined], [0, 0]]) await u.pulso(a, m, AGORA);
+  for (const [acoes, msg] of VAZIOS) {
+    const l = String(await u.linhaPulso(acoes, msg, AGORA));
+    const caso = JSON.stringify([acoes.map((a) => AGORA - a), msg === undefined ? 'sem mensagem' : AGORA - msg]);
+    assert.ok(l.includes('·'.repeat(15)), `${caso}: faltam as 15 barras vazias: ${l}`);
+    assert.ok(!l.includes('·'.repeat(16)), `${caso}: mais de 15 barras: ${l}`);
+    assert.match(l, /sem atividade/i, caso);
+    assert.doesNotMatch(l, /NaN|undefined|Infinity|parado/i, caso);
+  }
+});
+
+test('C6 (resposta 5): pulso() com ação ou mensagem undefined não rebenta, não dá NaN e não dá «parado»', async () => {
+  const u = await api();
+  for (const [a, m] of [[undefined, AGORA], [AGORA, undefined], [undefined, undefined]]) {
+    const r = await u.pulso(a, m, AGORA);
+    assert.doesNotMatch(JSON.stringify(r ?? {}), /NaN|null|Infinity/, JSON.stringify([a, m]));
+    assert.notEqual(minusc(r?.estado), 'parado', JSON.stringify([a, m]));
+  }
+});
+
+test('C6: com atividade, a linha do pulso não diz «sem atividade» e mostra o estado (ativo, a pensar, parado)', async () => {
+  const u = await api();
+  const casos = [[30 * S, 'ativo'], [5 * M, 'a pensar'], [12 * M, 'parado']];
+  for (const [ms, estado] of casos) {
+    const l = String(await u.linhaPulso([AGORA - 40 * M, AGORA - ms], AGORA - ms - 2 * M, AGORA));
+    assert.doesNotMatch(l, /sem atividade|NaN|undefined/i, l);
+    assert.ok(minusc(l).includes(estado), `${estado}: ${l}`);
+  }
 });

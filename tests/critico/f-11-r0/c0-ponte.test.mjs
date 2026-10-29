@@ -6,9 +6,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, relative, isAbsolute } from 'node:path';
 import { ROOT, PONTE, api } from './helpers.mjs';
 
-const FUNCOES = ['dados', 'iniciar', 'pulso', 'portas'];
+const FUNCOES = ['dados', 'iniciar', 'abrir', 'pulso', 'linhaPulso', 'portas', 'texto'];
 
-test('C0: a ponte tests/ponte/f-11.mjs exporta dados, iniciar, pulso, portas, modulo e modulos, e os ficheiros existem no pacote', async () => {
+test('C0: a ponte tests/ponte/f-11.mjs exporta dados, iniciar, abrir, pulso, linhaPulso, portas, texto, modulo e modulos, e os ficheiros existem no pacote', async () => {
   const u = await api();
   for (const f of FUNCOES) assert.equal(typeof u[f], 'function', 'falta a função ' + f);
   assert.equal(typeof u.modulo, 'string', 'falta o caminho modulo');

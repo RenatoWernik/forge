@@ -10,14 +10,22 @@
 //                          resolve no modelo que o mod mostra: os campos do leitor do F-10 (projeto, modo, objetivo, contagens,
 //                          percentagem, agentes[] com vida e minutos; ou erro, contagens: null, agentes: []). Campos a mais
 //                          (tokens, portas, ...) são aceites. `agora` em ms; o runtime falso dá o mesmo valor em $.clock.now().
-//   iniciar($)          -> Promise          o que o hook `session.start` do mod faz (sem o next): registar o comando, ler,
-//                          temporizadores, abrir o painel. Corre contra o runtime falso, que regista cada chamada.
+//   iniciar($)          -> Promise          o que o hook `session.start` do mod faz (sem o next). Corre contra o runtime falso,
+//                          que regista cada chamada. Resposta 8: só regista o comando, nunca abre o painel sozinho.
+//   abrir($)            -> Promise<{ text }> o que o hook `command.run` do comando do painel faz (o resultado do hook).
+//                          Resposta 8: sem forge.json, o text diz «este projeto não é um projeto forge» e nada é lido.
 //   pulso(ultimaAcao, ultimaMensagem, agora) -> { estado, autonomia }   ms; estado 'ativo' | 'a pensar' | 'parado';
 //                          autonomia 'autónomo' | 'comigo' (comparado sem maiúsculas). ultimaMensagem = a última mensagem do utilizador.
+//                          ultimaAcao ou ultimaMensagem podem ser undefined (resposta 5).
+//   linhaPulso(acoes, ultimaMensagem, agora) -> string   a linha do pulso que o mod mostra; acoes = ms das ações do orquestrador
+//                          (lista, pode ser vazia); ultimaMensagem pode ser undefined. Resposta 5: sem ação ou sem mensagem,
+//                          15 barras vazias (o «·» da referência) e «sem atividade».
 //   portas(saida, plataforma) -> number[]   as portas em escuta na saída literal; plataforma = process.platform ('win32' | 'darwin' | 'linux')
+//   texto(modelo, largura) -> string        o painel em texto simples (resposta 4), a partir do modelo que dados() devolve
 //   modulo              -> string           caminho absoluto do módulo de hooks do mod (o que o hooks.json do plugin lista)
 //   modulos             -> string[]         caminhos absolutos de TODOS os ficheiros de código do mod (hooks, dados, portas, ...)
-//   texto(modelo, largura) -> string        OPCIONAL, só se a PERGUNTA 4 for respondida com «sim» (ver c7-render.test.mjs)
+// As respostas do orquestrador às PERGUNTAS da Ronda −1 (comentário de 2026-10-29 na #12) fazem parte do contrato e estão
+// citadas como «resposta N».
 import { after } from 'node:test';
 import { mkdtempSync, rmSync, existsSync, readdirSync, statSync, lstatSync, readFileSync, writeFileSync, mkdirSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
