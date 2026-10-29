@@ -66,7 +66,7 @@ test('the panel step seeds notes/n0001 as a decision with the reason of each rol
 });
 
 const answers = {
-  projectName: 'Acme', language: 'English', mode: 'accelerated',
+  projectName: 'Acme', language: 'English', mode: 'accelerated', repo: 'acme/billing',
   models: Object.fromEntries(['developer', 'developerUi', 'critic', 'tester', 'aux'].map((r, i) => [r, { model: 'opus', effort: 'high', reason: `reason ${i} <b> "q" & 95 %` }])),
   memory: { workspace: 'acme', project: 'billing' },
 };

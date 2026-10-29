@@ -1,0 +1,90 @@
+{
+  "$comment": "What forge's integration was last verified against (decision D1: no pins, the doctor still compares with the newest release; this only records the tested version). verifiedWith is the version or sha tested; source is the upstream at that tag or sha; surface lists the skill names (skills) and the subcommands and flags (commands) that templates/** and check.cjs use, checked by scripts/compat.test.mjs against scripts/fixtures/compat/surface-2026-10-29.json; notes maps a version to a warning shown when updating across it; upstream (only the gauntlet-loop, a fork) is the original repository and the commit the fork was taken from.",
+  "components": {
+    "uv": {
+      "verifiedWith": "0.13.6",
+      "source": "https://github.com/astral-sh/uv/releases/tag/0.13.6",
+      "surface": { "skills": [], "commands": [] }
+    },
+    "gauntlet-loop": {
+      "verifiedWith": "fc6b2fc",
+      "source": "https://github.com/RenatoWernik/gauntlet-loop/tree/fc6b2fc",
+      "upstream": { "repo": "robonuggets/gauntlet-loop", "base": "9b1975a" },
+      "surface": { "skills": ["gauntlet-loop"], "commands": [] }
+    },
+    "ai-memory": {
+      "verifiedWith": "3.2.10",
+      "source": "https://github.com/akitaonrails/ai-memory/tree/v3.2.10",
+      "surface": { "skills": [], "commands": ["ai-memory backup", "ai-memory hook", "ai-memory install-mcp", "ai-memory pending-writes", "ai-memory read-page", "ai-memory status"] },
+      "notes": {
+        "3.0.0": "Major: the database is migrated on first start, and going back needs a backup and the 2.x binary. Take a backup (`ai-memory backup`) before updating across 3.0.0, and read docs/upgrading-to-3.0.md first."
+      }
+    },
+    "ai-memory-mcp": {
+      "verifiedWith": "3.2.10",
+      "source": "https://github.com/akitaonrails/ai-memory/tree/v3.2.10",
+      "surface": { "skills": [], "commands": ["ai-memory install-mcp"] }
+    },
+    "ponytail": {
+      "verifiedWith": "5.3.3",
+      "source": "https://github.com/DietrichGebert/ponytail/tree/v5.3.3",
+      "surface": { "skills": ["ponytail", "ponytail-audit", "ponytail-debt", "ponytail-review"], "commands": [] }
+    },
+    "spec-kit": {
+      "verifiedWith": "1.2.5",
+      "source": "https://github.com/github/spec-kit/tree/v1.2.5",
+      "surface": {
+        "skills": ["speckit-analyze", "speckit-clarify", "speckit-constitution", "speckit-converge", "speckit-implement", "speckit-plan", "speckit-specify", "speckit-tasks"],
+        "commands": ["specify init --force", "specify init --here", "specify init --integration", "specify init --non-interactive", "specify init --script"]
+      }
+    },
+    "sdd": {
+      "verifiedWith": "2.1.0",
+      "source": "https://github.com/SpillwaveSolutions/sdd-skill/tree/eba9606",
+      "surface": { "skills": ["sdd"], "commands": [] }
+    },
+    "mattpocock-skills": {
+      "verifiedWith": "1.3.2",
+      "source": "https://github.com/mattpocock/skills/tree/v1.3.2",
+      "surface": {
+        "skills": [
+          "mattpocock-skills:codebase-design",
+          "mattpocock-skills:diagnosing-bugs",
+          "mattpocock-skills:domain-modeling",
+          "mattpocock-skills:grilling",
+          "mattpocock-skills:prototype",
+          "mattpocock-skills:research",
+          "mattpocock-skills:setup-matt-pocock-skills",
+          "mattpocock-skills:tdd",
+          "mattpocock-skills:wizard",
+          "mattpocock-skills:writing-for-agents"
+        ],
+        "commands": []
+      }
+    },
+    "graphify": {
+      "verifiedWith": "0.9.97",
+      "source": "https://github.com/Graphify-Labs/graphify/tree/v0.9.97",
+      "surface": {
+        "skills": [],
+        "commands": [
+          "graphify affected",
+          "graphify claude",
+          "graphify cluster-only",
+          "graphify explain",
+          "graphify god-nodes",
+          "graphify hook",
+          "graphify query",
+          "graphify reflect",
+          "graphify save-result",
+          "graphify update"
+        ]
+      }
+    },
+    "graphify-skill": {
+      "verifiedWith": "0.9.97",
+      "source": "https://github.com/Graphify-Labs/graphify/tree/v0.9.97",
+      "surface": { "skills": [], "commands": ["graphify install"] }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": ".claude/briefs/critic.md",
+  "find": "`DISABLE_AUTOUPDATER=1`",
+  "replace": "a clean environment",
+  "line": "briefs"
+}

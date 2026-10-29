@@ -67,7 +67,7 @@ export const translatePt = (text) => {
     if (/^\s*```/.test(l)) { fence = !fence; return l; }
     if (fence || !l.trim() || /^[|\s:-]+$/.test(l)) return l;
     if (l.startsWith('#')) return NATURAL[l] ?? l.replace(/^(#{2,} )(\d+\. )?.*$/, '$1$2Seção');
-    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + LINE_PT + ' ' + (l.match(/`[^`]*`/g) ?? []).join(' ');
+    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + LINE_PT + (l.includes('Verifies:') ? ' Verifica: ' : ' ') + (l.match(/`[^`]*`/g) ?? []).join(' ');
   }).join('\n');
 };
 
@@ -79,7 +79,7 @@ export const buildProject = async (answers, { translate = true } = {}) => {
   await scaffold(answers, { dest });
   const fj = readJson(join(dest, '.claude/forge.json'));
   if (translate && /^pt/i.test(fj.langTag)) {
-    for (const rel of ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
+    for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', '.checkpoints/README.md', ...['dev', 'critic', 'round-minus-1', 'batch'].map((b) => `.claude/briefs/${b}.md`)]) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   }
   return { dest, fj };
 };

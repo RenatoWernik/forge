@@ -45,17 +45,18 @@ const translatePt = (text) => {
     if (/^\s*```/.test(l)) { fence = !fence; return l; }
     if (fence || !l.trim() || /^[|\s:-]+$/.test(l)) return l;
     if (l.startsWith('#')) return NATURAL[l] ?? l.replace(/^(#{2,} )(\d+\. )?.*$/, '$1$2Seção');
-    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + LINE_PT + ' ' + (l.match(/`[^`]*`/g) ?? []).join(' ');
+    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + LINE_PT + (l.includes('Verifies:') ? ' Verifica: ' : ' ') + (l.match(/`[^`]*`/g) ?? []).join(' ');
   }).join('\n');
 };
 
+const PROSE = ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', '.checkpoints/README.md']; // the briefs of .claude/briefs/ are added by the folder
 let n = 0;
 const build = async (set) => {
   const dest = join(WORK, 'p' + ++n);
   await scaffold(answers.get(set), { dest });
   const forge = readJson(join(dest, '.claude/forge.json'));
   const pending = readFileSync(join(dest, 'CLAUDE.md'), 'utf8').includes('PANEL-URL-PENDING'); // before the translation drops the bare URL
-  if (/^pt/i.test(forge.langTag)) for (const rel of ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
+  if (/^pt/i.test(forge.langTag)) for (const rel of [...PROSE, ...readdirSync(join(dest, '.claude/briefs')).map((f) => '.claude/briefs/' + f)]) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   return { dest, forge, pending };
 };
 const check = (cwd) => { const r = spawnSync(process.execPath, ['.claude/check.cjs'], { cwd, encoding: 'utf8', env, timeout: 240000 }); return { status: r.status, out: (r.stdout ?? '') + (r.stderr ?? '') }; };

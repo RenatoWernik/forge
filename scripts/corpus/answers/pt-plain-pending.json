@@ -2,6 +2,7 @@
   "projectName": "Clube do Livro",
   "language": "Portuguese (Brazil)",
   "mode": "rigorous",
+  "repo": "acme/livro",
   "models": {
     "developer": {
       "model": "haiku",
@@ -32,6 +33,11 @@
       "effort": "low",
       "reason": "the panel only records, it needs no deep reasoning"
     }
+  },
+  "hooks": {
+    "killByName": true,
+    "backgroundTests": true,
+    "idleWatch": true
   },
   "script": "ps",
   "plainStyle": true,
