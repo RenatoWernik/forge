@@ -9,7 +9,6 @@
 //   escalation = sameCriterionFailures and minutesWithoutProgress (integer, 1 or more), attacksRedOnDelivery and visualBelowReference (true or false), each with a description
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm'), { spawnSync } = require('node:child_process')
 process.chdir(path.join(__dirname, '..'))
-const WIN = 'C' + ':\\' // the root of the Windows paths the simulations use, in two parts
 const H = os.homedir(), AIM = 'ai-memory', ENV = process.argv.includes('--env')
 const sh = (exe, args, input) => spawnSync(exe, args, { input, encoding: 'utf8' })
 const out = (...a) => { const r = sh(...a); return r.error ? '' : r.stdout + r.stderr }
@@ -166,7 +165,7 @@ async function chk(name, f) {
   }
   const rejects = async (file, args) => { let n = 0; const x = await wf(file, args, () => ++n); return n === 0 && /incomplete args/.test(x.err?.message) }
   const [D, C, X] = WFR.map(k => F[k])
-  const base = { checkpoint: { n: 1, title: 'T' }, root: WIN + 'p', dashboardUrl: 'https://x', context: 'CTX-SPEC-PLAN-TASKS', models: F, language: FJ.language }
+  const base = { checkpoint: { n: 1, title: 'T' }, root: 'C:\\p', dashboardUrl: 'https://x', context: 'CTX-SPEC-PLAN-TASKS', models: F, language: FJ.language }
   const rn = o => +o.label.match(/:r(\d+)$/)[1]
   const flip = l => (l === 'A' ? 'B' : 'A')
   const only = (calls, re) => calls.filter(c => re.test(c.opts.label))
@@ -280,8 +279,8 @@ async function chk(name, f) {
   const warns = x => x.logs.filter(l => l.startsWith('WARNING panel:')).length
   await chk('panel: build: a panel agent without "ok" (null or error) becomes a WARNING in log() and the piece wins anyway; with "ok" the log stays clean', () => pb.out.results[0].won && warns(pb) === 2 && !pbOk.logs.some(l => l.startsWith('WARNING')))
   await chk('panel: ponytail: a panel agent without "ok" (null or error) becomes a WARNING in log() and the unit is approved anyway', () => pp.out.results[0].won && warns(pp) === 3)
-  r = await wf('gauntlet-ponytail.js', u2, (p, o) => o.label.startsWith('pony:') ? { ...cut, beforeDir: WIN + 'elsewhere' } : pony(p, o))
-  await chk('ponytail: the developer and the critic get the "before" the workflow computed (.gauntlet/ponytail/cp1/u2/before), never a path the developer declared', () => { const dir = WIN + 'p\\.gauntlet\\ponytail\\cp1\\u2\\before', c = only(r.calls, /^pony-critic:/); return only(r.calls, /^pony:/)[0].prompt.includes(dir) && c.length > 0 && c.every(x => x.prompt.includes(dir) && !x.prompt.includes(WIN + 'elsewhere')) })
+  r = await wf('gauntlet-ponytail.js', u2, (p, o) => o.label.startsWith('pony:') ? { ...cut, beforeDir: 'C:\\elsewhere' } : pony(p, o))
+  await chk('ponytail: the developer and the critic get the "before" the workflow computed (.gauntlet/ponytail/cp1/u2/before), never a path the developer declared', () => { const dir = 'C:\\p\\.gauntlet\\ponytail\\cp1\\u2\\before', c = only(r.calls, /^pony-critic:/); return only(r.calls, /^pony:/)[0].prompt.includes(dir) && c.length > 0 && c.every(x => x.prompt.includes(dir) && !x.prompt.includes('C:\\elsewhere')) })
   const trimmed = async (f, other) => { const x = await wf('gauntlet-ponytail.js', u2, (p, o) => o.label === 'pony:u2:r1' ? { ...cut, [f]: [big] } : pony(p, o)), c = only(x.calls, /^pony-critic:/)[0].prompt; return !c.includes(big) && c.includes('[cut') && x.logs.some(l => l.includes('u2 r1 ' + f)) && !x.logs.some(l => l.includes('u2 r1 ' + other)) }
   await chk('ponytail: cuts or kept over the limit reach the critic cut, flagged there and recorded with log() (only the cut field)', async () => (await Promise.all([trimmed('cuts', 'kept'), trimmed('kept', 'cuts')])).every(Boolean))
   const [dn, cn] = [await wf('gauntlet-ponytail.js', u1, (p, o) => o.label === 'pony:u1:r1' ? null : pony(p, o)), await wf('gauntlet-ponytail.js', u1, (p, o) => o.label === 'pony-critic:u1:r2' ? null : pony(p, o))]
