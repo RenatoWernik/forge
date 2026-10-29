@@ -109,7 +109,9 @@ async function chk(name, f) {
     console.log('info  CP0: ' + (has('BOOTSTRAP.md') ? 'open (follow BOOTSTRAP.md)' : 'closed'))
   }
   const DOCS = ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']
-  if (FJ.plainStyle) await chk('style: no dash, arrow or emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist)', () => DOCS.filter(f => has(f)).every(f => !/[\u2013\u2014\u2192\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u.test(fs.readFileSync(f, 'utf8'))))
+  const BRIEFS = ['dev', 'critic', 'round-minus-1', 'batch'] // .claude/briefs/<name>.md, one per role
+  const PROSE = [...DOCS, ...BRIEFS.map(b => '.claude/briefs/' + b + '.md'), '.checkpoints/README.md'] // the files whose language and style are checked
+  if (FJ.plainStyle) await chk('style: no dash, arrow or emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist) (also the briefs and .checkpoints/README.md)', () => PROSE.filter(f => has(f)).every(f => !/[\u2013\u2014\u2192\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u.test(fs.readFileSync(f, 'utf8'))))
   // language: the three documents follow "language" of forge.json. Their prose (outside code blocks, backtick spans, links and URLs) is scored by the share of very common
   // function words per language, so any correct translation passes whatever it calls its headings, and a translation of the headings alone does not (no network, no model).
   // English must be mostly English words; any other language must have almost none left; Portuguese must also show its own words.
@@ -136,8 +138,8 @@ async function chk(name, f) {
     const off = ([, w]) => { const e = share(w, WORDS.en.split(' ')), p = share(w, WORDS.pt.split(' ')); return en ? e < 0.15 || p > 0.03 : e > 0.1 || (pt && p < 0.05) }
     return (big.length ? big : all).filter(x => !x[2] && off(x)).map(([t]) => t)
   }
-  const wrong = DOCS.filter(f => has(f)).map(f => [f, badSections(f)]).filter(([, b]) => b.length).map(([f, b]) => f + ' [' + b.join(', ') + ']')
-  await chk('language: CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist) are in the language of forge.json, in the body text and not only in the headings' + (wrong.length ? ' (not in ' + FJ.language + ': ' + wrong.join(', ') + ')' : ''), () => typeof FJ.language === 'string' && tagOk && !wrong.length)
+  const wrong = PROSE.filter(f => has(f)).map(f => [f, badSections(f)]).filter(([, b]) => b.length).map(([f, b]) => f + ' [' + b.join(', ') + ']')
+  await chk('language: CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist) are in the language of forge.json, in the body text and not only in the headings (also the briefs and .checkpoints/README.md)' + (wrong.length ? ' (not in ' + FJ.language + ': ' + wrong.join(', ') + ')' : ''), () => typeof FJ.language === 'string' && tagOk && !wrong.length)
 
   // v3 documents. invariants: the 12 numbered items of CLAUDE.md and AGENTS.md, each with its Verifies: line (in English also the literal titles; in Portuguese the label
   // is "Verifica:"; in another language the label is the translator's, so the item must still name what verifies it in a backtick span). AGENTS.md mirrors CLAUDE.md: the same 12 blocks.
@@ -172,6 +174,60 @@ async function chk(name, f) {
   const LOCAL = { test: t => (t.match(FILES) || []).some(f => /^(?:contracts?|tickets?|issues?|<(?:n|id|num|number|ticket|issue)>|\d+|[A-Z]\d{2,})$/i.test(f.split('/').pop().replace(/\.[^.]+$/, ''))) }
   const here = DOCS.filter(f => has(f)), text = f => fs.readFileSync(f, 'utf8')
   if (here.length) await chk('ticket contract: GitHub Issues (CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md read it with ' + GH + ', with no contract file in the project)', () => here.every(f => !LOCAL.test(text(f))) && here.filter(f => f !== 'BOOTSTRAP.md').every(f => text(f).includes(GH)))
+
+  // briefs: the 4 role briefs of .claude/briefs/. Each has what every brief has (the hook warning in its first 5 lines, the operating rules, the contract in the issue, the rule of the real sessions)
+  // and the clauses of its role. A rule is [what the FAIL line says, literals that survive a translation (code spans), English prose patterns]: in English both are read, in another language
+  // only the literals, because the prose is the translator's. The FAIL line names the brief and the rule that is missing.
+  // ponytail: the prose of another language is not read, upgrade: add the patterns of a language here when a translation of the briefs is checked by words
+  const BRIEF_ALL = [
+    ['hook warning in the first 5 lines', ['CONTEXT WARNING', 'CONTEXT CRITICAL'], [/orchestrator/i, /\b(never|not|no)\b[^\n]{0,80}\b(stop|halt|pause)/i]],
+    ['kill by PID rule (never by name)', ['taskkill /IM', 'killall', 'pkill'], [/\bPID\b/]],
+    ['foreground tests rule (never in the background)', ['run_in_background'], [/foreground/i, /\b9\s*min(utes)?\b|\b540\s*s\b/i]],
+    ['checkpoint rule (after each step)', ['.checkpoints/'], [/after (each|every)\s+(step|stage)/i]],
+    ['contract rule (the issue, read with gh issue view)', ['gh issue view <n> --json body,comments'], [/\bbody\b/i, /orchestrator'?s?\b[^.\n]{0,30}\bcomments|comments\b[^.\n]{0,30}\borchestrator/i, /critics?'?s?\b[^.\n]{0,20}\bcomments\b[^.\n]{0,60}\bcontext/i, /\bQUESTION\b/, /\bcomment/i]],
+    ['real sessions rule', ['claude -p', 'claude plugin validate', 'DISABLE_AUTOUPDATER=1'], [
+      /subagents?\b[^.\n]{0,80}\borchestrator|orchestrator\b[^.\n]{0,80}\bsubagents?/i, /(new|another|separate|second)\s+(`?claude`?\s+)?(window|session)/i, /fake\b[^.\n]{0,15}(`?claude`?|runtime)/i,
+      /object of (a |the )?test|test object|under test/i, /final (verification|check)/i, /once (per|a|for each|for every) (ticket|piece)/i,
+      /\b(critics?)\b[^.\n]{0,30}\b(or|and)\b[^.\n]{0,15}\btesters?\b|\btesters?\b[^.\n]{0,15}\b(or|and)\b[^.\n]{0,30}\b(critics?)\b/i, /headless/i, /haiku/i,
+      /\b(3|three)\b[^.\n]{0,30}\bcalls\b|(at most|no more than|max(imum)?|up to)\s+(3|three)\b/i, /bypass/i,
+      /(never|do not|don't)\s+(kill|stop|interrupt|abort)\w*\b[^.\n]{0,40}\b(mid|middle|halfway|half-way|partway|before it (ends|finishes))|wait (for it )?(to|until it) (finish|end)/i,
+      /(record|log|register|note|write)\w*\b[^.\n]{0,60}\bcheckpoint/i]],
+  ]
+  const BRIEF_ROLE = {
+    dev: [
+      ['fix by class with a test of the class', [], [/(fix|correct)\w*\b[^.\n]{0,60}\bby class|\bclass of inputs/i, /\btest\b[^.\n]{0,20}\bclass\b/i]],
+      ['/ponytail-review with the Must fix and Should fix corrected before delivering', ['/ponytail-review'], [/Must fix/i, /Should fix/i, /before (you )?(deliver|hand)|before (the )?(delivery|handing)/i]],
+      ['the Round -1 attacks green', [], [/Round [−-]1/i, /attacks?\b[^.\n]{0,80}\bgreen\b/i]],
+      ['the contract wins over an attack', [], [/contract wins/i]],
+      ['Round 0', [], [/\bRound 0\b/i]],
+    ],
+    critic: [
+      ['materiality test with its 3 criteria', [], [/materiality/i, /always[- ]fails?|fails? always|always[- ]rejects?/i, /(goal|objective|purpose|intent)\b[^.\n]{0,20}\bcriteri(on|a)|criterion'?s (goal|objective|purpose)/i, /reproducib\w*/i, /oracle/i]],
+      ['the list of what is MINOR', [], [/\bMINOR\b/, /cosmetic/i, /literal (reading|read)|read(ing)? literally/i, /ambigu/i, /\b(own|your)\b[^.\n]{0,10}\battacks?\b/i]],
+      ['the verdict format', [], [/\bVERDICT\b/, /\bBLOCKING\b|\bBLOCKERS\b/, /\bMINOR\b/, /QUESTIONS (TO|FOR|ON|ABOUT) THE BAR|BAR QUESTIONS/, /\bFOLLOW-?UPS?\b/]],
+      ['R1 exhaustive and short later rounds', [], [/\bR1\b|\bround 1\b|\bfirst round\b/i, /exhaustive/i, /(later|following|subsequent|next|other)\s+rounds\b[^.\n]{0,100}\b(short|only)\b/i]],
+    ],
+    'round-minus-1': [
+      ['exactly the oracle, without adding requirements', [], [/exactly\b[^.\n]{0,20}\boracles?/i, /(without|never|no|not)\s+add\w*\b[^.\n]{0,40}\b(requirements?|demands?)/i]],
+      ['BAR GAPS', [], [/BAR GAPS|GAPS (IN|OF|ON) THE BAR/]],
+      ['prove that the attacks fail on the base', [], [/\b(prove|show|confirm|demonstrate)\w*\b[^.\n]{0,80}\b(fails?|failing|red)\b/i, /\bbase\b|\bmain\b|before the code/i]],
+      ['do not edit the product code', [], [/(do not|don't|never|not)\s+(edit|change|touch|modify|write)\w*\b[^.\n]{0,40}\b(product|production)\b[^.\n]{0,10}\bcode/i]],
+    ],
+    batch: [
+      ['additive merge', [], [/additiv\w*/i, /\bmerg\w*/i]],
+      ['the flaky rule', [], [/flaky/i, /isolated/i, /\bdiff\b/i]],
+      ['a regression goes back to the piece that caused it', [], [/regressions?\b[^.\n]{0,120}\b(piece|ticket)\b[^.\n]{0,20}\b(that )?caused/i]],
+      ['no push, PR or merge without the yes of the user', [], [/^(?=.*\bpush\b)(?=.*\bPRs?\b)(?=.*\bmerge\b)(?=.*\b(user|utilizador|usu[áa]rio)\b)(?=.*\b(never|no|not|without)\b).*$/im]],
+    ],
+  }
+  const lacks = BRIEFS.flatMap(b => {
+    const f = '.claude/briefs/' + b + '.md'
+    if (!has(f)) return [b + '.md: the file is missing']
+    const all = fs.readFileSync(f, 'utf8'), top = all.split(/\r?\n/).slice(0, 5).join('\n')
+    const miss = [...BRIEF_ALL, ...BRIEF_ROLE[b]].filter(([what, lits, res]) => { const s = what.startsWith('hook') ? top : all; return !lits.every(l => s.includes(l)) || (en && !res.every(re => re.test(s))) }).map(r => r[0])
+    return miss.length ? [b + '.md: ' + miss.join(', ')] : []
+  })
+  await chk('briefs (' + (lacks.length ? 'not ok: ' + lacks.join('; ') : 'the 4 role briefs of .claude/briefs/') + ')', () => !lacks.length)
 
   // workflows: simulation with a fake runtime (no model is called) of the invariants the manual promises and of the Workflow API contract.
   // The script runs in a vm context that only has the API hooks the workflows use (args, agent, parallel, phase, log; no Node, no files,

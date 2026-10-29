@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": ".claude/briefs/dev.md",
+  "find": "> **IMPORTANT:** the context warnings of the hook (`CONTEXT WARNING`, `CONTEXT CRITICAL`) belong to the orchestrator's session, never to yours, and they are never a reason to stop. Keep working to the end and save the checkpoint.",
+  "replace": "> **IMPORTANT:** read this brief before you start.",
+  "line": "briefs"
+}

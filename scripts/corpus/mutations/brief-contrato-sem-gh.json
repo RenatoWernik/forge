@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": ".claude/briefs/batch.md",
+  "find": "`gh issue view <n> --json body,comments`",
+  "replace": "the page of the issue",
+  "line": "briefs"
+}

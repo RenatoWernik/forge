@@ -85,7 +85,7 @@ export const generate = async (answers) => {
   await scaffold(answers, { dest });
   const fj = readJson(join(dest, '.claude/forge.json'));
   if (/^pt/i.test(fj.langTag)) {
-    for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) if (existsSync(join(dest, rel))) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
+    for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', '.checkpoints/README.md', ...['dev', 'critic', 'round-minus-1', 'batch'].map((b) => `.claude/briefs/${b}.md`)]) if (existsSync(join(dest, rel))) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   }
   return { dest, fj };
 };
