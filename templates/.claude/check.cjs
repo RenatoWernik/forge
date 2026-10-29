@@ -1,6 +1,6 @@
 // Validates the framework. Usage, from the project root: node .claude/check.cjs [--env]   (exit code 1 if there is a FAIL)
 //   default: .claude/forge.json + a simulation of both workflows (no model is called) + the manual/bootstrap examples that exist
-//   --env:   also the machine and project setup (ai-memory, claude-mem, Spec-Kit, Graphify, git, skills); versions are forge's doctor job
+//   --env:   also the machine and project setup (ai-memory, Spec-Kit, Graphify, git, skills); versions are forge's doctor job
 // .claude/forge.json: { "language": "English", "langTag": "en", "models": { "developer": R, "critic": R, "aux": R } } with R = { model, effort, label?, match? }
 //   model  = alias or ID passed to agent() (sonnet, opus, ...); effort = low | medium | high | xhigh | max
 //   label  = name shown on the panel (default: model); match = regex the model ID declared by an agent must satisfy (default: model)
@@ -65,7 +65,6 @@ async function chk(name, f) {
     await chk('ai-memory: server answers at ' + url, async () => (await get(url + '/')).status > 0)
     await chk('ai-memory: .ai-memory.toml admits capture in this project', () => out(AIM, ['hook', '--event', 'user-prompt-submit', '--agent', 'claude-code', '--server-url', url, '--check-capture'], JSON.stringify({ cwd: process.cwd().replace(/\\/g, '/') })).includes('"admits_capture":true'))
     await chk('ai-memory: page _rules/framework.md seeded', () => sh(AIM, ['read-page', '--path', '_rules/framework.md', '--workspace', toml('workspace'), '--project', toml('project')]).status === 0)
-    await chk('claude-mem: worker healthy on :37777', async () => (await (await get('http://localhost:37777/api/health')).json()).status === 'ok')
     await chk('Spec-Kit: .specify/ and the /speckit-* skills installed', () => has('.specify/memory/constitution.md') && ['constitution', 'specify', 'clarify', 'plan', 'tasks', 'analyze', 'converge'].every(n => has('.claude/skills/speckit-' + n, 'SKILL.md')))
     await chk('Matt Pocock: /setup done (docs/agents/ and an "## Agent skills" block in CLAUDE.md)', () => has('docs/agents/issue-tracker.md') && fs.readFileSync('CLAUDE.md', 'utf8').includes('## Agent skills'))
     await chk('Graphify: post-commit and post-checkout hooks installed', () => { const s = out('graphify', ['hook', 'status']); return s.includes('post-commit: installed') && s.includes('post-checkout: installed') })

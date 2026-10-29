@@ -160,28 +160,28 @@ test('CLI found only on PATH (no package manager lists it): the component defaul
 });
 
 const plugin = (over = {}) => cli({
-  id: 'claude-mem', type: 'plugin',
-  installed: [{ method: 'plugin', id: 'claude-mem@thedotmack' }],
-  latest: { method: 'github-release', repo: 'thedotmack/claude-mem' },
+  id: 'ponytail', type: 'plugin',
+  installed: [{ method: 'plugin', id: 'ponytail@ponytail' }],
+  latest: { method: 'github-release', repo: 'DietrichGebert/ponytail' },
   ...over,
 });
 const PLUGINS_JSON = (home) => join(home, '.claude', 'plugins', 'installed_plugins.json');
 
 test('installed plugin: version read from installed_plugins.json', async () => {
-  const installedPlugins = JSON.stringify({ plugins: { 'claude-mem@thedotmack': [{ scope: 'user', version: '13.27.1' }] } });
+  const installedPlugins = JSON.stringify({ plugins: { 'ponytail@ponytail': [{ scope: 'user', version: '1.4.0' }] } });
   const sys = fakeSys({
     files: { [PLUGINS_JSON('/h')]: installedPlugins },
-    urls: Object.fromEntries([REL('thedotmack/claude-mem', 'v13.28.0')]),
+    urls: Object.fromEntries([REL('DietrichGebert/ponytail', 'v1.5.0')]),
   });
   const c = (await runDoctor({ components: [plugin()] }, sys)).components[0];
   assert.equal(c.installed, true);
-  assert.equal(c.installedVersion, '13.27.1');
+  assert.equal(c.installedVersion, '1.4.0');
   assert.equal(c.status, 'outdated');
 });
 
 test('plugin absent from installed_plugins.json (or file missing): missing', async () => {
   const other = JSON.stringify({ plugins: { 'outro@mkt': [{ version: '1.0.0' }] } });
-  const urls = Object.fromEntries([REL('thedotmack/claude-mem', 'v13.28.0')]);
+  const urls = Object.fromEntries([REL('DietrichGebert/ponytail', 'v1.5.0')]);
   for (const files of [{ [PLUGINS_JSON('/h')]: other }, {}]) {
     const c = (await runDoctor({ components: [plugin()] }, fakeSys({ files, urls }))).components[0];
     assert.equal(c.status, 'missing');
@@ -417,7 +417,7 @@ test('network failure with the component absent: still missing, with the install
 });
 
 test('corrupt Claude config file: unknown with the error, the report survives', async () => {
-  const sys = fakeSys({ files: { [PLUGINS_JSON('/h')]: '{not json' }, urls: Object.fromEntries([REL('thedotmack/claude-mem', 'v13.28.0')]) });
+  const sys = fakeSys({ files: { [PLUGINS_JSON('/h')]: '{not json' }, urls: Object.fromEntries([REL('DietrichGebert/ponytail', 'v1.5.0')]) });
   const c = (await runDoctor({ components: [plugin()] }, sys)).components[0];
   assert.equal(c.status, 'unknown');
   assert.ok(c.error);
@@ -518,11 +518,16 @@ test('real registry: every component is complete, on all three platforms, with a
   }
 });
 
-test('real registry: covers the seven component groups of the framework', () => {
+test('real registry: covers the six component groups of the framework', () => {
   const groups = new Set(real.map((c) => c.group));
-  for (const g of ['gauntlet-loop', 'ai-memory', 'claude-mem', 'ponytail', 'sdd', 'matt-pocock', 'graphify']) assert.ok(groups.has(g), g);
+  for (const g of ['gauntlet-loop', 'ai-memory', 'ponytail', 'sdd', 'matt-pocock', 'graphify']) assert.ok(groups.has(g), g);
   const types = new Set(real.map((c) => c.type));
   for (const t of ['skill', 'plugin', 'cli', 'mcp']) assert.ok(types.has(t), t);
+});
+
+test('real registry: the groups are exactly those six (the prerequisite group aside, tdd comes with matt-pocock)', () => {
+  const groups = [...new Set(real.map((c) => c.group))].filter((g) => g !== 'prerequisite').sort();
+  assert.deepEqual(groups, ['ai-memory', 'gauntlet-loop', 'graphify', 'matt-pocock', 'ponytail', 'sdd']);
 });
 
 test('real registry: never pins a version (latest is always looked up, commands install the newest)', () => {

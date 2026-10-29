@@ -85,7 +85,7 @@ The panel is a live page (an Artifact with a small database) that shows agents, 
 - If you have the `Artifact` tool: ask the user's yes to publish `.claude/dashboard/panel.html` as a private artifact (only they can open it until they share it). Load the `artifact-design` and `artifact-capabilities` skills first, as the tool requires, declare the `db` capability (the page reads and writes its collections), and publish with a short generic icon such as `dashboard`. Keep the returned URL.
 - Load `ArtifactData` (ToolSearch `select:ArtifactData`) and seed with one `batch` write, times from `date -u +%Y-%m-%dT%H:%M:%SZ`, free text in the project language:
   - `meta/project`: `{name, description, phase:"constituicao", phaseNote, updatedAt}`
-  - `meta/framework`: `{items:[{key,name,status,note} x 8], updatedAt}` with keys `gauntlet`, `ai-memory`, `claude-mem`, `ponytail`, `sdd`, `tdd`, `mattpocock`, `graphify`, status `ocioso` and a note saying it waits for CP0
+  - `meta/framework`: `{items:[{key,name,status,note} x 7], updatedAt}` with keys `gauntlet`, `ai-memory`, `ponytail`, `sdd`, `tdd`, `mattpocock`, `graphify`, status `ocioso` and a note saying it waits for CP0
   - `checkpoints/cp0`: `{n:0, title:"Step 0: framework", status:"planejado", ponytail:"pendente"}`
   - `notes/n0001`: kind `decisao`, the setup decisions (language, models, scope)
 - Put the URL in the generated files: `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" --dest . --set-panel-url "<url>"`.
@@ -93,7 +93,7 @@ The panel is a live page (an Artifact with a small database) that shows agents, 
 
 ## 5. Run the bootstrap
 
-Read `BOOTSTRAP.md` and `FRAMEWORK.md` in full (you are the orchestrator). Present the BOOTSTRAP checklist once and ask the user to approve it as a whole: that approval covers steps 1 to 7 and the pieces and bars of step 8, as the file says. Then run the steps in order, with the tools the files name:
+Read `BOOTSTRAP.md` and `FRAMEWORK.md` in full (you are the orchestrator). Present the BOOTSTRAP checklist once and ask the user to approve it as a whole: that approval covers steps 1 to 6 and the pieces and bars of step 8, as the file says. Then run the steps in order, with the tools the files name:
 
 - Steps 2 and 4 write outside the generated files (`specify init`, `git init`, `graphify hook install`, `graphify claude install`) and are covered by the approved checklist. Anything not in the checklist needs its own yes.
 - Step 5 ends the session: write the baton with `memory_handoff_begin` and ask the user to restart at the project root. Step 6 (`/mattpocock-skills:setup-matt-pocock-skills`) is typed by the user only.

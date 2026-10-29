@@ -138,7 +138,7 @@ Check yourself:
 2. Compare the public behavior of the two versions.
 3. Run the ponytail-review skill on the project version and list in remainingCuts what could still be cut. ponytail-review only sees excess; correctness, security and performance belong to the critic of the build gauntlet.
 4. List in wronglyCut: validation at a trust boundary, an error that prevents data loss, security, accessibility or an explicit spec requirement that was cut; a deleted or weakened test; a new dependency; an abstraction over a single remaining implementation; a "ponytail:" comment without ceiling and upgrade trigger; a line reduction that the comparison of the two versions does not confirm.
-5. Do not consult memory (ai-memory memory_*; claude-mem search, timeline, get_observations, get_tool_uses; smart_* and the graph are allowed) and do not open FRAMEWORK.md or .claude/workflows/ (the label definitions live there), unless the context above allows it.
+5. Do not consult memory (ai-memory memory_*; the graph, Read and Grep are allowed) and do not open FRAMEWORK.md or .claude/workflows/ (the label definitions live there), unless the context above allows it.
 The project version only wins if it is the one chosen, the tests pass, behavior is preserved, and wronglyCut and remainingCuts are empty.
 Cuts declared by the developer: ${cap(JSON.stringify(cut.cuts), 4000, `${u.id} r${round} cuts`)} | Deliberately kept: ${cap(JSON.stringify(cut.kept), 2000, `${u.id} r${round} kept`)}
 ${panel(cid, 'Ponytail critic · ' + short, 'critic', `Round ${round}: before vs after, blind`, pid, round, '{"status":"judging"}')}`,

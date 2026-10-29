@@ -242,7 +242,7 @@ const EN = {
   title: "{name} Gauntlet Control", subtitle: "Live panel of the project agents", connecting: "connecting...", live: "live",
   noData: "no connection to the data", lost: "connection lost, reload the page", updated: "updated",
   summary: "Summary", running: "Running", queued: "Queued", piecesWon: "Pieces won", problem: "With problem", rounds: "Critic rounds", currentCp: "Current checkpoint",
-  sddPhase: "SDD phase", checkpoints: "Checkpoints", framework: "Framework", frameworkNote: "8 components, from step 0 to the last",
+  sddPhase: "SDD phase", checkpoints: "Checkpoints", framework: "Framework", frameworkNote: "7 components, from step 0 to the last",
   ph_constituicao: "Constitution", ph_especificar: "Specify", ph_clarificar: "Clarify", ph_planejar: "Plan", ph_tarefas: "Tasks", ph_implementar: "Implement", ph_entregue: "Delivered",
   fwWaiting: "waiting for the first data", st_ativo: "active", st_pausado: "paused", st_erro: "error", st_ocioso: "idle",
   cpDone: "{done}/{total} concluded", cpEmpty: "Checkpoints appear here as soon as the plan is approved. Each one goes through the Ponytail gauntlet before it closes.", cp: "CP", ponytail: "ponytail", pending: "pending",
@@ -280,7 +280,7 @@ $("livetxt").textContent = tx("connecting");
 
 // SDD phases and framework keys are identifiers the orchestrator writes to the panel; their names are texts.
 const SDD = ["constituicao","especificar","clarificar","planejar","tarefas","implementar","entregue"];
-const FW_DEFAULT = [["gauntlet","Gauntlet loop"],["ai-memory","AI Memory"],["claude-mem","Claude-mem"],["ponytail","Ponytail"],["sdd","SDD"],["tdd","TDD"],["mattpocock","Matt Pocock skills"],["graphify","Graphify"]];
+const FW_DEFAULT = [["gauntlet","Gauntlet loop"],["ai-memory","AI Memory"],["ponytail","Ponytail"],["sdd","SDD"],["tdd","TDD"],["mattpocock","Matt Pocock skills"],["graphify","Graphify"]];
 const LANES = [["running","laneRunning","emptyRunning"],["queued","laneQueued","emptyQueued"],["done","laneDone","emptyDone"],["failed","laneFailed","emptyFailed"]];
 const COLS = [["backlog","colBacklog"],["building","colBuilding"],["judging","colJudging"],["won","colWon"],["failed","colFailed"]];
 const loopName = l => tx(l === "ponytail" ? "loopPonytail" : "loopBuild");
