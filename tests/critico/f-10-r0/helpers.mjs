@@ -18,6 +18,9 @@
 //   argsObjetivo(ficheiro, texto)     -> string[]
 //   leitorFonte             -> string     caminho absoluto da fonte única do leitor no pacote
 //   leitorNoProjeto         -> string     caminho relativo da cópia do leitor no projeto gerado
+//   erro(modelo)            -> string | undefined   a mensagem do modelo de erro (resposta 15); undefined num painel válido
+//   bloqueio(ficheiro)      -> string     caminho do .lock que o utilitário cria em exclusivo para esse painel.json (resposta 13)
+// As respostas do orquestrador às PERGUNTAS da Ronda −1 (comentário de 2026-10-29 na #11) fazem parte do contrato e estão citadas como «resposta N».
 import { after } from 'node:test';
 import { mkdtempSync, rmSync, existsSync, readdirSync, statSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -51,6 +54,9 @@ export const api = async () => {
 };
 
 export const ESTADOS = ['falta', 'espera', 'dev', 'critico', 'reprovado', 'aprovado', 'main'];
+// Ordem das contagens (resposta 2 do orquestrador na #11): a da Guilda, sempre com os 7 estados, incluindo os de zero
+export const ORDEM = ['main', 'aprovado', 'critico', 'dev', 'reprovado', 'espera', 'falta'];
+export const MODOS = ['acelerado', 'rigoroso'];
 export const PAPEIS = ['dev', 'critico', 'tester', 'outro'];
 export const MIN = 60000;
 export const AGORA = Date.UTC(2026, 9, 29, 12, 0, 0);
@@ -86,7 +92,7 @@ export const pick = (r, xs) => xs[Math.floor(r() * xs.length)];
 // Utilitário da linha de comando: sempre com HOME falso e cwd na pasta temporária do teste
 export const runUtil = (u, args, cwd) => {
   const r = spawnSync(process.execPath, [u.utilitario, ...args], { cwd, encoding: 'utf8', env: sandboxEnv(), timeout: 60000 });
-  return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
+  return { status: r.status, out: (r.stdout || '') + (r.stderr || ''), err: r.stderr || '' };
 };
 export const runUtilAsync = (u, args, cwd) => new Promise((res) => {
   const c = spawn(process.execPath, [u.utilitario, ...args], { cwd, env: sandboxEnv(), stdio: 'ignore' });
@@ -98,7 +104,7 @@ export const painelTmp = (obj = base(), nome = 'proj') => {
   const dir = join(tmp(), nome, '.checkpoints');
   mkdirSync(dir, { recursive: true });
   const file = join(dir, 'painel.json');
-  if (obj !== undefined) writeFileSync(file, typeof obj === 'string' ? obj : txt(obj));
+  if (obj !== null) writeFileSync(file, typeof obj === 'string' ? obj : txt(obj));
   return { dir, file, proj: join(dir, '..') };
 };
 export const readJson = (f) => JSON.parse(readFileSync(f, 'utf8'));
@@ -113,5 +119,5 @@ export const buildProject = async (answers, dest) => {
 };
 export const corpusAnswers = () => {
   const dir = join(ROOT, 'scripts/corpus/answers');
-  return readdirSync(dir).filter((n) => n.endsWith('.json')).sort().map((n) => ({ name: n, value: JSON.parse(readFileSync(join(dir, n), 'utf8').replace(/^﻿/, '')) }));
+  return readdirSync(dir).filter((n) => n.endsWith('.json')).sort().map((n) => ({ name: n, value: JSON.parse(readFileSync(join(dir, n), 'utf8').replace(/^\uFEFF/, '')) }));
 };

@@ -22,13 +22,15 @@ test('C5: cada conjunto do corpus gera .checkpoints/painel.json válido, com o p
     const f = join(dest, '.checkpoints/painel.json');
     assert.ok(existsSync(f), s.name + ': .checkpoints/painel.json não foi gerado');
     const raw = readFileSync(f, 'utf8');
-    assert.ok(!raw.startsWith('﻿'), s.name + ': o painel.json gerado começa por BOM');
+    assert.ok(!raw.startsWith('\uFEFF'), s.name + ': o painel.json gerado começa por BOM');
     const o = JSON.parse(raw);
     assert.deepEqual(u.validar(o), [], s.name);
     assert.equal(o.versao, 1, s.name);
     assert.equal(o.projeto, s.value.projectName, s.name);
-    assert.equal(typeof o.modo, 'string', s.name + ': sem modo');
-    assert.ok(o.modo.length > 0, s.name + ': modo vazio');
+    assert.ok(!raw.includes('\r'), s.name + ': o painel.json gerado tem CR (resposta 12: só LF)');
+    // resposta 6: sem modo no forge.json (antes do F-03), o inicial usa "rigoroso"; com ele, copia-o
+    const fj = JSON.parse(readFileSync(join(dest, '.claude/forge.json'), 'utf8'));
+    assert.equal(o.modo, fj.modo ?? 'rigoroso', s.name + ': modo');
     assert.deepEqual(o.tickets, [], s.name);
   }
 });
@@ -68,8 +70,8 @@ test('âmbito: o leitor tem uma só fonte no pacote (nenhum outro ficheiro fora 
   assert.deepEqual(iguais.map((f) => relative(ROOT, f)), []);
 });
 
-// --- Ambíguos ---
-test('C5 (PERGUNTA 6): o modo do painel.json inicial vem da resposta do setup (forge.json v2, F-03), e não de um valor fixo', { todo: 'PERGUNTA 6: de onde vem o modo antes do F-03?' }, async () => {
+// --- Fica todo até existir o F-03 (#4), que traz o modo no forge.json (resposta 6) ---
+test('C5 (resposta 6): com o modo no setup (forge.json v2), o painel.json inicial copia-o', { todo: 'resposta 6: só depois do F-03 (#4)' }, async () => {
   const [s] = corpusAnswers();
   for (const modo of ['rigoroso', 'acelerado']) {
     const dest = await buildProject({ ...s.value, modo }, join(tmp(), 'm'));

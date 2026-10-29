@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, relative } from 'node:path';
 import { ROOT, PONTE, api } from './helpers.mjs';
 
-const FUNCOES = ['validar', 'ler', 'contagens', 'percentagem', 'objetivo', 'agentes', 'argsTicket', 'argsAgente', 'argsRemoverAgente', 'argsObjetivo'];
+const FUNCOES = ['validar', 'ler', 'contagens', 'percentagem', 'objetivo', 'agentes', 'argsTicket', 'argsAgente', 'argsRemoverAgente', 'argsObjetivo', 'erro', 'bloqueio'];
 const CAMINHOS = ['utilitario', 'leitorFonte', 'leitorNoProjeto'];
 
 test('C0: a ponte tests/ponte/f-10.mjs exporta as funções e os caminhos que os ataques usam', async () => {

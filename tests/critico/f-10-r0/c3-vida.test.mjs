@@ -38,16 +38,22 @@ test('C3: só o checkpoint do próprio agente conta (mtimes de outros ficheiros 
   assert.deepEqual([ag[0].vida, ag[0].minutos], ['a começar', null]);
 });
 
-// --- Ambíguos ---
-test('C3 (PERGUNTA 8): 9 min 59,9 s ainda é «ativo» (menos de 10 min), e 29 min 59,9 s ainda é «sem sinal» — a referência arredonda e daria o seguinte', { todo: 'PERGUNTA 8: limiares sobre o tempo real ou sobre os minutos arredondados?' }, async () => {
+// Resposta 8: os limiares contam sobre o tempo real, sem arredondar; os minutos mostrados arredondam-se para baixo
+test('C3 (resposta 8): limiares sobre o tempo real — 9:59,9 ativo, 10:00 sem sinal, 29:59,9 sem sinal, 30:00 parado?; minutos para baixo', async () => {
   const u = await api();
   const o = base(); o.agentes = [{ nome: 'x', papel: 'dev', ticket: 'T-01', modelo: 'sonnet', checkpoint: 'x.md' }];
-  const vida = (ms) => u.agentes(u.ler(txt(o), { 'x.md': AGORA - ms }, AGORA))[0].vida;
-  assert.deepEqual([vida(10 * MIN - 100), vida(30 * MIN - 100)], ['ativo', 'sem sinal']);
+  const ver = (ms) => { const a = u.agentes(u.ler(txt(o), { 'x.md': AGORA - ms }, AGORA))[0]; return [a.vida, a.minutos]; };
+  const TABELA = [[30000, 'ativo', 0], [59999, 'ativo', 0], [9 * MIN + 59900, 'ativo', 9], [10 * MIN - 1, 'ativo', 9], [10 * MIN, 'sem sinal', 10], [10 * MIN + 30000, 'sem sinal', 10],
+    [29 * MIN + 59900, 'sem sinal', 29], [30 * MIN - 1, 'sem sinal', 29], [30 * MIN, 'parado?', 30], [30 * MIN + 59999, 'parado?', 30]];
+  assert.deepEqual(TABELA.map(([ms]) => ver(ms)), TABELA.map(([, v, m]) => [v, m]));
 });
-test('C3 (PERGUNTA 9): um mtime no futuro (relógios desacertados) dá «ativo» com 0 minutos, nunca minutos negativos', { todo: 'PERGUNTA 9: mtime no futuro' }, async () => {
+
+// Resposta 9: um mtime no futuro dá ativo com 0 minutos
+test('C3 (resposta 9): um mtime no futuro (1 s, 5 min, 1 dia) dá «ativo» com 0 minutos, nunca minutos negativos', async () => {
   const u = await api();
   const o = base(); o.agentes = [{ nome: 'x', papel: 'dev', ticket: 'T-01', modelo: 'sonnet', checkpoint: 'x.md' }];
-  const a = u.agentes(u.ler(txt(o), { 'x.md': AGORA + 5 * MIN }, AGORA))[0];
-  assert.deepEqual([a.vida, a.minutos], ['ativo', 0]);
+  for (const ms of [1000, 5 * MIN, 24 * 60 * MIN]) {
+    const a = u.agentes(u.ler(txt(o), { 'x.md': AGORA + ms }, AGORA))[0];
+    assert.deepEqual([a.vida, a.minutos], ['ativo', 0], ms + ' ms no futuro');
+  }
 });

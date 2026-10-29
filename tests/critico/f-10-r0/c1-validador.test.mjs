@@ -12,6 +12,12 @@ const VALIDOS = {
   'base (agente com porta e agente sem porta, checkpoint que não existe)': base(),
   'sem tickets e sem agentes': mut((o) => { o.tickets = []; o.agentes = []; }),
   'agente sem porta': mut((o) => { delete o.agentes[0].porta; }),
+  'portas 1 e 65535, issue 1, rondas 0': mut((o) => { o.agentes[0].porta = 1; o.agentes[1].porta = 65535; o.tickets[0].issue = 1; o.tickets[0].rondas = 0; }),
+  'modo acelerado': mut((o) => { o.modo = 'acelerado'; }),
+  'sem objetivo (resposta 4)': mut((o) => del(o, 'objetivo')),
+  'objetivo vazio (resposta 4)': mut((o) => { o.objetivo = ''; }),
+  'esqueleto mínimo da resposta 11 (versao, modo, tickets e agentes)': { versao: 1, modo: 'rigoroso', tickets: [], agentes: [] },
+  'campos extra no topo, nos tickets e nos agentes (resposta 3)': mut((o) => { o.extra = { a: [1, 'x'] }; o.tickets[0].nota = 'n'; o.agentes[0].titulo = 'Lote 2'; }),
   'acentos, espaços e emoji nos textos': mut((o) => { o.projeto = 'Ação Ünïcode 2'; o.objetivo = 'Lote «coração» 🚀'; o.tickets[0].titulo = 'Título com "aspas" e \\barra'; }),
   ...Object.fromEntries(ESTADOS.map((e) => ['todos os tickets em ' + e, mut((o) => { for (const t of o.tickets) t.estado = e; })])),
   ...Object.fromEntries(PAPEIS.map((p) => ['agente com papel ' + p, mut((o) => { o.agentes[0].papel = p; })])),
@@ -20,12 +26,18 @@ const VALIDOS = {
 // [nome, caminho que o erro tem de citar, mutação]
 const INVALIDOS = [
   ['sem versao', 'versao', (o) => del(o, 'versao')],
-  ['versao 2 (esquema desconhecido)', 'versao', (o) => { o.versao = 2; }],
-  ['sem projeto', 'projeto', (o) => del(o, 'projeto')],
+  // resposta 5: versao é um inteiro ≥ 1 (neste ticket, 1)
+  ['versao em texto', 'versao', (o) => { o.versao = '1'; }],
+  ['versao 0', 'versao', (o) => { o.versao = 0; }],
+  ['versao não inteira', 'versao', (o) => { o.versao = 1.5; }],
+  // resposta 11: o esqueleto mínimo válido não tem projeto, logo projeto é opcional; se existir, é texto
   ['projeto não é texto', 'projeto', (o) => { o.projeto = 42; }],
   ['objetivo não é texto', 'objetivo', (o) => { o.objetivo = ['a']; }],
   ['sem modo', 'modo', (o) => del(o, 'modo')],
   ['modo não é texto', 'modo', (o) => { o.modo = 7; }],
+  // resposta 6: modo é "acelerado" ou "rigoroso"
+  ['modo desconhecido', 'modo', (o) => { o.modo = 'turbo'; }],
+  ['modo com maiúscula', 'modo', (o) => { o.modo = 'Rigoroso'; }],
   ['sem tickets', 'tickets', (o) => del(o, 'tickets')],
   ['tickets não é lista', 'tickets', (o) => { o.tickets = { id: 'T-01' }; }],
   ['sem agentes', 'agentes', (o) => del(o, 'agentes')],
@@ -53,6 +65,21 @@ const INVALIDOS = [
   ['checkpoint absoluto (Windows)', 'agentes[0].checkpoint', (o) => { o.agentes[0].checkpoint = 'C:\\Windows\\win.ini'; }],
   ['checkpoint absoluto (POSIX)', 'agentes[0].checkpoint', (o) => { o.agentes[0].checkpoint = '/etc/passwd'; }],
   ['agente nulo', 'agentes[0]', (o) => { o.agentes[0] = null; }],
+  // resposta 5: issue inteiro ≥ 1; rondas inteiro ≥ 0; porta inteiro de 1 a 65535
+  ['issue em texto', 'tickets[0].issue', (o) => { o.tickets[0].issue = '#11'; }],
+  ['issue 0', 'tickets[1].issue', (o) => { o.tickets[1].issue = 0; }],
+  ['issue não inteira', 'tickets[2].issue', (o) => { o.tickets[2].issue = 12.5; }],
+  ['rondas negativas', 'tickets[0].rondas', (o) => { o.tickets[0].rondas = -1; }],
+  ['rondas não inteiras', 'tickets[1].rondas', (o) => { o.tickets[1].rondas = 1.5; }],
+  ['rondas em texto', 'tickets[2].rondas', (o) => { o.tickets[2].rondas = '2'; }],
+  ['porta em texto', 'agentes[0].porta', (o) => { o.agentes[0].porta = 'abc'; }],
+  ['porta 0', 'agentes[0].porta', (o) => { o.agentes[0].porta = 0; }],
+  ['porta 65536', 'agentes[0].porta', (o) => { o.agentes[0].porta = 65536; }],
+  ['porta não inteira', 'agentes[1].porta', (o) => { o.agentes[1].porta = 4801.5; }],
+  // resposta 7: repetidos recusados, com o caminho exato do segundo
+  ['id de ticket repetido', 'tickets[1].id', (o) => { o.tickets[1].id = 'T-01'; }],
+  ['id de ticket repetido mais à frente', 'tickets[3].id', (o) => { o.tickets[3].id = 'T-02'; }],
+  ['nome de agente repetido', 'agentes[1].nome', (o) => { o.agentes[1].nome = 'dev-t03'; }],
 ];
 
 test('C1: o validador aceita cada painel válido do corpus (devolve [])', async () => {
@@ -117,32 +144,4 @@ test('C1: o validador não altera o objeto que recebe', async () => {
   const o = base(), copia = structuredClone(o);
   u.validar(o);
   assert.deepEqual(o, copia);
-});
-
-// --- Ambíguos no contrato: ficam como todo até a PERGUNTA ter resposta do orquestrador ---
-test('C1 (PERGUNTA 3): campos extra (ex.: agentes[].titulo, que o painel.json da referência usa) são aceites', { todo: 'PERGUNTA 3: campos extra aceites ou recusados?' }, async () => {
-  const u = await api();
-  assert.deepEqual(u.validar(mut((o) => { o.agentes[0].titulo = 'Lote 2'; o.extra = 1; })), []);
-});
-test('C1 (PERGUNTA 4): objetivo em falta é recusado com «objetivo» (o painel inicial do scaffold traz objetivo vazio)', { todo: 'PERGUNTA 4: objetivo obrigatório? vazio vale?' }, async () => {
-  const u = await api();
-  assert.ok(u.validar(mut((o) => del(o, 'objetivo'))).some((e) => e.includes('objetivo')));
-  assert.deepEqual(u.validar(mut((o) => { o.objetivo = ''; })), []);
-});
-test('C1 (PERGUNTA 5): tipos — issue inteiro positivo, rondas inteiro ≥ 0, porta inteiro 1–65535, versao o número 1', { todo: 'PERGUNTA 5: tipos de issue, rondas, porta e versao' }, async () => {
-  const u = await api();
-  for (const [c, f] of [['tickets[0].issue', (o) => { o.tickets[0].issue = '#11'; }], ['tickets[0].rondas', (o) => { o.tickets[0].rondas = -1; }],
-    ['tickets[0].rondas', (o) => { o.tickets[0].rondas = 1.5; }], ['agentes[0].porta', (o) => { o.agentes[0].porta = 'abc'; }],
-    ['agentes[0].porta', (o) => { o.agentes[0].porta = 70000; }], ['versao', (o) => { o.versao = '1'; }]]) {
-    assert.ok(u.validar(mut(f)).some((e) => e.includes(c)), c);
-  }
-});
-test('C1 (PERGUNTA 6): modo fora de rigoroso/acelerado é recusado', { todo: 'PERGUNTA 6: valores válidos de modo' }, async () => {
-  const u = await api();
-  assert.ok(u.validar(mut((o) => { o.modo = 'turbo'; })).some((e) => e.includes('modo')));
-});
-test('C1 (PERGUNTA 7): ids de ticket e nomes de agente repetidos são recusados', { todo: 'PERGUNTA 7: duplicados' }, async () => {
-  const u = await api();
-  assert.ok(u.validar(mut((o) => { o.tickets[1].id = 'T-01'; })).some((e) => e.includes('tickets[1].id')));
-  assert.ok(u.validar(mut((o) => { o.agentes[1].nome = 'dev-t03'; })).some((e) => e.includes('agentes[1].nome')));
 });

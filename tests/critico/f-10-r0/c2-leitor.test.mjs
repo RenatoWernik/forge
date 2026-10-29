@@ -3,7 +3,7 @@
 // Oráculo: contagens calculadas à mão a partir das fixtures literais; 60 permutações com semente fixa para a ordem.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { api, base, txt, ESTADOS, AGORA, MIN, rng } from './helpers.mjs';
+import { api, base, txt, ESTADOS, ORDEM, AGORA, MIN, rng } from './helpers.mjs';
 
 const comTickets = (estados) => {
   const o = base();
@@ -119,12 +119,11 @@ test('C2: um painel enorme (20 000 tickets, 2 000 agentes) é lido em menos de 3
   assert.equal(u.agentes(modelo).length, 2000);
 });
 
-// --- Ambíguos ---
-test('C2 (PERGUNTA 2): a ordem fixa é a do contrato (falta, espera, dev, critico, reprovado, aprovado, main) e não a da referência (main → falta)', { todo: 'PERGUNTA 2: qual ordem?' }, async () => {
+// Resposta 2: a ordem é main → aprovado → critico → dev → reprovado → espera → falta, sempre com os 7 estados (também os de zero)
+test('C2 (resposta 2): as contagens são exatamente os 7 estados, na ordem main → falta, com os zeros', async () => {
   const u = await api();
-  assert.deepEqual(u.contagens(u.ler(txt(comTickets(TODOS)), {}, AGORA)).map(([e]) => e).filter((e) => ESTADOS.includes(e)), ESTADOS);
-});
-test('C2 (PERGUNTA 2): as contagens trazem os 7 estados, incluindo os de zero (a referência esconde os zeros)', { todo: 'PERGUNTA 2: estados com zero entram?' }, async () => {
-  const u = await api();
-  assert.equal(u.contagens(u.ler(txt(comTickets(['main'])), {}, AGORA)).length, 7);
+  const lit = (estados) => u.contagens(u.ler(txt(comTickets(estados)), {}, AGORA));
+  assert.deepEqual(lit(TODOS), [['main', 3], ['aprovado', 4], ['critico', 1], ['dev', 3], ['reprovado', 2], ['espera', 1], ['falta', 2]]);
+  assert.deepEqual(lit(['main']), [['main', 1], ['aprovado', 0], ['critico', 0], ['dev', 0], ['reprovado', 0], ['espera', 0], ['falta', 0]]);
+  assert.deepEqual(lit([]), ORDEM.map((e) => [e, 0]));
 });
