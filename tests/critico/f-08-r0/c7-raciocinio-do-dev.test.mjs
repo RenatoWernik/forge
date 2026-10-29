@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BUILD, PONY, NARRATIVE, contract, baseArgs, runWf, scenario, roleOf, why, fail, generate, check, linesOf, fails, mutations, corpusAnswers, replaceIn, declared, PROBE, fillSchema } from './helpers.mjs';
+import { BUILD, PONY, NARRATIVE, repro, contract, baseArgs, runWf, scenario, roleOf, why, fail, generate, check, linesOf, fails, mutations, corpusAnswers, replaceIn, declared, PROBE, fillSchema } from './helpers.mjs';
 
 // Guarda (já passa na base): o workflow não passa a narrativa do dev ao crítico
 test('#18 (guarda): no gauntlet-build, nenhum prompt de crítico traz a narrativa ou o raciocínio do dev, em 3 rondas e nos dois modos', async () => {
@@ -67,7 +67,9 @@ test('#18: com o raciocínio do dev injetado no prompt do crítico, o check.cjs 
 });
 
 test('#18: o corpus tem a mutação DEV-REASONING (o raciocínio do dev no prompt do crítico do gauntlet-build) e ela faz falhar essa linha', async () => {
-  const ms = mutations().filter((m) => m.file === '.claude/workflows/gauntlet-build.js' && /summary|reasoning|narrativ/i.test(m.replace || '') && !/summary|reasoning|narrativ/i.test(m.find || '') && reasoningLine({ text: m.line || '' }));
+  // resposta 6 da #9: a mutação chama-se critico-recebe-raciocinio-do-dev (substitui a critico-recebe-lacuna-de-rondas-anteriores)
+  const ms = mutations().filter((m) => m.name === 'critico-recebe-raciocinio-do-dev');
+  assert.ok(ms.every((m) => m.file === '.claude/workflows/gauntlet-build.js' && /summary|reasoning|narrativ/i.test(m.replace || '') && !/summary|reasoning|narrativ/i.test(m.find || '') && reasoningLine({ text: m.line || '' })), 'a mutação tem de pôr conteúdo do dev no prompt do crítico do gauntlet-build e apontar para a linha do crítico: ' + JSON.stringify(ms));
   assert.ok(ms.length >= 1, 'mutações do gauntlet-build: ' + JSON.stringify(mutations().filter((m) => /gauntlet-build/.test(m.file)).map((m) => [m.name, m.replace])));
   for (const m of ms) {
     const dest = await generate(corpusAnswers(m.base));
@@ -76,4 +78,39 @@ test('#18: o corpus tem a mutação DEV-REASONING (o raciocínio do dev no promp
     assert.equal(post.status, 1, m.name);
     assert.ok(linesOf(post.out).some((l) => l.state === 'FAIL' && l.text === m.line), `${m.name}: ${fails(post.out)}`);
   }
+});
+
+// Resposta 6 da #9: a partir da R2, o crítico RECEBE as falhas da ronda anterior, vindas do veredito do crítico (ids e descrição)
+test('#18 (resposta 6): o crítico da R2 recebe as falhas da R1 do veredito do crítico (o critério C2 e o repro), e o da R1 não recebe nada disso', async () => {
+  for (const mode of ['rigorous', 'accelerated']) {
+    const p = contract('pa', 9101, { central: [2] });
+    const run = await runWf(BUILD, baseArgs([p], { mode }), scenario([p], { pa: [fail(2)] }));
+    const crit = run.calls.filter((c) => roleOf(c.opts) === 'critic');
+    assert.equal(crit.length, 2, `${mode}: ${why(run, p.id)}`);
+    assert.ok(!crit[0].prompt.includes(repro(1, 2)), mode + ': o crítico da R1 não tem falhas anteriores');
+    assert.ok(crit[1].prompt.includes(repro(1, 2)), `${mode}: o crítico da R2 não recebeu a falha da R1 (${repro(1, 2)})`);
+    assert.match(crit[1].prompt, /\bC2\b/, mode + ': o crítico da R2 não recebeu o id do critério que falhou');
+    assert.ok(!crit[1].prompt.includes(NARRATIVE), mode + ': com as falhas anteriores veio conteúdo do dev');
+  }
+});
+
+// Alarme falso («reprova sempre»): pôr no prompt do crítico as falhas que o crítico anterior devolveu não pode fazer falhar a linha
+const WRAP_PRIOR = `
+const __agent = agent; let __prior = ''
+agent = async (prompt, opts) => {
+  const o = opts || {}, c = args && args.models && args.models.critic, d = args && args.models && args.models.developer
+  const isCritic = c && o.model === c.model && o.effort === c.effort && !(d && d.model === c.model && d.effort === c.effort)
+  const r = await __agent(isCritic && __prior ? prompt + '\\nPrior failures from the critic: ' + __prior : prompt, opts)
+  if (isCritic && r && typeof r === 'object') __prior = JSON.stringify(Object.fromEntries(Object.entries(r).filter(([k]) => /block|bloq|prior|fail/i.test(k))))
+  return r
+}
+`;
+test('#18 (resposta 6, alarme falso): com as falhas do crítico anterior no prompt do crítico, a linha do crítico sem raciocínio do dev continua ok', async () => {
+  const dest = await generate(corpusAnswers('en-plain-published'));
+  const f = join(dest, '.claude/workflows/gauntlet-build.js'), t = readFileSync(f, 'utf8'), m = t.match(/^export const meta = \{[\s\S]*?^\}\r?\n/m);
+  assert.ok(m, 'meta do gauntlet-build.js não encontrado');
+  writeFileSync(f, t.slice(0, m.index + m[0].length) + WRAP_PRIOR + t.slice(m.index + m[0].length));
+  const ls = linesOf(check(dest).out).filter(reasoningLine);
+  assert.ok(ls.length >= 1, 'não há linha do crítico sem raciocínio do dev');
+  assert.ok(ls.every((l) => l.state === 'ok'), 'alarme falso: as falhas anteriores do crítico são permitidas: ' + JSON.stringify(ls));
 });

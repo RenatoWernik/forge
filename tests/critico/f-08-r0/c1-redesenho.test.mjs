@@ -3,20 +3,21 @@
 // Depende do F-07: sim (args com o contrato da peça e a Ronda −1 em `args.attacks`).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUILD, METRICS, MODES, ALWAYS, contract, baseArgs, runWf, scenario, resultOf, devCount, criticCount, sameCrit, why, fail, failMany, rng, pick, shuffle } from './helpers.mjs';
+import { BUILD, METRICS, MODES, ALWAYS, stopReason, fieldOf, repro, contract, baseArgs, runWf, scenario, resultOf, devCount, criticCount, sameCrit, why, fail, failMany, rng, pick, shuffle } from './helpers.mjs';
 
 const redesignOk = (run, p, k, msg) => {
   const r = resultOf(run, p.id);
   assert.ok(r, 'sem resultado da peça: ' + msg + ' ' + why(run, p.id));
-  assert.equal(r.stopped, 'redesign', msg + ' ' + why(run, p.id));
-  assert.ok(sameCrit(r.criterion, k), `criterion devia ser C${k}: ${JSON.stringify(r.criterion)} (${msg})`);
+  assert.equal(stopReason(r), 'redesign', msg + ' ' + why(run, p.id));
+  assert.ok(sameCrit(fieldOf(r, 'criterion'), k), `criterion devia ser C${k}: ${JSON.stringify(fieldOf(r, 'criterion'))} (${msg})`);
   assert.notEqual(r.won, true, 'uma peça parada para REDESENHO não ganhou: ' + msg);
   assert.equal(devCount(run, p), 2, 'devs lançados (a ronda 3 não pode existir): ' + msg);
   assert.equal(criticCount(run, p), 2, 'críticos lançados: ' + msg);
-  assert.ok(r.metrics && typeof r.metrics === 'object', 'sem metrics: ' + msg);
-  for (const m of METRICS) assert.ok(m in r.metrics, `metrics.${m} em falta (${msg})`);
-  assert.equal(r.metrics.rounds, 2, 'metrics.rounds: ' + msg);
-  assert.equal(r.metrics.sameCriterionFailures, 2, 'metrics.sameCriterionFailures: ' + msg);
+  const mt = fieldOf(r, 'metrics');
+  assert.ok(mt && typeof mt === 'object', 'sem metrics: ' + msg);
+  for (const m of METRICS) assert.ok(m in mt, `metrics.${m} em falta (${msg})`);
+  assert.equal(mt.rounds, 2, 'metrics.rounds: ' + msg);
+  assert.equal(mt.sameCriterionFailures, 2, 'metrics.sameCriterionFailures: ' + msg);
 };
 
 for (const mode of MODES) {
@@ -54,5 +55,27 @@ test('C1 (gerador, semente 808, 24 casos): o critério repetido nas rondas 1 e 2
     redesignOk(run, p, k, `caso ${i}: ${mode}, C${k}, materialidade ${mat}`);
     const rq = resultOf(run, q.id);
     assert.ok(rq && rq.won === true && devCount(run, q) === 1, `caso ${i}: a outra peça (sem falhas) ganha na ronda 1: ${why(run, q.id)}`);
+  }
+});
+
+// Resposta 3 da #9: no acelerado, o mesmo critério NÃO central a falhar na R1 e na R2 vai para followUps e não bloqueia
+test('C1 (accelerated, resposta 3): C1 não central reprovado nas rondas 1 e 2 → a R2 passa-o para followUps e a peça ganha, sem "redesign"', async () => {
+  for (const mat of [2, 3]) {
+    const p = contract('pa', 9101, { central: [2] });
+    const run = await runWf(BUILD, baseArgs([p], { mode: 'accelerated' }), scenario([p], { pa: [fail(1, mat), fail(1, mat)] }));
+    const r = resultOf(run, p.id);
+    assert.ok(r && r.won === true && !stopReason(r), `materialidade ${mat}: ${why(run, p.id)}`);
+    assert.equal(devCount(run, p), 2);
+    assert.ok(JSON.stringify(r.followUps || null).includes(repro(2, 1)), `materialidade ${mat}: a falha da R2 está em followUps: ${JSON.stringify(r.followUps)}`);
+  }
+});
+
+// Resposta 2 da #9: com a escalada do forge.json por defeito (sameCriterionFailures 2), o mesmo critério 2× dá "redesign", não "escalate"
+test('C1 (resposta 2): com sameCriterionFailures 2, o mesmo critério reprovado 2× devolve "redesign" e nunca "escalate", nos dois modos', async () => {
+  for (const mode of MODES) {
+    const p = contract('pa', 9101, { central: [1] });
+    const run = await runWf(BUILD, baseArgs([p], { mode, esc: { sameCriterionFailures: 2 } }), scenario([p], { pa: [fail(1), fail(1)] }));
+    redesignOk(run, p, 1, mode + ', escalada por defeito');
+    assert.equal(fieldOf(resultOf(run, p.id), 'condition'), undefined, 'um "redesign" não traz condição de escalada');
   }
 });

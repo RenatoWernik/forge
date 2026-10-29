@@ -22,9 +22,16 @@
 //   - o retorno de cada peça é { id, stopped, ... }: stopped 'redesign' com `criterion`, 'contract' ou 'escalate' com `condition`,
 //     sempre com `metrics` = { rounds, sameCriterionFailures, attacksRedOnDelivery, minutesWithoutProgress }; uma peça aprovada
 //     tem `won: true`, e as falhas que o modo acelerado passa a seguimento ficam em `followUps`;
-//   - medidas que o workflow não pode medir sozinho (sem relógio nem ficheiros): os agentes declaram-nas. Os ataques vermelhos na
-//     entrega e os minutos chegam em campos do schema do dev ou do crítico, que o runtime falso preenche pelo nome (ver `fill`);
-//     o visual abaixo da referência chega num campo do veredito do crítico.
+//   - respostas do orquestrador às 6 PERGUNTAS da Ronda −1 (comentário na #9, E:\Guilda\.checkpoints\orquestrador-resp-f08.md):
+//     1. sem `mode`, recusa; 2. entre `redesign` e `escalate` na mesma ronda, ganha o `redesign`; 3. no acelerado, um critério não
+//     central que falha na R1 e na R2 vai para `followUps` e não bloqueia, um central dá `redesign`; 4. no acelerado, a R2
+//     reprovada sem critério repetido dá `stopped: { reason: "maxRounds" }` e o dev não é relançado; 5. os sinais nunca vêm do
+//     dev: os ataques a vermelho calculam-se do resultado POR ATAQUE que o crítico corre na entrega (`passesOnDelivery`), sem
+//     confiar num booleano; o visual vem do juiz (o crítico); os minutos vêm da vida do leitor do F-10; 6. a partir da R2 o
+//     crítico recebe as falhas da ronda anterior (do veredito do crítico: ids e descrição), nunca conteúdo do dev; a mutação
+//     `critico-recebe-lacuna-de-rondas-anteriores` é substituída por `critico-recebe-raciocinio-do-dev`.
+//     O runtime falso preenche os campos do schema pelo nome (ver `fillObj`): o crítico, a lista por ataque e o visual; o dev
+//     alega sinais falsos (ataques a vermelho, minutos, visual) que o workflow tem de ignorar.
 // Os papéis reconhecem-se pelo modelo e pelo esforço (modelos de sonda distintos), nunca pelas etiquetas, que são internas.
 import { after } from 'node:test';
 import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
@@ -138,6 +145,10 @@ export const devCount = (run, p) => callsOf(run, p, 'dev').length;
 export const criticCount = (run, p) => callsOf(run, p, 'critic').length;
 // O critério devolvido é o C<n> pedido: aceita 'C1', 'c1' ou 1
 export const sameCrit = (x, k) => x === k || String(x).trim().toUpperCase() === 'C' + k;
+// Resposta 4 da #9: `stopped: { reason: "maxRounds" }`. O motivo lê-se de `stopped` (texto) ou de `stopped.reason` (objeto);
+// `criterion`, `condition` e `metrics` leem-se no topo do resultado ou dentro do objeto `stopped`.
+export const stopReason = (r) => (r && r.stopped && typeof r.stopped === 'object' ? r.stopped.reason : r && r.stopped) || null;
+export const fieldOf = (r, k) => (r && r[k] !== undefined ? r[k] : r && r.stopped && typeof r.stopped === 'object' ? r.stopped[k] : undefined);
 
 // ---------- Preenchimento de um valor pelo schema e pelo nome do campo ----------
 const typeOf = (s) => (Array.isArray(s?.type) ? s.type.find((t) => t !== 'null') : s?.type);
@@ -166,11 +177,14 @@ const timeHint = (key, s, minutes) => {
   }
   return undefined;
 };
-const attackHint = (key, s, ids, red) => {
+// liar: os campos-resumo (booleano ou número) dizem «tudo verde» mesmo com um ataque a vermelho; só a lista por ataque diz a verdade
+// (resposta 5 da #9: o workflow calcula a partir do resultado por ataque, sem confiar num booleano)
+const attackHint = (key, s, ids, red, liar = false) => {
   if (/evidence/i.test(key) || !/attack|ataque|^red|Red|^green|Green/.test(key)) return undefined;
   const reds = red ? ids.slice(0, 1) : [], greens = red ? ids.slice(1) : ids;
-  if (/red|fail/i.test(key)) return asType(s, { num: reds.length, str: reds, bool: red });
-  if (/green|pass/i.test(key)) return asType(s, { num: greens.length, str: greens, bool: !red });
+  const sum = liar && typeOf(s) !== 'array' && !(typeOf(s) === 'array' && typeOf(s.items) === 'object');
+  if (/red|fail/i.test(key)) return sum ? asType(s, { num: 0, str: [], bool: false }) : asType(s, { num: reds.length, str: reds, bool: red });
+  if (/green|pass/i.test(key)) return sum ? asType(s, { num: ids.length, str: ids, bool: true }) : asType(s, { num: greens.length, str: greens, bool: !red });
   if (typeOf(s) === 'array' && typeOf(s.items) === 'object') return ids.map((id) => fillObj(s.items, (p, ps) => {
     const k = p[p.length - 1], isRed = red && id === reds[0];
     if (/^id$|name|file/i.test(k)) return id;
@@ -179,7 +193,7 @@ const attackHint = (key, s, ids, red) => {
     if (/status|state|result/i.test(k)) return fromEnum(ps, isRed ? /red|fail/i : /green|pass|ok/i, isRed ? 'red' : 'green');
     return undefined;
   }));
-  if (/^attacks?$/i.test(key) || /attacksGreen|allGreen/i.test(key)) return asType(s, { num: greens.length, str: red ? 'red' : 'green', bool: !red });
+  if (/^attacks?$/i.test(key) || /attacksGreen|allGreen/i.test(key)) return sum ? asType(s, { num: ids.length, str: 'green', bool: true }) : asType(s, { num: greens.length, str: red ? 'red' : 'green', bool: !red });
   return undefined;
 };
 
@@ -197,9 +211,10 @@ const devAnswer = (opts, ctx) => {
     if (p.length === 1 && /testCommand/.test(k)) return 'TEST-DEV';
     if (p.length === 1 && /redEvidence/.test(k)) return 'RED-EV';
     if (p.length === 1 && /greenEvidence/.test(k)) return 'GREEN-EV';
+    if (/visual/i.test(k)) return asType(s, { num: +!!ctx.visual, str: ctx.visual ? 'below' : 'ok', bool: !!ctx.visual });
     return attackHint(k, s, ids, red) ?? timeHint(k, s, minutes);
   };
-  return { ...fillObj(opts.schema || {}, hint), summary: `${NARRATIVE}summary-r${round}`, reasoning: `${NARRATIVE}reasoning-r${round}`, narrative: `${NARRATIVE}narrative-r${round}` };
+  return { ...fillObj(opts.schema || {}, hint), ...(ctx.visual ? { visualBelowReference: true } : {}), ...(red ? { attacksRed: ids.slice(0, 1), attacksRedOnDelivery: 1 } : {}), ...(minutes > 1000 ? { minutesWithoutProgress: minutes } : {}), summary: `${NARRATIVE}summary-r${round}`, reasoning: `${NARRATIVE}reasoning-r${round}`, narrative: `${NARRATIVE}narrative-r${round}` };
 };
 
 // Um bloqueante: { crit: n (C<n>), mat: 1 | 2 | 3, cat?: categoria do «reprova sempre» } → o repro leva a marca REPRO-r<ronda>-C<n>
@@ -242,14 +257,16 @@ const criticAnswer = (prompt, opts, ctx) => {
     if (/approved|aprovad|pass(ed)?$/i.test(k) && typeOf(s) === 'boolean') return approve;
     if (/gap/i.test(k) && typeOf(s) === 'string') return 'GAP-r' + round;
     if (/reason|summary|narrativ|explan/i.test(k) && typeOf(s) === 'string') return CRITIC_REASONING + round;
-    return attackHint(k, s, ids, red) ?? timeHint(k, s, minutes);
+    return attackHint(k, s, ids, red, ctx.liar) ?? timeHint(k, s, minutes);
   };
   return fillObj(opts.schema || {}, hint);
 };
 
 // Cenário: plan[pieceId] = [veredito da ronda 1, da ronda 2, ...]; depois do fim do plano, o crítico aprova.
-// opts: red(id, round) → a entrega desta ronda tem ataques a vermelho; minutesPerRound (por defeito 5); models.
-export const scenario = (pieces, plan = {}, { red = () => false, minutesPerRound = 5, models = PROBE } = {}) => (prompt, opts, run) => {
+// opts: red(id, round) → o crítico corre os ataques na entrega e um deles está a vermelho (verdade por ataque; com liar, os
+// campos-resumo do crítico dizem «verde»); dev(id, round) → o que o DEV alega ({ red, minutes, visual }), que o workflow nunca
+// pode usar como sinal (resposta 5 da #9); minutesPerRound (por defeito 5); models.
+export const scenario = (pieces, plan = {}, { red = () => false, liar = false, dev = () => ({}), minutesPerRound = 5, models = PROBE } = {}) => (prompt, opts, run) => {
   const role = roleOf(opts, models);
   if (!role || role === 'aux' || role === 'tester') return 'ok';
   const c = { prompt, opts };
@@ -257,8 +274,9 @@ export const scenario = (pieces, plan = {}, { red = () => false, minutesPerRound
   if (!piece) return null;
   const devs = run.calls.filter((x) => belongs(x, piece) && ['developer', 'developerUi'].includes(roleOf(x.opts, models))).length;
   const round = Math.max(1, devs);
-  if (role === 'critic') return criticAnswer(prompt, opts, { round, v: (plan[piece.id] || [])[round - 1], red: red(piece.id, round), minutes: round * minutesPerRound, piece, models });
-  return devAnswer(opts, { round, red: red(piece.id, round), minutes: (round - 1) * minutesPerRound + Math.ceil(minutesPerRound / 2), piece, models });
+  if (role === 'critic') return criticAnswer(prompt, opts, { round, v: (plan[piece.id] || [])[round - 1], red: red(piece.id, round), liar, minutes: 0, piece, models });
+  const d = dev(piece.id, round) || {};
+  return devAnswer(opts, { round, red: !!d.red, visual: !!d.visual, minutes: d.minutes ?? (round - 1) * minutesPerRound + Math.ceil(minutesPerRound / 2), piece, models });
 };
 // Bloqueantes curtos para os planos
 export const fail = (crit, mat = 2, cat) => ({ blocking: [{ crit, mat, ...(cat ? { cat } : {}) }] });

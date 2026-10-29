@@ -7,7 +7,7 @@
 // Depende do F-07: sim (args com o contrato da peça e a Ronda −1 em `args.attacks`).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUILD, MODES, ALWAYS, contract, baseArgs, runWf, scenario, resultOf, devCount, why, fail } from './helpers.mjs';
+import { BUILD, MODES, ALWAYS, stopReason, contract, baseArgs, runWf, scenario, resultOf, devCount, why, fail } from './helpers.mjs';
 
 const CASES = [];
 for (const [cat] of ALWAYS) for (const round of [1, 2]) for (const mode of MODES) CASES.push([cat, round, mode]);
@@ -29,11 +29,11 @@ for (const [cat, round, mode] of CASES) {
     // reprovar na ronda N = a peça não ganha na ronda N: ou há mais uma ronda (que aprova), ou a peça para sem ganhar
     if (round === 1 || mode === 'rigorous') {
       assert.equal(devs, round + 1, `a ronda ${round} reprovou, por isso há a ronda ${round + 1}: ${why(run, p.id)}`);
-      assert.ok(r.won === true && !r.stopped, `a ronda ${round + 1} limpa aprova: ${why(run, p.id)}`);
+      assert.ok(r.won === true && !stopReason(r), `a ronda ${round + 1} limpa aprova: ${why(run, p.id)}`);
     } else {
       assert.equal(devs, 2, 'acelerado: sem ronda 3');
       assert.notEqual(r.won, true, 'o «reprova sempre» na R2 do acelerado não passa para seguimento: ' + why(run, p.id));
-      assert.ok(r.stopped, 'a peça reprovada para com um stopped: ' + why(run, p.id));
+      assert.equal(stopReason(r), 'maxRounds', 'resposta 4: a peça reprovada na R2 do acelerado para com maxRounds: ' + why(run, p.id));
     }
   });
 }

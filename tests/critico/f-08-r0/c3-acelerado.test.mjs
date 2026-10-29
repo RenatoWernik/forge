@@ -5,7 +5,7 @@
 // Depende do F-07: sim (args com o contrato da peça e a Ronda −1 em `args.attacks`).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUILD, ALWAYS, contract, baseArgs, runWf, scenario, resultOf, devCount, criticCount, why, fail, failMany, repro, rng, pick } from './helpers.mjs';
+import { BUILD, ALWAYS, stopReason, contract, baseArgs, runWf, scenario, resultOf, devCount, criticCount, why, fail, failMany, repro, rng, pick } from './helpers.mjs';
 
 // Os 4 tipos de falha, sempre no critério C1 (central só no tipo «central»)
 const TYPES = {
@@ -34,12 +34,12 @@ for (const [type, round, reproves] of TABLE) {
     if (round === 1) {
       // reprova na R1: há R2, e a R2 limpa aprova
       assert.equal(devCount(run, p), 2, 'a R1 reprovou, por isso há uma R2: ' + why(run, p.id));
-      assert.ok(r.won === true && !r.stopped, 'a R2 limpa aprova: ' + why(run, p.id));
+      assert.ok(r.won === true && !stopReason(r), 'a R2 limpa aprova: ' + why(run, p.id));
     } else if (reproves) {
       assert.notEqual(r.won, true, 'a falha da R2 reprova: ' + why(run, p.id));
-      assert.ok(r.stopped, 'a peça reprovada na R2 do acelerado para com um stopped: ' + why(run, p.id));
+      assert.equal(stopReason(r), 'maxRounds', 'resposta 4: a R2 reprovada sem critério repetido para com stopped.reason maxRounds: ' + why(run, p.id));
     } else {
-      assert.ok(r.won === true && !r.stopped, 'a falha da R2 não reprova: ' + why(run, p.id));
+      assert.ok(r.won === true && !stopReason(r), 'a falha da R2 não reprova: ' + why(run, p.id));
       assert.equal(devCount(run, p), 2);
       assert.ok(Array.isArray(r.followUps), 'followUps tem de ser uma lista: ' + why(run, p.id));
       assert.ok(JSON.stringify(r.followUps).includes(repro(2, 1)), `a falha da R2 (${repro(2, 1)}) está em followUps: ${JSON.stringify(r.followUps)}`);
@@ -51,7 +51,7 @@ test('C3 (acelerado): na R2, um «reprova sempre» e uma falha não central junt
   const p = contract('pa', 9101, { central: [2] });
   const run = await runWf(BUILD, baseArgs([p], { mode: 'accelerated' }), scenario([p], { pa: [fail(2, 2), failMany([1, 3], [3, 1, 'security'])] }));
   const r = resultOf(run, p.id);
-  assert.ok(r && r.won !== true && r.stopped, why(run, p.id));
+  assert.ok(r && r.won !== true && stopReason(r) === 'maxRounds', why(run, p.id));
   assert.ok(devCount(run, p) <= 2);
 });
 
@@ -78,5 +78,6 @@ test('C3 (gerador, semente 303, 60 planos): no acelerado nunca há ronda 3 e a v
     assert.ok(devCount(run, p) <= 2 && criticCount(run, p) <= 2, 'ronda 3 no acelerado: ' + msg);
     assert.ok(res, 'sem resultado: ' + msg);
     assert.equal(res.won === true, expected, 'vitória: ' + msg);
+    if (!expected) assert.equal(stopReason(res), 'maxRounds', 'resposta 4: ' + msg);
   }
 });

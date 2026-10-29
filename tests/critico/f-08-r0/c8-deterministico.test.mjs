@@ -17,8 +17,11 @@ const refuses = async (args, field) => {
   assert.match(msg, new RegExp(`\\b${field}\\b`), `${field}: a recusa não nomeia o campo: ${msg.slice(0, 300)}`);
 };
 
-test('C8: um mode fora de rigorous e accelerated é recusado antes de qualquer agente, com o nome do campo', async () => {
+test('C8: um mode em falta ou fora de rigorous e accelerated é recusado antes de qualquer agente, com o nome do campo', async () => {
   for (const mode of ['fast', 'turbo', 'Rigorous', 'rigoroso', 0, '']) await refuses(baseArgs([p], { mode }), 'mode');
+  // resposta 1 da #9: sem mode, recusa (sem valor por omissão)
+  const sem = baseArgs([p]); delete sem.mode;
+  await refuses(sem, 'mode');
 });
 
 test('C8: uma escalation sem uma das 4 condições, ou com um valor do tipo errado, é recusada antes de qualquer agente', async () => {

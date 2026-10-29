@@ -4,19 +4,20 @@
 // Depende do F-07: sim (args com o contrato da peça e a Ronda −1 em `args.attacks`).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUILD, METRICS, ALWAYS, contract, baseArgs, runWf, scenario, resultOf, devCount, criticCount, why, fail, rng, pick, shuffle } from './helpers.mjs';
+import { BUILD, METRICS, ALWAYS, stopReason, fieldOf, contract, baseArgs, runWf, scenario, resultOf, devCount, criticCount, why, fail, rng, pick, shuffle } from './helpers.mjs';
 
 const contractOk = (run, p, msg, same) => {
   const r = resultOf(run, p.id);
   assert.ok(r, 'sem resultado da peça: ' + msg + ' ' + why(run, p.id));
-  assert.equal(r.stopped, 'contract', msg + ' ' + why(run, p.id));
+  assert.equal(stopReason(r), 'contract', msg + ' ' + why(run, p.id));
   assert.notEqual(r.won, true, msg);
   assert.equal(devCount(run, p), 3, 'devs lançados (a ronda 4 não pode existir): ' + msg);
   assert.equal(criticCount(run, p), 3, 'críticos lançados: ' + msg);
-  assert.ok(r.metrics && typeof r.metrics === 'object', 'sem metrics: ' + msg);
-  for (const m of METRICS) assert.ok(m in r.metrics, `metrics.${m} em falta (${msg})`);
-  assert.equal(r.metrics.rounds, 3, 'metrics.rounds: ' + msg);
-  if (same !== undefined) assert.equal(r.metrics.sameCriterionFailures, same, 'metrics.sameCriterionFailures: ' + msg);
+  const mt = fieldOf(r, 'metrics');
+  assert.ok(mt && typeof mt === 'object', 'sem metrics: ' + msg);
+  for (const m of METRICS) assert.ok(m in mt, `metrics.${m} em falta (${msg})`);
+  assert.equal(mt.rounds, 3, 'metrics.rounds: ' + msg);
+  if (same !== undefined) assert.equal(mt.sameCriterionFailures, same, 'metrics.sameCriterionFailures: ' + msg);
 };
 
 test('C2: C1, C2 e C3 reprovados nas rondas 1, 2 e 3 → stopped "contract", sem ronda 4, metrics.rounds 3 e sameCriterionFailures 1', async () => {
@@ -49,6 +50,6 @@ test('C2 (guarda): rigoroso, C1 e C2 reprovados nas rondas 1 e 2 e aprovação n
   const p = contract('pa', 9101);
   const run = await runWf(BUILD, baseArgs([p]), scenario([p], { pa: [fail(1), fail(2)] }));
   const r = resultOf(run, p.id);
-  assert.ok(r && r.won === true && !r.stopped, why(run, p.id));
+  assert.ok(r && r.won === true && !stopReason(r), why(run, p.id));
   assert.equal(devCount(run, p), 3);
 });

@@ -29,7 +29,9 @@ test('regressão: os ataques da Ronda −1 já fundidos continuam no repositóri
   assert.equal(base.status, 0, base.stderr);
   for (const f of base.stdout.split('\n').map((s) => s.trim()).filter(Boolean)) {
     // uma mutação pode ser reescrita (o texto do prompt muda neste ticket), nunca apagada
-    assert.ok(existsSync(join(ROOT, f)), f + ' foi apagada do corpus');
+    // resposta 6 da #9: a critico-recebe-lacuna-de-rondas-anteriores é substituída pela critico-recebe-raciocinio-do-dev
+    const now = f.endsWith('/critico-recebe-lacuna-de-rondas-anteriores.json') ? 'scripts/corpus/mutations/critico-recebe-raciocinio-do-dev.json' : f;
+    assert.ok(existsSync(join(ROOT, now)), now + ' em falta no corpus (' + f + ')');
   }
 });
 
