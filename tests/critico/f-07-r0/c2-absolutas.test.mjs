@@ -5,7 +5,7 @@
 // semente 20261029, cada uma posta como critério 2 de um contrato válido e corrida nos dois workflows que validam o contrato
 // (gauntlet-attacks e gauntlet-build), nos dois modos. O critério verifica-se com `node --test scripts/contrato.test.mjs`, que tem
 // de existir e passar.
-// Leitura (PERGUNTA 1 na #8): um critério sem palavra absoluta e sem oracle é válido.
+// Resposta 1 do orquestrador (orquestrador-resp-f07.md): um critério sem palavra absoluta e sem oracle é válido.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';

@@ -1,6 +1,6 @@
 // F-07 critério 1: o contrato é validado antes de qualquer agent(), no gauntlet-build e no gauntlet-attacks. Cada contrato
 // inválido é recusado com o nome do campo em falta ou errado, e com zero agentes lançados; a falta de `issue` também conta.
-// Depende do F-06: não.
+// Depende do F-06: não. Emenda (resposta 1 do orquestrador): todos os critérios têm comando; o oracle só é obrigatório nos absolutos.
 // Oráculo (independente do dev): o corpus BAD abaixo, um caso por campo e por classe de defeito (em falta, null, vazio, só espaços,
 // tipo errado, valor fora do enum), com o campo esperado em cada um; e o corpus GOOD, que tem de lançar agentes sem erro (sem alarme
 // falso). Corre nos dois workflows e nos dois modos. Uma peça inválida ao lado de uma válida também dá zero agentes («antes de
@@ -102,13 +102,24 @@ for (const file of [ATTACKS, BUILD]) {
   }
 }
 
-// Mais de 6 critérios: pedido do orquestrador no brief desta Ronda −1 (processo v2, regra 6), mas não está no corpo da #8.
-// Fica como todo (corre, mostra o resultado, não reprova) até a resposta à PERGUNTA 4; com uma emenda, passa a teste normal.
+// Mais de 6 critérios: emenda do orquestrador (resposta 4, E:\Guilda\.checkpoints\orquestrador-resp-f07.md): a validação recusa
+// a peça com mais de 6 critérios e indica qual partir. Oráculo: 7, 8 e 12 critérios recusados (6 aceites está no GOOD), sozinha
+// ou ao lado de uma peça válida, com zero agent() e uma mensagem que nomeia o campo criteria e o id da peça a partir.
+const many = (n, id = 'pb', issue = 9102) => contract(id, issue, { criteria: Array.from({ length: n }, (_, i) => ({ text: `Step ${i} returns 3 rows`, oracle: 'corpus', command: `node --test t${i}.test.mjs` })) });
+const namesId = (msg, id) => new RegExp(`(?<![\\w-])${id}(?![\\w-])`).test(msg);
 for (const file of [ATTACKS, BUILD]) {
-  test(`C1+ ${file}: um contrato com 7 critérios é recusado antes de qualquer agent(), com o campo criteria`, { todo: 'PERGUNTA 4 na #8: o limite de 6 critérios não está no corpo do contrato' }, async () => {
-    const p = contract('pa', 9101, { criteria: Array.from({ length: 7 }, (_, i) => ({ text: `Step ${i} returns 3 rows`, oracle: 'corpus', command: `node --test t${i}.test.mjs` })) });
-    const x = await runWf(file, args(file, [p], 'rigorous'), fakeImpl({ pieces: [p] }));
-    assert.equal(x.calls.length, 0);
-    assert.ok(names(refusalText(x), 'criteria'));
-  });
+  for (const mode of MODES) {
+    test(`C1+ ${file} (${mode}): uma peça com mais de 6 critérios é recusada antes de qualquer agent(), nomeando criteria e a peça a partir`, async () => {
+      const wrong = [];
+      for (const n of [7, 8, 12]) {
+        for (const pieces of [[many(n)], [contract('pa', 9101), many(n)]]) {
+          const x = await runWf(file, args(file, pieces, mode), fakeImpl({ pieces }));
+          const t = refusalText(x);
+          if (x.calls.length !== 0) wrong.push(`${n} critérios (${pieces.length} peças): lançou ${x.calls.length} agentes`);
+          else if (!names(t, 'criteria') || !namesId(t, 'pb')) wrong.push(`${n} critérios (${pieces.length} peças): a recusa não nomeia criteria e pb: ${t.slice(0, 200)}`);
+        }
+      }
+      assert.deepEqual(wrong, []);
+    });
+  }
 }

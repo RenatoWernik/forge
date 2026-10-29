@@ -5,7 +5,8 @@
 // (controlo) tem de deixar o check em «All ok.», para provar que a falha vem da mutação e não do prelúdio.
 // Mais: os exemplos de args do FRAMEWORK.md e do BOOTSTRAP.md (os «modelos de ticket» que o utilizador copia) com um critério
 // absoluto sem oracle fazem o check falhar.
-// Depende do F-06: só a mutação «sem o brief da Ronda −1». Leitura da PERGUNTA 2 (args.attacks) na mutação «salta a Ronda −1».
+// Depende do F-06: só a mutação «sem o brief da Ronda −1». Respostas do orquestrador: 2 (args.attacks) na mutação «salta a
+// Ronda −1»; 4 (mais de 6 critérios recusado) e 5 (failingOnBase:false bloqueia) nas mutações marcadas com elas.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -24,6 +25,8 @@ const withPrelude = (dest, file, prelude) => {
 const wrap = (body) => `{ const __a = agent; agent = ${body} }`;
 const TEXT = ['objective', 'input', 'fails', 'outOfScope', 'env', 'output'];
 const FILL = `if (args && Array.isArray(args.pieces)) args = { ...args, pieces: args.pieces.map(p => p && typeof p === 'object' ? { ...p, issue: Number.isInteger(p.issue) && p.issue > 0 ? p.issue : 4242, ${TEXT.map((k) => `${k}: typeof p.${k} === 'string' && p.${k}.trim() ? p.${k} : 'mutant ${k}'`).join(', ')}, criteria: (Array.isArray(p.criteria) && p.criteria.length ? p.criteria : [{}]).map(c => ({ text: c && typeof c.text === 'string' && c.text.trim() ? c.text : 'mutant text', command: c && typeof c.command === 'string' && c.command.trim() ? c.command : 'node --test', oracle: c && ['corpus', 'property', 'reference', 'threshold'].includes(c.oracle) ? c.oracle : 'corpus' })) } : p) }`;
+const FOB = "if (args && Array.isArray(args.attacks)) args = { ...args, attacks: args.attacks.map(r => r && typeof r === 'object' ? { ...r, failingOnBase: true } : r) }";
+const SIX = "if (args && Array.isArray(args.pieces)) args = { ...args, pieces: args.pieces.map(p => p && typeof p === 'object' && Array.isArray(p.criteria) ? { ...p, criteria: p.criteria.slice(0, 6) } : p) }";
 const ISSUE = "if (args && Array.isArray(args.pieces)) args = { ...args, pieces: args.pieces.map(p => p && typeof p === 'object' ? { ...p, issue: Number.isInteger(p.issue) && p.issue > 0 ? p.issue : 4242 } : p) }";
 
 for (const language of ['English', 'Portuguese']) {
@@ -50,6 +53,9 @@ const MUTANTS = [
   ['C3: o prompt deixa de mandar ler a issue com --json body,comments', [[ATTACKS, wrap("(p, o) => __a(String(p).split('--json body,comments').join('--json body'), o)")]], 1],
   ['C3: as lacunas do crítico perdem-se no retorno', [[ATTACKS, wrap('async (p, o) => { const r = await __a(p, o); return r && typeof r === "object" && Array.isArray(r.gaps) ? { ...r, gaps: [] } : r }')]], 1],
   ['C4: o gauntlet-build salta a Ronda −1 (todas as peças com um resultado limpo)', [[BUILD, R0_BYPASS]], 1],
+  ['C4 (resposta 5): o gauntlet-build ignora failingOnBase:false', [[BUILD, FOB]], 1],
+  ['C1 (resposta 4): o gauntlet-build aceita mais de 6 critérios (corta-os a 6 antes da validação)', [[BUILD, SIX]], 1],
+  ['C1 (resposta 4): o gauntlet-attacks aceita mais de 6 critérios (corta-os a 6 antes da validação)', [[ATTACKS, SIX]], 1],
 ];
 
 for (const [label, edits, code] of MUTANTS) {

@@ -3,17 +3,21 @@
 // para <pasta>/home e TMP, TEMP e TMPDIR para <pasta>/tmp (também nos processos filhos). A pasta é apagada no after() e no exit.
 // Nenhum ataque abre uma sessão `claude`: os workflows correm num runtime falso (vm), como a simulação do check.cjs.
 //
-// Leitura do contrato que estes ataques assumem. Cada ponto marcado com PERGUNTA está na issue #8 e ajusta-se aqui, num só sítio:
+// Leitura do contrato que estes ataques assumem. As respostas do orquestrador às PERGUNTAS da #8
+// (E:\Guilda\.checkpoints\orquestrador-resp-f07.md) fazem parte do contrato; cada ponto ajusta-se aqui, num só sítio:
 //   - os campos do contrato ficam no topo de cada peça dos `args` (spec #1: «os args de cada peça ganham os campos do contrato»);
 //     os campos antigos da peça (id, title, goal, bar, owns, tdd) continuam lá;
 //   - `issue` é um número inteiro positivo; `objective`, `input`, `fails`, `outOfScope`, `env` e `output` são texto não vazio;
-//     `criteria` é uma lista não vazia de { text, oracle, command }, com `oracle` em corpus | property | reference | threshold;
-//   - PERGUNTA 1: o `oracle` só é obrigatório num critério com palavra absoluta (critério 2: «não podem ser recusados» os critérios
-//     sem palavra absoluta); por isso um critério sem palavra absoluta e sem oracle é válido;
-//   - PERGUNTA 2: o resultado da Ronda −1 chega ao gauntlet-build em `args.attacks`, a lista `results` que o gauntlet-attacks
+//     `criteria` é uma lista de 1 a 6 critérios { text, oracle, command } (resposta 4: mais de 6 é recusado, nomeando a peça),
+//     com `oracle` em corpus | property | reference | threshold;
+//   - resposta 1: o `command` é obrigatório em todos os critérios; o `oracle` só num critério com palavra absoluta, por isso um
+//     critério sem palavra absoluta e sem oracle é válido;
+//   - resposta 2: o resultado da Ronda −1 chega ao gauntlet-build em `args.attacks`, a lista `results` que o gauntlet-attacks
 //     devolve, tal como está (helper `comR0`);
-//   - PERGUNTA 3: o gauntlet-attacks recebe os mesmos args de base que o gauntlet-build (checkpoint, root, dashboardUrl, context,
+//   - resposta 3: o gauntlet-attacks recebe os mesmos args de base que o gauntlet-build (checkpoint, root, dashboardUrl, context,
 //     models, language, memory, pieces) e devolve { results: [{ id, attacks, failingOnBase, gaps }] } (também aceito a lista solta);
+//   - resposta 5: `failingOnBase: false` bloqueia a peça no build (sem dev), como as lacunas; os ataques marcados como guarda não
+//     contam para ele (é o crítico que o declara; PERGUNTA 7 na #8: como se marca um ataque como guarda e qual o valor de `blocked`);
 //   - o crítico da Ronda −1 responde no schema com os mesmos nomes do retorno (attacks, failingOnBase, gaps); o runtime falso
 //     preenche qualquer outro campo obrigatório do schema pelo tipo;
 //   - recusa = zero agent() e o texto do erro (ou do retorno) nomeia o campo como caminho: `issue`, `criteria[1].command`,
