@@ -199,6 +199,13 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
   return { files, conflicts };
 }
 
+// The seed of notes/n0001: the setup decisions of the project in `dest`, read back from its forge.json so the reasons shown are the ones recorded.
+export async function decisionNote(dest) {
+  const fj = JSON.parse((await readFile(join(dest, '.claude/forge.json'), 'utf8')).replace(/^﻿/, ''));
+  const roles = ROLES.map((r) => `${r}: ${fj.models[r].label ?? fj.models[r].model} ${fj.models[r].effort}, ${fj.models[r].reason}`);
+  return { kind: 'decisao', body: [`language: ${fj.language}`, `mode: ${fj.mode}`, ...roles].join('\n') };
+}
+
 // The panel URL only exists after the page is published, which needs the generated panel.html: write with the pending URL first, swap it in afterwards.
 export async function setPanelUrl(dest, url) {
   if (!PANEL_URL.test(url ?? '')) throw new Error('panel URL must look like https://claude.ai/artifact/<id>');
@@ -222,6 +229,7 @@ const USAGE = `usage: node scaffold.mjs --dest <folder> --name <project> --langu
          [--script sh|ps] [--panel-url <url>] [--lang-tag <tag>] [--no-plain-style] [--answers <file.json>]
          [--dry-run] [--force]
        node scaffold.mjs --dest <folder> --set-panel-url <url>
+       node scaffold.mjs --dest <folder> --decision-note
        Flags override the same keys of --answers; models are never defaulted: the user chooses them.
        The roles developerUi and tester, and the reason of every role, come only through --answers.`;
 
@@ -231,9 +239,13 @@ export async function main(argv, write) {
       dest: { type: 'string' }, answers: { type: 'string' }, name: { type: 'string' }, language: { type: 'string' }, 'lang-tag': { type: 'string' },
       mode: { type: 'string' }, developer: { type: 'string' }, critic: { type: 'string' }, aux: { type: 'string' }, workspace: { type: 'string' }, project: { type: 'string' },
       script: { type: 'string' }, 'panel-url': { type: 'string' }, 'set-panel-url': { type: 'string' },
-      'no-plain-style': { type: 'boolean' }, 'dry-run': { type: 'boolean' }, force: { type: 'boolean' },
+      'no-plain-style': { type: 'boolean' }, 'dry-run': { type: 'boolean' }, force: { type: 'boolean' }, 'decision-note': { type: 'boolean' },
     } }).values;
     const dest = resolve(v.dest ?? '.');
+    if (v['decision-note']) {
+      write(JSON.stringify(await decisionNote(dest)));
+      return 0;
+    }
     if (v['set-panel-url']) {
       const { changed } = await setPanelUrl(dest, v['set-panel-url']);
       write(`forge scaffold: panel URL set in ${changed.length} files: ${changed.join(', ')}`);
