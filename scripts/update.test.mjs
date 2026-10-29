@@ -292,6 +292,15 @@ test('a config folder with control characters never reaches the diff line raw', 
   assert.doesNotMatch(r.out, /\u001b|\nFAKE/);
 });
 
+test('--check --json escapes U+2028, U+2029, DEL and C1 controls from a hostile version, and stays valid JSON', async () => {
+  const hostile = '5.3.2' + String.fromCharCode(0x2028, 0x2029, 0x7f, 0x85) + 'x';
+  const m = machine({ urls: urls(), files: plugins({ 'ponytail@ponytail': hostile }) });
+  const r = await run(m, '--check', '--json');
+  for (const ch of hostile.slice(5, 9)) assert.ok(!r.out.includes(ch), `raw U+${ch.codePointAt(0).toString(16)}`);
+  assert.match(r.out, /\\u2028\\u2029\\u007f\\u0085/);
+  assert.equal(JSON.parse(r.out).components.find((c) => c.id === 'ponytail').installedVersion, hostile);
+});
+
 test('control characters in a value read from a file never reach the output raw', async () => {
   const files = { [`${CFG}/plugins/installed_plugins.json`]: JSON.stringify({ plugins: { 'forge@forge': [{ version: '0.1.0\u001b[31m\nFAKE', gitCommitSha: 'nothex' }] } }) };
   const r = await run(machine({ urls: urls(), files }), '--check');

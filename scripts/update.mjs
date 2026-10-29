@@ -16,7 +16,10 @@ const USAGE = 'Usage: update.mjs [--check] [--json] [--versions <fixture.json>]\
 
 const CONTROL_RE = new RegExp('[\\p{Cc}\\u2028\\u2029]', 'gu');
 // A value that came from a file, the environment or a command never ends a line or starts a new one.
-const show = (v) => String(v).replace(CONTROL_RE, (ch) => '\\u' + ch.codePointAt(0).toString(16).padStart(4, '0'));
+const escapeChar = (ch) => '\\u' + ch.codePointAt(0).toString(16).padStart(4, '0');
+const show = (v) => String(v).replace(CONTROL_RE, escapeChar);
+// JSON.stringify leaves DEL, the C1 controls, U+2028 and U+2029 raw; outside of strings JSON only has the newlines of its indentation.
+const jsonSafe = (json) => json.replace(CONTROL_RE, (ch) => (ch === '\n' ? ch : escapeChar(ch)));
 const quote = (v) => `'${show(v).replaceAll("'", "'\\''")}'`;
 
 const norm = (text) => text.replaceAll('\r\n', '\n').trim();
@@ -293,7 +296,7 @@ export async function main(argv, sys, write) {
   const id = o.applies[0];
   if (id === undefined) {
     const report = await check(registry, compat, sys);
-    write(o.flags.has('--json') ? JSON.stringify({ ...report, components: report.components.map(toJson) }, null, 2) : formatText(report));
+    write(o.flags.has('--json') ? jsonSafe(JSON.stringify({ ...report, components: report.components.map(toJson) }, null, 2)) : formatText(report));
     return report.components.every((c) => c.status === 'ok') ? 0 : 1;
   }
   if (![...registry.components.map((c) => c.id), 'forge', 'speckit-project'].includes(id)) { write(`Not a component: ${show(id)}\n${USAGE}`); return 2; }
