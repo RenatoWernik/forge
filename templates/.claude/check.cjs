@@ -1,6 +1,6 @@
 // Validates the framework. Usage, from the project root: node .claude/check.cjs [--env]   (exit code 1 if there is a FAIL)
 //   default: .claude/forge.json + a simulation of both workflows (no model is called) + the manual/bootstrap examples that exist
-//   --env:   also the machine and project setup (ai-memory, Spec-Kit, Graphify, git, skills); versions are forge's doctor job
+//   --env:   also the machine and project setup (ai-memory, Spec-Kit, Graphify, git, hooks, skills); versions are forge's doctor job
 // .claude/forge.json: { "language": "English", "langTag": "en", "mode": "rigorous", "models": { "developer": R, "developerUi": R, "critic": R, "tester": R, "aux": R }, "escalation": { <condition>: { "value", "description" } } }
 //   with R = { model, effort, reason, label?, match? }
 //   mode   = rigorous | accelerated
@@ -102,6 +102,12 @@ async function chk(name, f) {
     await chk('Matt Pocock: /setup done (docs/agents/ and an "## Agent skills" block in CLAUDE.md)', () => has('docs/agents/issue-tracker.md') && fs.readFileSync('CLAUDE.md', 'utf8').includes('## Agent skills'))
     await chk('Graphify: post-commit and post-checkout hooks installed', () => { const s = out('graphify', ['hook', 'status']); return s.includes('post-commit: installed') && s.includes('post-checkout: installed') })
     await chk('git: repository and .gitignore with .gauntlet/ and graphify-out/', () => { const g = fs.readFileSync('.gitignore', 'utf8').split(/\r?\n/); return has('.git') && g.includes('.gauntlet/') && g.includes('graphify-out/') })
+    // protection hooks: "installed" means an entry of the script is in the project's .claude/settings.json (not only in the answers); the script file must be there too
+    const HOOKS = { killByName: 'forge-matar-por-nome.mjs', backgroundTests: 'forge-testes-em-primeiro-plano.mjs', idleWatch: 'forge-vigia-de-agentes.mjs' }
+    let wired = ''
+    try { wired = JSON.stringify(JSON.parse(fs.readFileSync('.claude/settings.json', 'utf8').replace(/^﻿/, '')).hooks || {}).replace(/\\\\/g, '/') } catch (e) {}
+    const hooksOn = Object.keys(HOOKS).filter(k => wired.includes('.claude/hooks/' + HOOKS[k]))
+    await chk('hooks installed in .claude/settings.json: ' + (hooksOn.join(', ') || 'none') + ' (each script must exist in .claude/hooks/)', () => hooksOn.every(k => has('.claude/hooks', HOOKS[k])))
     await chk('global skills (ponytail*, graphify, tdd) and the mattpocock-skills plugin', () => ['ponytail', 'ponytail-review', 'ponytail-audit', 'ponytail-debt', 'graphify', 'tdd'].every(s => has(H, '.claude/skills', s, 'SKILL.md')) && Object.keys(JSON.parse(fs.readFileSync(path.join(H, '.claude/plugins/installed_plugins.json'), 'utf8')).plugins).some(k => k.startsWith('mattpocock-skills@')))
     const cst = has('.specify/memory/constitution.md') ? fs.readFileSync('.specify/memory/constitution.md', 'utf8') : ''
     console.log('info  constitution: ' + (!cst ? 'missing' : cst.includes('[PROJECT_NAME]') ? 'still the template (run /speckit-constitution)' : 'filled in'))

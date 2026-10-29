@@ -2,6 +2,7 @@ import { readdir, readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { validarHooks, ficheirosDosHooks, juntarSettings } from './hooks.mjs';
 
 const TEMPLATES = fileURLToPath(new URL('../templates/', import.meta.url));
 // copied as is: its comments quote the marker syntax
@@ -9,6 +10,7 @@ const VERBATIM = new Set(['.claude/check.cjs']);
 const LEITOR = fileURLToPath(new URL('./painel-leitor.mjs', import.meta.url));
 export const LEITOR_NO_PROJETO = '.claude/painel-leitor.mjs';
 const PAINEL = '.checkpoints/painel.json';
+const SETTINGS = '.claude/settings.json'; // the settings of the PROJECT; the hooks the user said yes to are joined to it, never to a global file
 const MODO_DO_PAINEL = { rigorous: 'rigoroso', accelerated: 'acelerado' }; // the mode of forge.json, in the words of painel.json
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const ROLES = ['developer', 'developerUi', 'critic', 'tester', 'aux'];
@@ -142,6 +144,7 @@ function validate(a) {
   need('dashboardUrl', a.dashboardUrl === undefined || (str(a.dashboardUrl) && PANEL_URL.test(a.dashboardUrl)), 'a https://claude.ai/artifact/<id> URL');
   const lang = resolveLanguage(a);
   if (lang.error) bad.push(lang.error);
+  bad.push(...validarHooks(a.hooks));
   const ps = a.panelStrings;
   need('panelStrings', ps === undefined || (ps && typeof ps === 'object' && Object.entries(ps).every(([k, v]) => /^\w+$/.test(k) && str(v) && v.length <= 400)), 'an object of short strings keyed like the panel texts');
   if (bad.length) throw new Error(`invalid answers:\n- ${bad.join('\n- ')}`);
@@ -178,9 +181,12 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
   tree['.claude/forge.json'] = JSON.stringify({ language: lang.name, langTag: lang.tag, plainStyle: answers.plainStyle !== false, mode: answers.mode, models: answers.models, escalation: ESCALATION }, null, 2) + '\n';
   tree[PAINEL] = JSON.stringify({ versao: 1, projeto: answers.projectName, modo: MODO_DO_PAINEL[answers.mode], tickets: [], agentes: [] }, null, 2) + '\n';
   tree[LEITOR_NO_PROJETO] = await readFile(LEITOR, 'utf8'); // the single source of the reader, copied as is (its text has no markers to fill)
-  const files = Object.keys(tree);
+  for (const [rel, from] of ficheirosDosHooks(answers.hooks)) tree[rel] = await readFile(from, 'utf8'); // only the hooks answered true; copied as is, like the reader
   const conflicts = [];
-  for (const rel of files) if (await exists(join(dest, rel))) conflicts.push(rel);
+  for (const rel of Object.keys(tree)) if (await exists(join(dest, rel))) conflicts.push(rel);
+  // no answer for hooks leaves settings.json alone; an answer joins it (no force needed: the user's keys and hooks stay) or, when it is not valid JSON, stops before anything is written
+  const settings = answers.hooks === undefined ? null : juntarSettings(await readFile(join(dest, SETTINGS), 'utf8').catch(() => undefined), answers.hooks);
+  const files = [...Object.keys(tree), ...(settings === null ? [] : [SETTINGS])];
   if (!dryRun) {
     if (conflicts.length && !force) throw new Error(`refusing to overwrite existing files (use force to replace them): ${conflicts.join(', ')}`);
     for (const [rel, text] of Object.entries(tree)) {
@@ -188,6 +194,7 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
       await mkdir(dirname(join(dest, rel)), { recursive: true });
       await writeFile(join(dest, rel), text);
     }
+    if (settings !== null) await writeFile(join(dest, SETTINGS), settings);
   }
   return { files, conflicts };
 }
@@ -257,8 +264,8 @@ export async function main(argv, write) {
       ...(kept.length ? [`existing files (kept): ${kept.join(', ')}`] : [])].join('\n'));
     return 0;
   } catch (e) {
-    write(`${e.message}\n${USAGE}`);
-    return 2;
+    write(e.exit === 1 ? e.message : `${e.message}\n${USAGE}`); // a settings.json that is not valid JSON: exit 1, nothing written
+    return e.exit ?? 2;
   }
 }
 
