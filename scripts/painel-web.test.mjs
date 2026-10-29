@@ -9,6 +9,17 @@ import { docsVida } from './painel.mjs';
 import { ler } from './painel-leitor.mjs';
 import { seletorInboxTexto, seletorInboxEnviar } from '../tests/ponte/f-12.mjs';
 
+let B, pagina;
+// Registered before the helper's own after(), which deletes the page folders, so the browser closes first.
+// Windows sometimes holds a file of the closed browser's temp profile for longer than fechar() waits (20 s): keep deleting it for one more minute
+after(async () => {
+  try { await B?.fechar(); } catch (e) {
+    if (!['EPERM', 'EBUSY'].includes(e.code)) throw e;
+    for (let i = 0; ; i++) {
+      try { rmSync(e.path, { recursive: true, force: true }); break; } catch (x) { if (i >= 60) throw x; await new Promise((r) => setTimeout(r, 1000)); }
+    }
+  }
+});
 // Chrome on Windows refuses the DevTools pipe under a fake USERPROFILE. The helper keeps the USERPROFILE it finds for the browser only and
 // fakes it for this process; when this suite already runs in a sandbox (the regression attacks run scripts/*.test.mjs with a fake one),
 // it would keep the fake one and every page test would hang. So it gets the account's real profile folder, still for the browser only.
@@ -36,17 +47,7 @@ test('docsVida gives painel/vida: { t, agentes: { <nome>: { minutos, vida } } } 
   assert.ok(Object.hasOwn(docsVida(JSON.stringify(painel([['__proto__', 'p.md']])), {}, AGORA)['painel/vida'].agentes, '__proto__'), 'any name is an own key');
 });
 
-let B, pagina;
 before(async () => { B = await comBrowser(); pagina = await paginaDe(); });
-// Windows sometimes holds a file of the closed browser's temp profile for longer than fechar() waits (20 s): keep deleting it for one more minute
-after(async () => {
-  try { await B?.fechar(); } catch (e) {
-    if (!['EPERM', 'EBUSY'].includes(e.code)) throw e;
-    for (let i = 0; ; i++) {
-      try { rmSync(e.path, { recursive: true, force: true }); break; } catch (x) { if (i >= 60) throw x; await new Promise((r) => setTimeout(r, 1000)); }
-    }
-  }
-});
 
 testePagina('criterion 2: the page draws the counts by state, the progress and the agents of the F-10 model, for every fixture', async () => {
   await B.abrir(pagina, { docs: docsDe(FIXTURES.base) });
