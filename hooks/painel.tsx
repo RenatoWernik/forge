@@ -44,6 +44,12 @@ export const register: Register = on => {
     })
   })
 
+  on('ui.close', { id: PANE }, async ($, e, next) => {
+    timer?.cancel()
+    timer = undefined
+    return next(e)
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     const m = await read($, painel)
