@@ -114,7 +114,7 @@ Done when you summarize in three lines what was already decided or tried on the 
 
 ### Step 2. Gauntlet build
 
-Assemble `pieces` from `tasks.md` (each one already has its contract issue, section 10.1, and its Round −1 attacks, section 10.3) and call `Workflow({name:"gauntlet-build", args})` (the `name` resolves the workflow saved in `.claude/workflows/`). The call returns at once; the result arrives later as a notification and carries the `taskId` of the run. `args` is a JSON object, never a string (`meta.whenToUse` has the format; `check.cjs` validates this example). Put in `root` the absolute path of the project root (the session's working directory):
+Assemble `pieces` from `tasks.md` (each one already has its contract issue, section 10.1) and run the Round −1 first: call `Workflow({name:"gauntlet-attacks", args})` with the args below, without `attacks` (section 10.3): one critic per piece, with the model of `models.critic`, reads the issue with `gh issue view <issue> --json body,comments`, writes the attacks and runs them on the base. Its `results[]` (`id, attacks[{id, file, guard?, passesOnBase}], failingOnBase, gaps`) go, as returned, in `attacks` of the same args for the build: call `Workflow({name:"gauntlet-build", args})` (the `name` resolves the workflow saved in `.claude/workflows/`). The call returns at once; the result arrives later as a notification and carries the `taskId` of the run. `args` is a JSON object, never a string (`meta.whenToUse` has the format; `check.cjs` validates this example). Put in `root` the absolute path of the project root (the session's working directory):
 
 ```json
 {"checkpoint":{"n":1,"title":"Setup and Foundational"},
@@ -124,7 +124,11 @@ Assemble `pieces` from `tasks.md` (each one already has its contract issue, sect
  "memory":{"workspace":"{{MEM_WORKSPACE}}","project":"{{MEM_PROJECT}}"},
  "models":{{MODELS_JSON}},
  "context":"specs/001-name/{spec,plan,tasks}.md; CONTEXT.md; test: <command from plan.md>",
- "pieces":[{"id":"config","title":"Load configuration","goal":"T003 to T005 (FR-002): read and validate the configuration; seam: Config.load","bar":"<bar approved in section 4.2>","owns":["src/config.py","tests/test_config.py"],"tdd":true}]}
+ "pieces":[{"id":"config","title":"Load configuration","goal":"T003 to T005 (FR-002): read and validate the configuration; seam: Config.load","bar":"<bar approved in section 4.2>","owns":["src/config.py","tests/test_config.py"],"tdd":true,
+   "issue":12,"objective":"<the objective, copied from issue 12>","input":"<branch, HEAD and files of the ticket>",
+   "criteria":[{"text":"Config.load returns the 3 keys of the sample file","oracle":"corpus","command":"pytest tests/test_config.py"},{"text":"A missing key fails with a message that names it","command":"pytest tests/test_config.py -k missing"}],
+   "fails":"<what fails the ticket>","outOfScope":"<what the ticket does not do>","env":"<environment and commands>","output":"<where the result goes>"}],
+ "attacks":[{"id":"config","attacks":[{"id":"config-a1","file":"tests/critico/config-r0/a1.test.py","passesOnBase":false},{"id":"config-g1","file":"tests/critico/config-r0/g1.test.py","guard":true,"passesOnBase":true}],"failingOnBase":true,"gaps":[]}]}
 ```
 
 Format rules:
@@ -134,6 +138,8 @@ Format rules:
 - `goal` = result, ids `T###` and `FR-###` and the seam, without prescribing architecture.
 - `owns` = exclusive files of the piece, tests included. `parallel:true` only if the `owns` are disjoint and no piece imports code from another (default is sequential).
 - `tdd:false` only for a piece without testable logic.
+- Each piece also carries its contract, transcribed from the issue (the issue is the source; the agents read the issue itself): `issue` (the number), `objective`, `input`, `criteria` (1 to 6; each `{text, oracle?, command}`), `fails`, `outOfScope`, `env` and `output`. Every criterion has the `command` that verifies it. `oracle` (`corpus`, `property`, `reference` or `threshold`) is required when the `text` has an absolute word (never, always, any, all, every, nunca, sempre, qualquer, todos, todas, nenhum, nenhuma). Both workflows validate the contract before spending any agent and refuse a missing or wrong field, or more than 6 criteria (split the piece), naming the field.
+- `attacks` is the `results` of `gauntlet-attacks`, untouched. The `guard:true` mark is for a regression or hygiene attack, which may pass on the base. The workflow recomputes `failingOnBase` from the `passesOnBase` of each attack without `guard`; the critic's own boolean is never read.
 - Args without `root`, `dashboardUrl`, `models` or `pieces`, or a piece without `id`, `title`, `goal`, `bar` or `owns`, bring the workflow down before any agent is spent.
 
 The workflow repeats developer and critic per piece until `won:true`: ours chosen blind, tests passing in the critic's run and no blocking error. While it runs:
@@ -144,9 +150,9 @@ The workflow repeats developer and critic per piece until `won:true`: ours chose
 - An agent without an answer (skipped or API error) ends the piece with `stopped`.
 - In the background, at each interaction with the user read the `inbox` (step 1) and the new `pergunta` notes (`query` on `notes` with `where:[["kind","eq","pergunta"]]`, `order_by:{field:"t",direction:"desc"}` and `limit:10`; new ones have a `t` later than your last read) and bring them to the chat.
 
-Return: `results[]` with `id, won, rounds, stopped, files, testCommand, models, lastVerdict`. Then:
+Return: `results[]` with `id, won, rounds, stopped, files, testCommand, models, lastVerdict`. A piece without a clean Round −1 (no result, open `gaps`, an attack without `guard` that passes on the base, an attack without `passesOnBase`, or no attack without `guard`) comes back as `{id, won:false, rounds:0, blocked:{reason:"gaps", gaps}}` or `blocked:{reason:"failingOnBase", attacks:[ids]}` and never reaches the developer: close the gap in the contract and run the Round −1 again for that piece. Then:
 
-- `won:false`, `stopped` or a piece missing from `results`: stop and take it to the user.
+- `won:false`, `blocked`, `stopped` or a piece missing from `results`: stop and take it to the user.
 - Check `models` against `.claude/forge.json` (each declared model must satisfy the `match` of its role, which defaults to the `model`); any other value: section 9.
 - Run the plan's full suite yourself; if it fails, reopen the responsible piece with the output in its `goal`.
 - `git status`: only files in the `owns` of the CP's pieces changed.
