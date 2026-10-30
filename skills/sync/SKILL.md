@@ -48,6 +48,7 @@ Read the exit code and the messages it prints:
 Open the patch file and read all of it. Show the user the list of files and a short account of each hunk in chat, in their language: what changed and why it looks like a general improvement. Then look for what should not go into a public package and raise it before asking for the yes:
 
 - Anything specific to this project or to the user that was not a marker: local paths, user names, e-mail addresses, company or client names, panel URLs, workspace or project names in another spelling.
+- Hunks that undo a newer package version: the hooks and the panel scripts are compared with the current package file, so a project generated before a package update shows that update as if the project had removed it. Drop those hunks.
 - Changes that only make sense for one project (a rule for this codebase, a tool this project alone uses).
 - Text in a language other than English: the package documents and templates are in English; the project language only applies to the generated panel texts, notes and commits.
 

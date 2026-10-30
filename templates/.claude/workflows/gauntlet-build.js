@@ -261,7 +261,7 @@ ${panel(cid, 'Critic · ' + short, 'critic', `Round ${round}: judge blind agains
 
     // The accelerated mode, in its last round, moves to followUps a failure that is not an always-fail (materiality 1 or a category) and not a criterion marked central; an unknown criterion stays blocking.
     const critKey = c => { const s = String(c).trim().toUpperCase(), m = /^C0*(\d+)$/.exec(s); return m ? 'C' + m[1] : s } // C01, c1 and C001 are the criterion C1
-const at = b => { const m = /^C(\d+)$/i.exec(String(b.criterion).trim()); return m ? p.criteria[m[1] - 1] : undefined }
+    const at = b => { const m = /^C(\d+)$/i.exec(String(b.criterion).trim()); return m ? p.criteria[m[1] - 1] : undefined }
     const soft = b => MODE === 'accelerated' && round >= CAP && Number(b.materiality) !== 1 && (!b.category || b.category === 'criterion') && at(b) && at(b).central !== true
     const hard = v.blocking.filter(b => !soft(b))
     followUps.push(...v.blocking.filter(soft).map(b => ({ round, ...b })))
