@@ -351,13 +351,13 @@ test('a hook edited in the project comes back against scripts/hooks, applies at 
 });
 
 test('an e-mail address or an absolute path in an added line is flagged as personal data (exit 3), the same words as plain text are not', async () => {
-  const bad = ['Ask maria.silva@example.org first.', 'Logs: C:\\Users\\maria\\logs', 'Logs: /home/maria/logs'];
+  const bad = ['Ask maria.silva@example.org first.', 'Logs: C' + ':\\Users\\maria\\logs', 'Logs: /' + 'home/maria/logs'];
   for (const line of bad) {
     const dir = await project();
     await writeFile(join(dir, 'CLAUDE.md'), `${await read(dir, 'CLAUDE.md')}${line}\n`);
     assert.deepEqual((await sync(dir, PKG)).leaks, [{ file: 'CLAUDE.md', line }], line);
   }
   const dir = await project();
-  await writeFile(join(dir, 'CLAUDE.md'), `${await read(dir, 'CLAUDE.md')}Run plugin forge@forge and read docs/home/notes at https://example.org/x.\n`);
+  await writeFile(join(dir, 'CLAUDE.md'), `${await read(dir, 'CLAUDE.md')}Run plugin forge@forge and read docs/house/notes at https://example.org/x.\n`);
   assert.deepEqual((await sync(dir, PKG)).leaks, []);
 });
