@@ -12,8 +12,8 @@
       "upstream": { "repo": "robonuggets/gauntlet-loop", "base": "9b1975a" },
       "pristine": {
         "gauntlet-loop/SKILL.md": [
-          { "ref": "fc6b2fc", "sha256": "7ee54fa150c6eb1af07e7069e7fafcaceb00b71ca346cd4f2a5a988918e496b9", "url": "https://raw.githubusercontent.com/RenatoWernik/gauntlet-loop/fc6b2fc/.claude/skills/gauntlet-loop/SKILL.md" },
-          { "ref": "9b1975a", "sha256": "e3653566c6c1fa3125c0a3c48586367dc76ab62c18b5cf5e9d449d067fde8638", "url": "https://raw.githubusercontent.com/robonuggets/gauntlet-loop/9b1975a/.claude/skills/gauntlet-loop/SKILL.md" }
+          { "ref": "9b1975a", "sha256": "e3653566c6c1fa3125c0a3c48586367dc76ab62c18b5cf5e9d449d067fde8638", "url": "https://raw.githubusercontent.com/robonuggets/gauntlet-loop/9b1975a/.claude/skills/gauntlet-loop/SKILL.md" },
+          { "ref": "fc6b2fc", "sha256": "7ee54fa150c6eb1af07e7069e7fafcaceb00b71ca346cd4f2a5a988918e496b9", "url": "https://raw.githubusercontent.com/RenatoWernik/gauntlet-loop/fc6b2fc/.claude/skills/gauntlet-loop/SKILL.md" }
         ]
       },
       "surface": { "skills": ["gauntlet-loop"], "commands": [] }
@@ -97,8 +97,8 @@
       "source": "https://github.com/SpillwaveSolutions/sdd-skill/tree/eba9606",
       "pristine": {
         "sdd/SKILL.md": [
-          { "ref": "eba9606", "sha256": "907acd1f19f9d697fc2f9a813ed0fed1656d336a302cafbd77bd86ec2f18f0c1", "url": "https://raw.githubusercontent.com/SpillwaveSolutions/sdd-skill/eba9606/skill.md" },
-          { "ref": "0ec5955", "sha256": "9718c918657007c19ed0588365051acbc9b162f38648a79ec693c5b92d595f4c", "url": "https://raw.githubusercontent.com/SpillwaveSolutions/sdd-skill/0ec5955/skill.md" }
+          { "ref": "0ec5955", "sha256": "9718c918657007c19ed0588365051acbc9b162f38648a79ec693c5b92d595f4c", "url": "https://raw.githubusercontent.com/SpillwaveSolutions/sdd-skill/0ec5955/skill.md" },
+          { "ref": "eba9606", "sha256": "907acd1f19f9d697fc2f9a813ed0fed1656d336a302cafbd77bd86ec2f18f0c1", "url": "https://raw.githubusercontent.com/SpillwaveSolutions/sdd-skill/eba9606/skill.md" }
         ]
       },
       "surface": { "skills": ["sdd"], "commands": [] }

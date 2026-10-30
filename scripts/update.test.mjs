@@ -147,6 +147,19 @@ test('loose ponytail skills equal to the latest release (above the pristine) are
   files[skillPath('ponytail-help')] = novo + 'my rule';
   assert.equal((await status(m)).ponytail, 'customized');
 });
+test('the diff of a customized skill is against the newest release of the pristine, whatever the component (gauntlet-loop, sdd, loose ponytail)', async () => {
+  const pony = ['ponytail', 'ponytail-audit', 'ponytail-debt', 'ponytail-gain', 'ponytail-help', 'ponytail-review'];
+  const files = { [skillPath('gauntlet-loop')]: 'edited', [skillPath('sdd')]: '---\nname: sdd\nversion: 2.0.0\n---\nedited\n', ...Object.fromEntries(pony.map((n) => [skillPath(n), 'edited'])) };
+  const r = await run(machine({ urls: urls(), files }), '--check');
+  const diff = (name) => r.out.split('\n').filter((l) => l.includes('see the difference') && l.includes(`/${name}/SKILL.md'`)).map((l) => /curl -fsSL '([^']+)'/.exec(l)[1]);
+  assert.deepEqual(diff('gauntlet-loop'), ['https://raw.githubusercontent.com/RenatoWernik/gauntlet-loop/fc6b2fc/.claude/skills/gauntlet-loop/SKILL.md']);
+  const sdd = r.out.split('\n').filter((l) => l.includes('see the difference') && l.includes('sdd-skill'));
+  assert.equal(sdd.length, 1);
+  assert.match(sdd[0], /sdd-skill\/eba9606\/skill\.md/);
+  const ponytail = r.out.split('\n').filter((l) => l.includes('see the difference') && l.includes('ponytail'));
+  assert.equal(ponytail.length, 6);
+  for (const l of ponytail) assert.match(l, /\/v5\.3\.3\//);
+});
 test('a skill that is a published copy is never customized (LF or CRLF); one changed byte makes it customized', async () => {
   for (const [text, expected] of [[original, 'outdated'], [original.replaceAll('\n', '\r\n'), 'outdated'], [original + 'x', 'customized'], ['b' + original, 'customized']]) {
     const m = withCompat(machine({ urls: urls(), files: { [skillPath('gauntlet-loop')]: text } }), pristineCompat(original));

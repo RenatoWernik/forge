@@ -132,7 +132,10 @@ async function layer(c, r, entry, sys) {
   const untested = r.status === 'outdated' && above(r.latestVersion, verifiedWith);
   const versionNotes = r.status === 'outdated' ? crossed(entry?.notes, r.installedVersion, r.latestVersion) : [];
   const status = folders.length ? 'customized' : untested ? 'unverified' : r.status;
-  return { ...rest, status, verifiedWith, untested, versionNotes, customized: folders, ...(afterUpdate && { afterUpdate }), pristine: entry?.pristine };
+  // The pristine lists each file from the oldest release to the newest; the diff is against the newest one of the component's repository.
+  const diffs = Object.entries(entry?.pristine ?? {}).filter(([file]) => folders.includes(file.split('/')[0]))
+    .map(([file, versions]) => [file, (versions.findLast((v) => RAW_URL.exec(v.url)?.[1] === c.latest?.repo) ?? versions.at(-1)).url]);
+  return { ...rest, status, verifiedWith, untested, versionNotes, customized: folders, diffs, ...(afterUpdate && { afterUpdate }), pristine: entry?.pristine };
 }
 
 async function upstreamWarnings(compat, sys, rows) {
@@ -161,10 +164,8 @@ function formatRow(c, dir) {
   if (c.error) lines.push(`    error: ${show(c.error)}`);
   if (c.status === 'unverified') lines.push(`    ${show(c.latestVersion)} is not tested with forge (verified with ${show(c.verifiedWith)}): the update needs --accept-unverified`);
   if (c.status === 'customized') {
-    const first = Object.entries(c.pristine ?? {}).find(([file]) => c.customized.includes(file.split('/')[0]));
-    const local = join(dir, 'skills', ...(first?.[0] ?? c.customized[0]).split('/'));
     lines.push(`    your copy (${show(c.customized.join(', '))}) is not any published version: it will not be touched unless you apply with --overwrite, and a backup goes to forge-backups first`);
-    if (first) lines.push(`    see the difference: diff ${quote(local)} <(curl -fsSL ${quote(first[1][0].url)})`);
+    for (const [file, url] of c.diffs) lines.push(`    see the difference: diff ${quote(join(dir, 'skills', ...file.split('/')))} <(curl -fsSL ${quote(url)})`);
   }
   for (const n of c.versionNotes ?? []) lines.push(`    note ${show(n.version)}${n.requiresBackup ? ' (needs a backup)' : ''}: ${show(n.text)}`);
   if (['outdated', 'unverified', 'customized'].includes(c.status)) lines.push(`    update: update.mjs --apply ${c.id} --yes${c.status === 'customized' ? ' (--overwrite replaces your copy)' : ''}`);
