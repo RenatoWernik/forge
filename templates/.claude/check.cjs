@@ -460,42 +460,44 @@ async function chk(name, f) {
   const bwf = (d, over, lie) => wf('gauntlet-batch.js', bargs(over), bt(d, lie))
   const sum = x => !x.out ? 'refused' : x.out.batch.failures.map(f => f.test + '=' + f.class).sort().join() + '|' + x.out.regressions.map(g => g.piece + '/' + g.test).sort().join() + '|' + x.out.batch.verdict
   const core = ['tests/core.test.js', 'src/core.js'], ta = ['tests/pa.test.js', 'src/pa.js']
-  const CASES = [ // [the failures the tester declares, tests=classes|piece/test of the regressions|verdict]
-    [[], '||pass'],
-    [[{ test: 'ta', files: ta, suite: [1, 2] }], 'ta=a|pa/ta|fail'],
-    [[{ test: 'ta', files: ta, suite: [1, 2] }, { test: 'tc', files: ['src/pc.js'], e2e: [1, 2, 3] }], 'ta=a,tc=a|pa/ta,pc/tc|fail'],
-    [[{ test: 'both', files: [...core, 'src/pa.js', 'src/pb.js'], suite: [1, 2] }], 'both=a|pa/both,pb/both|fail'],
-    [[{ test: 'x', files: core, suite: [2], alone: true }], 'x=c||pass'],
-    [[{ test: 'x', files: core, suite: [1] }], 'x=a||fail'],
-    [[{ test: 'x', files: ta, suite: [1], alone: true }], 'x=a|pa/x|fail'],
-    [[{ test: 'x', files: core, e2e: [3], alone: true }], 'x=c||pass'],
-    [[{ test: 'x', files: core, suite: [1, 2], main: 'all' }], 'x=b||pass'],
-    [[{ test: 'x', files: core, suite: [1, 2], main: 'some' }], 'x=c||pass'],
-    [[{ test: 'x', files: core, suite: [1, 2], main: 'none' }], 'x=a||fail'],
-    [[{ test: 'x', files: core, suite: [1, 2] }], 'x=a||fail'],
-    [[{ test: 'x', files: core, e2e: [1, 2, 3], alone: true, main: 'some' }], 'x=c||pass'],
-    [[{ test: 'x', files: core, e2e: [1, 2, 3], alone: true, main: 'all' }], 'x=b||pass'],
-    [[{ test: 'x', files: core, e2e: [1, 2, 3], alone: true, main: 'none' }], 'x=a||fail'],
-    [[{ test: 'x', files: core, e2e: [1, 2, 3], alone: true }], 'x=a||fail'],
-    [[{ test: 'x', files: core, suite: [1, 2], main: 'all' }, { test: 'y', files: core, suite: [1], alone: true }], 'x=b,y=c||pass'],
-    [[{ test: 'x', files: core, suite: [1, 2], main: 'all' }, { test: 'y', files: ['src/pb.js'], suite: [1, 2] }], 'x=b,y=a|pb/y|fail'],
-  ]
-  const abs = await bwf(decl([{ test: 'ta', files: ['/proj/tests/pa.test.js', '/PROJ/src/pa.js'], suite: [1], alone: true }]), { root: '/proj/' })
+  // One batch declares many failing tests, each one a case of its own: the class and the regression of each test are read per test, and the verdict in the runs below it
+  const FX = {
+    ta: { test: 'ta', files: ['/proj/tests/pa.test.js', '/PROJ/src/pa.js'], suite: [1, 2] }, // a file written with the project path in front is the same file as in owns
+    tc: { test: 'tc', files: ['src/pc.js'], e2e: [1, 2, 3] },
+    both: { test: 'both', files: [...core, 'src/pa.js', 'src/pb.js'], suite: [1, 2] },
+    alone: { test: 'alone', files: core, suite: [2], alone: true },
+    notAlone: { test: 'notAlone', files: core, suite: [1] },
+    touches: { test: 'touches', files: ta, suite: [1], alone: true },
+    e2e: { test: 'e2e', files: core, e2e: [3], alone: true },
+    mAll: { test: 'mAll', files: core, suite: [1, 2], main: 'all' },
+    mSome: { test: 'mSome', files: core, suite: [1, 2], main: 'some' },
+    mNone: { test: 'mNone', files: core, suite: [1, 2], main: 'none' },
+    noMain: { test: 'noMain', files: core, suite: [1, 2] },
+    eSome: { test: 'eSome', files: core, e2e: [1, 2, 3], alone: true, main: 'some' },
+    eAll: { test: 'eAll', files: core, e2e: [1, 2, 3], alone: true, main: 'all' },
+    eNone: { test: 'eNone', files: core, e2e: [1, 2, 3], alone: true, main: 'none' },
+    eNoMain: { test: 'eNoMain', files: core, e2e: [1, 2, 3], alone: true },
+    pb: { test: 'pb', files: ['src/pb.js'], suite: [1, 2] },
+  }
+  const ALL = 'alone=c,both=a,e2e=c,eAll=b,eNoMain=a,eNone=a,eSome=c,mAll=b,mNone=a,mSome=c,noMain=a,notAlone=a,pb=a,ta=a,tc=a,touches=a|pa/both,pa/ta,pa/touches,pb/both,pb/pb,pc/tc'
+  const VERDICTS = [[[], '||pass'], [[FX.mAll, FX.eAll, FX.alone, FX.mSome], 'alone=c,eAll=b,mAll=b,mSome=c||pass'], [[FX.mAll, FX.pb], 'mAll=b,pb=a|pb/pb|fail'], [[FX.notAlone], 'notAlone=a||fail']]
+  const NESTED = !!process.env.FORGE_CHECK_NESTED // the render round trip below runs this check again in temp folders: there the batch runs once, to fill seen for the contract lines, and the invariants above run only in the real check
+  const bok = await bwf(decl()), bTest = only(bok.calls, /^batch:tester$/), bFlaky = await bwf(decl([FX.alone]))
+  if (!NESTED) {
   const SIZES = [['rigorous', 3, true], ['rigorous', 4, false], ['rigorous', 5, false], ['rigorous', 6, false], ['accelerated', 3, true], ['accelerated', 4, true], ['accelerated', 5, true], ['accelerated', 6, false]]
   await chk('batch: a batch over the size of its mode (more than 3 pieces in rigorous, more than 5 in accelerated) is refused before any agent(), and the error says so; up to the limit the tester runs (3, 4, 5 and 6 pieces in both modes)', async () => (await Promise.all(SIZES.map(async ([mode, n, ok]) => { const x = await bwf(decl(), { mode, pieces: bpn(n) }); return ok ? !x.err && x.calls.length > 0 && !!x.out.batch : x.calls.length === 0 && /batch too large/.test(x.err?.message) && !x.out }))).every(Boolean))
   await chk('batch: args without root, dashboardUrl or testCommand, with no mode or a mode that is not rigorous or accelerated, with no pieces, a piece without id, title or owns, or two pieces with the same id, bring the workflow down with incomplete args, before spending an agent', async () => (await Promise.all([{ root: '' }, { dashboardUrl: '' }, { testCommand: '' }, { testCommand: ' ' }, { mode: undefined }, { mode: 'turbo' }, { pieces: [] }, ...['id', 'title', 'owns'].map(k => ({ pieces: [{ ...bp[0], [k]: undefined }] })), { pieces: [bp[0], bp[0]] }].map(a => rejects('gauntlet-batch.js', bargs(a))))).every(Boolean))
   await chk('batch: args without models, or with the tester or the aux missing a model or a valid effort, or with a match that is not a valid regex, bring the workflow down with incomplete args naming the role and pointing to forge.json, before spending an agent', () => rejectsModels('gauntlet-batch.js', bargs(), ['tester', 'aux']))
-  const bok = await bwf(decl()), bTest = only(bok.calls, /^batch:tester$/)
   const [s1, e2, none, no2e, mute] = await Promise.all([bwf(decl([], { suite: 1, e2e: 3 })), bwf(decl([], { suite: 2, e2e: 2 })), bwf(decl([], { suite: 0, e2e: 0 })), bwf(decl([], { suite: 2, e2e: 0 }), { e2eCommand: undefined }), wf('gauntlet-batch.js', bargs(), () => null)])
   await chk('batch: one tester with the model and effort of forge.json runs the suite 2x and the E2E 3x with the testCommand and the e2eCommand of the args, and no other agent gets them; the batch is approved only with those executions declared (suite 1x, E2E 2x, none or no answer: not approved, reason "runs"); without e2eCommand the E2E is n/a', () => bTest.length === 1 && rolesOk(bok.calls) && bok.out.batch.verdict === 'pass' && bok.out.runs.suite === 2 && bok.out.runs.e2e === 3 && bTest[0].prompt.includes('SUITE-CMD') && bTest[0].prompt.includes('E2E-CMD') && bok.calls.every(c => c === bTest[0] || !/SUITE-CMD|E2E-CMD/.test(c.prompt))
     && [s1, e2, none, mute].every(x => x.out.batch.verdict === 'fail' && x.out.batch.reason === 'runs') && no2e.out.batch.verdict === 'pass' && no2e.out.runs.e2e === 'n/a' && !/undefined|null/.test(only(no2e.calls, /^batch:tester$/)[0].prompt))
-  await chk('batch: the class of each failing test comes only from the data declared: a (touches the files of a piece, or out of the diff with no proof that main fails the same), b (out of the diff and every execution on main fails too), c (flaky); only a fails the batch, one regression per piece the test touches; a tester that writes verdict, passed, class, flaky or regressions changes nothing; a file written with the project path in front is the same file as in owns', async () => sum(abs) === 'ta=a|pa/ta|fail' && (await Promise.all(CASES.flatMap(([fs, want]) => [false, true].map(async lie => sum(await bwf(decl(fs), {}, lie)) === want)))).every(Boolean))
+  await chk('batch: the class of each failing test comes only from the data declared: a (touches the files of a piece, or out of the diff with no proof that main fails the same), b (out of the diff and every execution on main fails too), c (flaky); only a fails the batch, one regression per piece the test touches; a tester that writes verdict, passed, class, flaky or regressions changes nothing; a file written with the project path in front is the same file as in owns', async () => (await Promise.all([false, true].map(async lie => sum(await bwf(decl(Object.values(FX)), { root: '/proj/' }, lie)) === ALL + '|fail'))).every(Boolean) && (await Promise.all(VERDICTS.flatMap(([fs, want], i) => (i === 1 ? [false, true] : [false]).map(async lie => sum(await bwf(decl(fs), {}, lie)) === want)))).every(Boolean))
   const portD = decl([{ test: 'x', files: core, suite: [1], alone: true }, { test: 'y', files: core, suite: [2], alone: true }, { test: 'z', files: core, e2e: [1], alone: true }])
   portD.runs.forEach(r => r.failures.forEach(f => { f.output = 'Error: listen EADDRINUSE: address already in use :::' + (f.test === 'z' ? 4808 : 4807) }))
   const bPort = await bwf(portD)
   await chk('batch: the tester is told to look for fixed ports repeated between tests (EADDRINUSE), and two failing tests with EADDRINUSE on the same port come back in fixedPorts with the port (a port that only one test hits does not)', () => /EADDRINUSE/.test(only(bPort.calls, /^batch:tester$/)[0].prompt) && JSON.stringify(bPort.out.fixedPorts) === '[{"port":4807,"tests":["x","y"]}]')
-  const [bFlaky, bNoIssue] = [await bwf(decl([{ test: 'x', files: core, suite: [2], alone: true }])), await wf('gauntlet-batch.js', bargs(), (p, o) => o.label === 'batch:flaky' ? { issues: [], model: declared(T) } : bt(decl([{ test: 'x', files: core, suite: [2], alone: true }]))(p, o))]
-  await chk('batch: a flaky failure (class c) is passed to a tester call that must open an issue with the label flaky for it, and the return has that issue; a batch without flaky failures makes no such call, and a flaky without an issue gets a WARNING in log() and does not fail the batch', () => only(bFlaky.calls, /^batch:flaky$/).length === 1 && only(bFlaky.calls, /^batch:flaky$/)[0].prompt.split('\n').some(l => /\bissues?\b/.test(l) && /\bflaky\b/.test(l)) && rolesOk(bFlaky.calls) && JSON.stringify(bFlaky.out.flaky.map(f => [f.test, f.issue])) === '[["x","#x"]]' && bFlaky.out.batch.verdict === 'pass'
+  const bNoIssue = await wf('gauntlet-batch.js', bargs(), (p, o) => o.label === 'batch:flaky' ? { issues: [], model: declared(T) } : bt(decl([FX.alone]))(p, o))
+  await chk('batch: a flaky failure (class c) is passed to a tester call that must open an issue with the label flaky for it, and the return has that issue; a batch without flaky failures makes no such call, and a flaky without an issue gets a WARNING in log() and does not fail the batch', () => only(bFlaky.calls, /^batch:flaky$/).length === 1 && only(bFlaky.calls, /^batch:flaky$/)[0].prompt.split('\n').some(l => /\bissues?\b/.test(l) && /\bflaky\b/.test(l)) && rolesOk(bFlaky.calls) && JSON.stringify(bFlaky.out.flaky.map(f => [f.test, f.issue])) === '[["alone","#alone"]]' && bFlaky.out.batch.verdict === 'pass'
     && !only(bok.calls, /^batch:flaky$/).length && bNoIssue.out.flaky[0].issue === null && bNoIssue.logs.some(l => l.startsWith('WARNING no issue')) && bNoIssue.out.batch.verdict === 'pass')
   // the line of the prompt that forbids push, PR and merge without the yes of the user, in every prompt of the tester (the three forms of removing it are in the corpus)
   const NO_MERGE = /^(?=.*\bpush\b)(?=.*\bPRs?\b)(?=.*\bmerge\b)(?=.*\b(user|utilizador|usu[áa]rio)\b)(?=.*\b(never|no|not|without|nunca|sem|nenhum)\b).*$/im
@@ -504,6 +506,7 @@ async function chk(name, f) {
   seen['gauntlet-batch.js'].pop() // the probe run is not part of the contract checks below (its aux model differs from the meta phases)
   await chk('models: with distinct probe models in args.models, every agent() of gauntlet-batch uses them (model and effort), warns about none, and the prompts carry the language, whatever forge.json says', () => bpd.calls.length === 2 && bpd.calls.every(c => (c.opts.label === 'batch:tester' ? 'probe-tester,medium' : 'probe-aux,max') === c.opts.model + ',' + c.opts.effort && c.prompt.includes('Probe-Language')) && !bpd.logs.some(l => l.startsWith('WARNING')) && /Probe Tester 4\.0/.test(bpd.calls[1].prompt))
 
+  }
   const units = [{ id: 'u1', title: 'U1', paths: ['src/a.js'] }, { id: 'u2', title: 'U2', paths: ['src/b.js'] }]
   const cut = { cuts: ['CUT-DEV'], kept: ['KEPT-DEV'], linesBefore: 9, linesAfter: 5, testOutput: 'ok', model: declared(D) }
   const pcritic = (p, o, at = o.label.includes(':u1:') ? 8 : 2) => { const cur = /^A: .*\.gauntlet/m.test(p) ? 'B' : 'A', win = rn(o) >= at; return { winner: win ? cur : flip(cur), testsPass: true, behaviourPreserved: true, wronglyCut: [], remainingCuts: win ? [] : ['CUT-LEFT-' + rn(o)], biggestGap: 'GAP-' + rn(o), model: declared(C) } }
