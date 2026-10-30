@@ -127,6 +127,8 @@ export const contract = (id = 'pa', issue = 9101, over = {}) => ({
 export const baseArgs = (pieces, over = {}) => ({
   checkpoint: { n: 1, title: 'T' }, root: '/proj', dashboardUrl: 'https://claude.ai/artifact/x', context: 'CTX-SPEC',
   models: structuredClone(PROBE), language: 'English', memory: { workspace: 'ws', project: 'pj' }, mode: 'rigorous',
+  // F-08 (#9): gauntlet-build also refuses args without the escalation of forge.json (4 conditions, each with a value); the fixture only adds it
+  escalation: Object.fromEntries([['sameCriterionFailures', 2], ['attacksRedOnDelivery', true], ['minutesWithoutProgress', 30], ['visualBelowReference', true]].map(([k, value]) => [k, { value, description: 'probe ' + k }])),
   pieces, ...over,
 });
 

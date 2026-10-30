@@ -259,8 +259,9 @@ async function chk(name, f) {
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // Round -1 result of a piece as gauntlet-attacks returns it and gauntlet-build gets it in args.attacks: an attack that fails on the base and a guard that already passes
   const r0 = (id, over = {}) => ({ id, attacks: [{ id: id + '-a1', file: 'tests/critico/' + id + '-r0/a1.test.mjs', passesOnBase: false }, { id: id + '-g1', file: 'tests/critico/' + id + '-r0/g1.test.mjs', guard: true, passesOnBase: true }], failingOnBase: true, gaps: [], ...over })
-  const base = { checkpoint: { n: 1, title: 'T' }, root: 'C:\\p', dashboardUrl: 'https://x', context: 'CTX-SPEC-PLAN-TASKS', models: F, language: FJ.language, mode: 'rigorous', escalation: FJ.escalation }
+  const base = { checkpoint: { n: 1, title: 'T' }, root: 'C:\\p', dashboardUrl: 'https://x', context: 'CTX-SPEC-PLAN-TASKS', models: F, language: FJ.language }
   base.attacks = [r0('p'), r0('q')] // the Round -1 results the build workflow needs for pieces p and q
+  Object.assign(base, { mode: 'rigorous', escalation: FJ.escalation }) // the build workflow takes both from forge.json, like the models
   const rn = o => +o.label.match(/:r(\d+)$/)[1]
   const flip = l => (l === 'A' ? 'B' : 'A')
   const only = (calls, re) => calls.filter(c => re.test(c.opts.label))
