@@ -24,6 +24,8 @@ Run the update check. It compares each component with the latest public release 
 node "${CLAUDE_PLUGIN_ROOT}/scripts/update.mjs" --check
 ```
 
+The check exits with `4` when something needs handling and with `0` when every component is `ok`: `4` is not a failure of the command, it is the cue to show the table and ask. Any other non-zero exit is an error of the command: stop and show its output.
+
 `--check --json` gives the same report as data, and each row of it carries the exact install or update `command` and the `installDocs` link of that component. Statuses: `ok`, `outdated`, `unverified` (a newer version that forge was not tested with), `customized` (a skill you edited: never touched here), `missing`, `unknown` (the latest version could not be read, usually a network problem: say so and ask before treating it as ok).
 
 Show the user a short table (component, installed, latest, status). For every `missing` or `outdated` component, show its `command` and `installDocs` link from the JSON and ask for the yes: one question per component, or one for the whole list if the user says "all". Only after the yes, run the command with Bash, then run the check again and confirm that component turned `ok`. For `unverified` and `customized` components, say what the check says and go on: updating them is the `/forge:update` skill, with its own yes. Notes:

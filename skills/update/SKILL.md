@@ -32,7 +32,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/update.mjs" --check
 - `missing`: not installed. This skill only updates; the doctor (`node "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.mjs"`) prints the install command.
 - `unknown`: the latest version could not be read (usually the network). Say so; do not treat it as ok.
 
-The output can end with warnings, and only some runs have any: for example, a line saying that the original gauntlet-loop repository has new commits. Warnings are information only: they are never applied for the user. Report only the warnings that appear in the command output; never infer or add a warning that is not there.
+Warnings show up in two places, and only some runs have any: a `warning:` line under the row of its component, and global warnings after the table (for example, a line saying that the original gauntlet-loop repository has new commits). Warnings are information only: they are never applied for the user. Report only the warnings that appear in the command output; never infer or add a warning that is not there.
 
 The check exits with `4` when something needs handling (`missing`, `outdated`, `unverified`, `customized` or `unknown`) and with `0` when every component is `ok`: `4` is not a failure of the command, it is the cue to show the table and ask.
 
