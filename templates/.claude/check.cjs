@@ -240,17 +240,17 @@ async function chk(name, f) {
   // no clock); Date.now, Math.random and new Date() without an argument throw, and so does the 1001st agent(), as in the runtime.
   // If a workflow starts using another hook (pipeline, budget, workflow), the ReferenceError says to extend this runtime on purpose.
   // wf never throws: the script failure stays in run.err and every check that depends on it prints its own FAIL.
-  const seen = {}
+  const seen = {}, compiled = {} // compiled: each workflow is compiled once and run in a new context for every simulation (the file does not change while the check runs)
   const wf = async (file, args, impl) => {
     const run = { calls: [], logs: [], phases: [] }
     ;(seen[file] ||= []).push(run)
     try {
-      const src = fs.readFileSync('.claude/workflows/' + file, 'utf8').replace(/^export const meta\s*=/m, 'const meta =')
+      const script = compiled[file] ||= new vm.Script('(async () => {' + fs.readFileSync('.claude/workflows/' + file, 'utf8').replace(/^export const meta\s*=/m, 'const meta =') + '\n})()')
       const agent = async (prompt, opts) => { if (run.calls.push({ prompt, opts }) > 1000) throw new Error('limit of 1000 agents'); return impl(prompt, opts) }
       const parallel = ts => Promise.all(ts.map(t => t().catch(() => null)))
       const ctx = vm.createContext({ args, agent, parallel, phase: t => run.phases.push(t), log: m => run.logs.push(m) })
       vm.runInContext('Date.now = Math.random = () => { throw new Error("forbidden in Workflow") }; Date = new Proxy(Date, { construct: (T, a) => a.length ? new T(...a) : Date.now() })', ctx)
-      run.out = await vm.runInContext('(async () => {' + src + '\n})()', ctx)
+      run.out = await script.runInContext(ctx)
     } catch (e) { run.err = e }
     return run
   }
@@ -492,6 +492,12 @@ async function chk(name, f) {
   await chk('batch: one tester with the model and effort of forge.json runs the suite 2x and the E2E 3x with the testCommand and the e2eCommand of the args, and no other agent gets them; the batch is approved only with those executions declared (suite 1x, E2E 2x, none or no answer: not approved, reason "runs"); without e2eCommand the E2E is n/a', () => bTest.length === 1 && rolesOk(bok.calls) && bok.out.batch.verdict === 'pass' && bok.out.runs.suite === 2 && bok.out.runs.e2e === 3 && bTest[0].prompt.includes('SUITE-CMD') && bTest[0].prompt.includes('E2E-CMD') && bok.calls.every(c => c === bTest[0] || !/SUITE-CMD|E2E-CMD/.test(c.prompt))
     && [s1, e2, none, mute].every(x => x.out.batch.verdict === 'fail' && x.out.batch.reason === 'runs') && no2e.out.batch.verdict === 'pass' && no2e.out.runs.e2e === 'n/a' && !/undefined|null/.test(only(no2e.calls, /^batch:tester$/)[0].prompt))
   await chk('batch: the class of each failing test comes only from the data declared: a (touches the files of a piece, or out of the diff with no proof that main fails the same), b (out of the diff and every execution on main fails too), c (flaky); only a fails the batch, one regression per piece the test touches; a tester that writes verdict, passed, class, flaky or regressions changes nothing; a file written with the project path in front is the same file as in owns', async () => (await Promise.all([false, true].map(async lie => sum(await bwf(decl(Object.values(FX)), { root: '/proj/' }, lie)) === ALL + '|fail'))).every(Boolean) && (await Promise.all(VERDICTS.flatMap(([fs, want], i) => (i === 1 ? [false, true] : [false]).map(async lie => sum(await bwf(decl(fs), {}, lie)) === want)))).every(Boolean))
+  // a command split in blocks (each block an entry with the number of its pass): an execution is a pass that holds every block, and "failed in every execution" is measured over the passes of the block the test lives in
+  const ent = (command, pass, failures = []) => ({ kind: 'suite', command, pass, failures }), ft = { test: 't', files: core, output: 'x' }
+  const E3 = decl().runs.filter(r => r.kind === 'e2e'), blk = (suite, extra) => ({ runs: [...suite, ...E3], isolated: [], main: [], ...extra })
+  const proof = { isolated: [{ test: 't', passed: true, output: '' }], main: [{ test: 't', results: [true, true], output: '' }] }
+  const [k1, kOnce, kShort, kAll, kSome] = await Promise.all([blk([ent('A', 1), ent('B', 1), ent('A', 2), ent('B', 2)]), blk([ent('A', 1), ent('B', 1)]), blk([ent('A', 1), ent('B', 1), ent('A', 2)]), blk([ent('A', 1, [ft]), ent('B', 1), ent('A', 2, [ft]), ent('B', 2)], proof), blk([ent('A', 1, [ft]), ent('B', 1), ent('A', 2), ent('B', 2)], proof)].map(d => bwf(d)))
+  await chk('batch: a command split in blocks counts by pass: a full execution is a pass with every block (2 passes of 2 blocks approve; 1 pass, or a pass that lacks a block, gives not approved with reason "runs"), and a test that fails in every pass of its block, passes alone and never fails on main is class a, not flaky (class c only if it fails in some passes)', () => k1.out.batch.verdict === 'pass' && k1.out.runs.suite === 2 && [kOnce, kShort].every(x => x.out.batch.verdict === 'fail' && x.out.batch.reason === 'runs' && x.out.runs.suite === 1) && sum(kAll) === 't=a||fail' && sum(kSome) === 't=c||pass')
   const portD = decl([{ test: 'x', files: core, suite: [1], alone: true }, { test: 'y', files: core, suite: [2], alone: true }, { test: 'z', files: core, e2e: [1], alone: true }])
   portD.runs.forEach(r => r.failures.forEach(f => { f.output = 'Error: listen EADDRINUSE: address already in use :::' + (f.test === 'z' ? 4808 : 4807) }))
   const bPort = await bwf(portD)
