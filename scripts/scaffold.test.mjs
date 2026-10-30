@@ -41,6 +41,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     '.claude/forge.json',
     '.claude/painel-leitor.mjs',
     '.claude/workflows/gauntlet-attacks.js',
+    '.claude/workflows/gauntlet-batch.js',
     '.claude/workflows/gauntlet-build.js',
     '.claude/workflows/gauntlet-ponytail.js',
     '.graphifyignore',
