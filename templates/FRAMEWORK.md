@@ -114,7 +114,7 @@ Done when you summarize in three lines what was already decided or tried on the 
 
 ### Step 2. Gauntlet build
 
-Assemble `pieces` from `tasks.md` (each one already has its contract issue, section 10.1, and its Round −1 attacks, section 10.3) and call `Workflow({name:"gauntlet-build", args})` (the `name` resolves the workflow saved in `.claude/workflows/`). The call returns at once; the result arrives later as a notification and carries the `taskId` of the run. `args` is a JSON object, never a string (`meta.whenToUse` has the format; `check.cjs` validates this example). Put in `root` the absolute path of the project root (the session's working directory):
+Assemble `pieces` from `tasks.md` (each one already has its contract issue, section 10.1) and run the Round −1 first: call `Workflow({name:"gauntlet-attacks", args})` with the args below, without `attacks` (section 10.3): one critic per piece, with the model of `models.critic`, reads the issue with `gh issue view <issue> --json body,comments`, writes the attacks and runs them on the base. Its `results[]` (`id, attacks[{id, file, guard?, passesOnBase}], failingOnBase, gaps`) go, as returned, in `attacks` of the same args for the build: call `Workflow({name:"gauntlet-build", args})` (the `name` resolves the workflow saved in `.claude/workflows/`). The call returns at once; the result arrives later as a notification and carries the `taskId` of the run. `args` is a JSON object, never a string (`meta.whenToUse` has the format; `check.cjs` validates this example). Put in `root` the absolute path of the project root (the session's working directory):
 
 ```json
 {"checkpoint":{"n":1,"title":"Setup and Foundational"},
@@ -123,30 +123,41 @@ Assemble `pieces` from `tasks.md` (each one already has its contract issue, sect
  "language":"{{LANGUAGE}}",
  "memory":{"workspace":"{{MEM_WORKSPACE}}","project":"{{MEM_PROJECT}}"},
  "models":{{MODELS_JSON}},
+ "mode":"<rigorous or accelerated, copied from .claude/forge.json>",
+ "escalation":"<the escalation key of .claude/forge.json, copied as it is>",
  "context":"specs/001-name/{spec,plan,tasks}.md; CONTEXT.md; test: <command from plan.md>",
- "pieces":[{"id":"config","title":"Load configuration","goal":"T003 to T005 (FR-002): read and validate the configuration; seam: Config.load","bar":"<bar approved in section 4.2>","owns":["src/config.py","tests/test_config.py"],"tdd":true}]}
+ "pieces":[{"id":"config","title":"Load configuration","goal":"T003 to T005 (FR-002): read and validate the configuration; seam: Config.load","bar":"<bar approved in section 4.2>","owns":["src/config.py","tests/test_config.py"],"tdd":true,
+   "issue":12,"objective":"<the objective, copied from issue 12>","input":"<branch, HEAD and files of the ticket>",
+   "criteria":[{"text":"Config.load returns the 3 keys of the sample file","oracle":"corpus","command":"pytest tests/test_config.py"},{"text":"A missing key fails with a message that names it","command":"pytest tests/test_config.py -k missing"}],
+   "fails":"<what fails the ticket>","outOfScope":"<what the ticket does not do>","env":"<environment and commands>","output":"<where the result goes>"}],
+ "attacks":[{"id":"config","attacks":[{"id":"config-a1","file":"tests/critico/config-r0/a1.test.py","passesOnBase":false},{"id":"config-g1","file":"tests/critico/config-r0/g1.test.py","guard":true,"passesOnBase":true}],"failingOnBase":true,"gaps":[]}]}
 ```
 
 Format rules:
 
-- `models` is a copy of the `models` key of `.claude/forge.json`; `language` and `memory` are the `language` of forge.json and the scope of `.ai-memory.toml`.
+- `models`, `mode` and `escalation` are copies of the keys of the same name of `.claude/forge.json` (there is no default mode: `gauntlet-build` refuses args without a valid `mode` or with an incomplete `escalation`, naming the field); `language` and `memory` are the `language` of forge.json and the scope of `.ai-memory.toml`.
 - `n` is numeric; `id` is kebab-case without accents. `context`, `goal` and `bar` reach the critic: they never say which candidate is ours. Only the `context` releases the critic to open FRAMEWORK.md and `.claude/workflows/` (forbidden to it; CP0 releases them).
 - `goal` = result, ids `T###` and `FR-###` and the seam, without prescribing architecture.
 - `owns` = exclusive files of the piece, tests included. `parallel:true` only if the `owns` are disjoint and no piece imports code from another (default is sequential).
 - `tdd:false` only for a piece without testable logic.
+- Each piece also carries its contract, transcribed from the issue (the issue is the source; the agents read the issue itself): `issue` (the number), `objective`, `input`, `criteria` (1 to 6; each `{text, oracle?, command}`), `fails`, `outOfScope`, `env` and `output`. Every criterion has the `command` that verifies it. `oracle` (`corpus`, `property`, `reference` or `threshold`) is required when the `text` has an absolute word (never, always, any, all, every, nunca, sempre, qualquer, todos, todas, nenhum, nenhuma). Both workflows validate the contract before spending any agent and refuse a missing or wrong field, or more than 6 criteria (split the piece), naming the field.
+- `attacks` is the `results` of `gauntlet-attacks`, untouched. The `guard:true` mark is for a regression or hygiene attack, which may pass on the base. The workflow recomputes `failingOnBase` from the `passesOnBase` of each attack without `guard`; the critic's own boolean is never read.
 - Args without `root`, `dashboardUrl`, `models` or `pieces`, or a piece without `id`, `title`, `goal`, `bar` or `owns`, bring the workflow down before any agent is spent.
+- Optional fields of a piece: `ui: true` runs its developer with `models.developerUi` (any other piece with `models.developer`); `redesigns` (an integer, 0 or more, that you raise each time you write a `REDESIGN` comment for the piece); `central: true` on a criterion of `criteria`, for the criteria that stay blocking in round 2 of `accelerated`.
+- `vida` (optional): `{<agent or piece id>: {minutos, vida}}`, the minutes without progress that you read with the panel reader from the checkpoint files. The workflow only reads it; a number that an agent declares about itself is never used. Pieces are matched by `id` or by the agent ids `b-{N}-{piece}-r{R}` and `c-{N}-{piece}-r{R}`.
 
-The workflow repeats developer and critic per piece until `won:true`: ours chosen blind, tests passing in the critic's run and no blocking error. While it runs:
+The workflow repeats developer and critic per piece, in at most 3 rounds (`rigorous`) or 2 (`accelerated`), until `won:true`: ours chosen blind, tests passing in the critic's run and no blocking failure. The critic lists each blocking failure with the criterion (`C<n>`, the position in `criteria`), the materiality (1 always fails, 2 the goal of the criterion fails, 3 the oracle fails in a real case) and the repro; from round 2 it also gets the failures that the previous critic listed (never anything the developer wrote). While it runs:
 
-- Round `escalateAfter` (default 6): the `pergunta` note `cp{N}-{piece}-travada` goes up (change the bar, narrow the scope or stop) and the loop goes on by itself. It is only a backstop: the round cap of the mode (3 in `rigorous`, 2 in `accelerated`, section 10.2) stops the run first.
-- The user, or the round cap of the mode (section 10.2), says stop: interrupt the run with the `TaskStop` tool (ToolSearch `select:TaskStop`) with `task_id` set to the `taskId` that the `Workflow` call returned, mark the piece `failed` on the panel and record the decision. A `+Nk` token cap from the user also ends it (`agent()` throws when it is reached).
+- The round cap of the mode (section 10.2) and the rules of `escalation` stop a piece by themselves; nothing here raises a "stuck" question any more.
+- The user says stop: interrupt the run with the `TaskStop` tool (ToolSearch `select:TaskStop`) with `task_id` set to the `taskId` that the `Workflow` call returned, mark the piece `failed` on the panel and record the decision. A `+Nk` token cap from the user also ends it (`agent()` throws when it is reached).
 - Changing bar or scope: adjust `pieces[]` and run only that piece again.
 - An agent without an answer (skipped or API error) ends the piece with `stopped`.
 - In the background, at each interaction with the user read the `inbox` (step 1) and the new `pergunta` notes (`query` on `notes` with `where:[["kind","eq","pergunta"]]`, `order_by:{field:"t",direction:"desc"}` and `limit:10`; new ones have a `t` later than your last read) and bring them to the chat.
 
-Return: `results[]` with `id, won, rounds, stopped, files, testCommand, models, lastVerdict`. Then:
+Return: `results[]` with `id, won, rounds, stopped, files, testCommand, models, lastVerdict`, `metrics` (`rounds, sameCriterionFailures, attacksRedOnDelivery, minutesWithoutProgress`) and `followUps` (the round 2 failures that `accelerated` moved to follow-up issues: open one issue `seguimento` for each). `stopped` says what to do next: `"redesign"` (with `criterion`: the same criterion failed in two rounds, so write the `REDESIGN` comment and raise `redesigns`), `"contract"` (the 3rd failed round of `rigorous`: rewrite the contract), `"escalate"` (with `condition`: the orchestrator decides) or `{reason:"maxRounds"}` (the 2nd failed round of `accelerated`: rewrite the contract). The developer is never relaunched by the workflow. The critic must report, for every Round -1 attack of the piece, whether it passes on the delivery (passesOnDelivery, a boolean); a piece with an attack that is missing or not a boolean comes back as locked:{reason:"gaps", gaps} and never wins (it fails closed, like passesOnBase): look at why the critic did not run it and launch the critic again. A piece without a clean Round −1 (no result, open `gaps`, an attack without `guard` that passes on the base, an attack without `passesOnBase`, or no attack without `guard`) comes back as `{id, won:false, rounds:0, blocked:{reason:"gaps", gaps}}` or `blocked:{reason:"failingOnBase", attacks:[ids]}` and never reaches the developer: close the gap in the contract and run the Round −1 again for that piece. Then:
 
-- `won:false`, `stopped` or a piece missing from `results`: stop and take it to the user.
+- `won:false`, `blocked`, `stopped` or a piece missing from `results`: stop and take it to the user.
+- Open the `followUps` as issues labelled `seguimento`.
 - Check `models` against `.claude/forge.json` (each declared model must satisfy the `match` of its role, which defaults to the `model`); any other value: section 9.
 - Run the plan's full suite yourself; if it fails, reopen the responsible piece with the output in its `goal`.
 - `git status`: only files in the `owns` of the CP's pieces changed.
@@ -222,7 +233,7 @@ URL: {{DASHBOARD_URL}}. Tool `ArtifactData` (ToolSearch `select:ArtifactData`). 
 | `pieces` | `cp{N}-{piece}`; Ponytail `cp{N}-pt-{unit}` | `title, checkpoint, loop, bar, rounds, status, verdict, gap` | `status`: backlog, building, judging, won, failed; `verdict`: ganhou, perdeu |
 | `agents` | `b-{N}-{piece}-r{R}`, `c-...`; `pb-`, `pc-`; `r-{topic}` reader; `m-...` standalone | `label, role, loop, model, effort, status, task, piece, checkpoint, round, updatedAt, result, error, verdict, gap, next, note` | `role`: builder, critic (readers and panel agents write builder); `status`: queued, running, done, failed, blocked (blocked shows under "With problem") |
 | `events` | `{agentId}-a` start, `-z` end, `-v` verdict; `o-cp{N}-{slug}` for the orchestrator | `t, who, kind, loop, text` | `kind`: ok, fail, decision, info |
-| `notes` | `nNNNN` (orchestrator, 4 sequential digits); `{agentId}-n`; `cp{N}-{piece}-travada` (Ponytail: `cp{N}-pt-{unit}-travada`) | `t, kind, title, body` | `kind`: decisao, risco, pergunta, info, erro |
+| `notes` | `nNNNN` (orchestrator, 4 sequential digits); `{agentId}-n`; `cp{N}-pt-{unit}-travada` (Ponytail only) | `t, kind, title, body` | `kind`: decisao, risco, pergunta, info, erro |
 | `inbox` | created by the page | `t, text, status, reply` | `status`: novo, lido |
 | `painel` | `estado`; `vida` | `estado`: the exact object of `.checkpoints/painel.json`; `vida`: `t, agentes` (`{<nome>: {minutos, vida}}`) | `vida`: a começar, ativo, sem sinal, parado? |
 
@@ -263,7 +274,7 @@ The orchestrator writes `meta/*`, `checkpoints/cp{N}` (creates `{n, title, statu
 | Symptom | Cause | Action |
 |---|---|---|
 | `results[].models` or a WARNING outside the models of `.claude/forge.json` | the alias resolved to another model, or `match` is too loose | stop, tell the user; do not accept the win of that round |
-| `check.cjs` fails on `build:`, `ponytail:` or `panel:` lines | a workflow edit broke an invariant (loop with a limit, a model outside forge.json, critic without a label map, parallel Ponytail units, numeric `checkpoint` in the seed) | fix the workflow; change the simulation only if the invariant changed (and then CLAUDE.md and this manual) |
+| `check.cjs` fails on `build:`, `ponytail:` or `panel:` lines | a workflow edit broke an invariant (a changed round cap, a model outside forge.json, critic without a label map, parallel Ponytail units, numeric `checkpoint` in the seed) | fix the workflow; change the simulation only if the invariant changed (and then CLAUDE.md and this manual) |
 | `check.cjs` fails on the `forge.json` line or on `the meta text names` | `forge.json` is missing a role or the workflow `meta` does not say what forge.json says | fix `forge.json`, or make the meta text and the `Panel` phase model match it |
 | `graphify query` says "No matching nodes" | the search is literal by label, no synonyms | identifiers of 3 or more letters; `explain`, `path`, `affected` with the exact label |
 | subscription quota exhausted | every agent of the project spends the same quota | tell the user and wait; stopped workflow: resume as in section 5 (Preconditions) |
@@ -306,7 +317,7 @@ The `mode` of `.claude/forge.json` picks the column of this table, and the table
 | Blind comparison | two orders | one order, a tie passes |
 | Never relaxes | secrets, security, data loss, false alarms or charges, regressions | same |
 
-The rules of `escalation` in `forge.json` apply in both modes: the same criterion failed `sameCriterionFailures` times makes the orchestrator write a `REDESIGN` comment (in `accelerated`, the cap of 2 rounds comes first, section 10.4); an attack still red on delivery sends the piece back to the developer before the critic sees it; an agent without progress for `minutesWithoutProgress` is woken; a visual result below the reference counts as a failed criterion.
+The rules of `escalation` in `forge.json` apply in both modes: the same criterion failed `sameCriterionFailures` times makes the orchestrator write a `REDESIGN` comment (the `redesign` comes first, and only a piece that already had one, `redesigns` of 1 or more, escalates when the same criterion fails `sameCriterionFailures` times again); a Round -1 attack that is still red when the critic runs it on the delivery, a visual result that the critic finds below the reference and an agent without progress for `minutesWithoutProgress` (from `args.vida`) each make the workflow return `escalate`, and the decision is yours.
 
 ### 10.3 TDD in two loops
 
@@ -322,8 +333,8 @@ This is not the horizontal slicing that the `tdd` skill forbids. Horizontal slic
 - The critic applies a test of materiality: it fails a piece only for a blocking flaw (the always-fails list, the aim of a criterion, or the oracle failing in a reproducible real case). The rest is minor and goes to the notes or to a follow-up issue.
 - The developer fixes by class: for each failure it finds the class of inputs that causes it, fixes the class and adds a test of the class, besides the critic's case.
 - An intermittent test fails the ticket only when its cause is in the diff; otherwise it becomes an issue labelled `flaky`.
-- In `rigorous` (3 rounds), the same criterion failed twice: the orchestrator writes the `REDESIGN` comment with the mechanism, the algorithm and the tests that prove it, the developer implements that design and the critic judges against it. A third failed round of any kind stops the ticket, and the orchestrator rewrites the contract.
-- In `accelerated` (2 rounds), the cap comes before a second failure of the same criterion can be redesigned: round 2 fails only the always-fails list and the core criteria of the contract, everything else it finds becomes a follow-up issue, and a piece still failing after round 2 stops, and the orchestrator rewrites the contract.
+- In `rigorous` (3 rounds), the same criterion failed twice: the orchestrator writes the `REDESIGN` comment with the mechanism, the algorithm and the tests that prove it, the developer implements that design and the critic judges against it. A third failed round of any kind, even the same criterion for the 3rd time, stops the ticket (contract, which comes before edesign at that point), and the orchestrator rewrites the contract.
+- In `accelerated` (2 rounds), round 2 fails only the always-fails list and the central criteria of the contract (`central: true`): everything else it finds becomes a follow-up issue (`followUps`), a central criterion or an always-fail that failed in both rounds is redesigned as in `rigorous`, and a piece still failing after round 2 stops with `maxRounds`, and the orchestrator rewrites the contract.
 - A ticket that reaches its cap without winning is reviewed as a specification failure.
 
 ### 10.5 Batches and operating rules

@@ -30,11 +30,17 @@ test('dry run lists the generated tree and writes nothing to the destination', a
   const { files } = await scaffold(answers(), { dest, dryRun: true });
   assert.deepEqual([...files].sort(), [
     '.ai-memory.toml',
+    '.checkpoints/README.md',
     '.checkpoints/painel.json',
+    '.claude/briefs/batch.md',
+    '.claude/briefs/critic.md',
+    '.claude/briefs/dev.md',
+    '.claude/briefs/round-minus-1.md',
     '.claude/check.cjs',
     '.claude/dashboard/panel.html',
     '.claude/forge.json',
     '.claude/painel-leitor.mjs',
+    '.claude/workflows/gauntlet-attacks.js',
     '.claude/workflows/gauntlet-build.js',
     '.claude/workflows/gauntlet-ponytail.js',
     '.graphifyignore',
@@ -346,8 +352,11 @@ const translate = (text, { line = LINE.pt, headings = {}, prose = true } = {}) =
     return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + line + (l.includes('Verifies:') ? ' Verifica: ' : ' ') + (l.match(/`[^`]*`/g) ?? []).join(' ');
   }).join('\n');
 };
+// the files of the language check: the four documents, the four role briefs and the format of the checkpoints
+const BRIEFS = ['dev', 'critic', 'round-minus-1', 'batch'].map((b) => `.claude/briefs/${b}.md`);
+const PROSE = ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', ...BRIEFS, '.checkpoints/README.md'];
 const rewrite = async (dest, rules, opts) => {
-  for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) {
+  for (const rel of PROSE) {
     const text = opts ? translate(await read(dest, rel), opts) : await read(dest, rel);
     await writeFile(join(dest, rel), rules.reduce((t, [from, to]) => t.replaceAll(from, to), text));
   }
@@ -409,7 +418,7 @@ test('the generated check scores each sub-step too: a Portuguese FRAMEWORK.md wi
   const KEPT = /^### Step [4-7]\./;
   const mixed = original.split(/^(?=#{2,} )/m).map((s) => (KEPT.test(s) ? s : translate(s, { headings: NATURAL, line: LINE.pt.repeat(2) }))).join('');
   await writeFile(join(dest, 'FRAMEWORK.md'), mixed);
-  for (const rel of ['CLAUDE.md', 'AGENTS.md', 'BOOTSTRAP.md']) await writeFile(join(dest, rel), translate(await read(dest, rel), { headings: NATURAL }));
+  for (const rel of PROSE.filter((f) => f !== 'FRAMEWORK.md')) await writeFile(join(dest, rel), translate(await read(dest, rel), { headings: NATURAL }));
   const r = CHECK(dest);
   assert.equal(r.status, 1, r.stdout);
   assert.match(r.stdout, /^FAIL {2}language: .*\(not in Portuguese \(Brazil\): FRAMEWORK\.md \[Step 4\. Graphify, Step 5\. Memory, Step 6\. Panel, Step 7\. Approval and tag\]\)$/m);
@@ -447,6 +456,26 @@ test('no generated file, in English or Portuguese, cites the skill resolving-mer
     const dest = await tmp();
     const { files } = await scaffold(answers({ language }), { dest });
     for (const rel of files) assert.doesNotMatch(await read(dest, rel), /resolving-merge-conflicts/, `${language}: ${rel}`);
+  }
+});
+
+test('the .checkpoints/README.md names the 7 fields of a checkpoint and the file name <role>-<ticket>.md, in the language of the template', async () => {
+  const dest = await tmp();
+  await scaffold(answers(), { dest });
+  const readme = await read(dest, '.checkpoints/README.md');
+  assert.ok(readme.includes('`.checkpoints/<role>-<ticket>.md`'));
+  for (const field of ['role', 'ticket', 'phase', 'round', 'HEAD', 'next step', 'pending']) assert.match(readme, new RegExp('^\\| `' + field + '` \\|', 'm'), field);
+  assert.doesNotMatch(readme, /\b(papel|fase|ronda)\b|pr[óo]ximo passo|pend[êe]ncias/i);
+});
+
+test('each of the 4 role briefs opens with the warning that the hook context alerts belong to the orchestrator, within its first 5 lines', async () => {
+  const dest = await tmp();
+  await scaffold(answers(), { dest });
+  for (const rel of BRIEFS) {
+    const text = await read(dest, rel);
+    const top = text.split('\n').slice(0, 5).join('\n');
+    assert.ok(top.includes('`CONTEXT WARNING`') && top.includes('`CONTEXT CRITICAL`') && /orchestrator's session, never to yours/.test(top) && /never a reason to stop/.test(top), rel);
+    assert.doesNotMatch(text, /\{\{[\w.]+\}\}/, rel);
   }
 });
 

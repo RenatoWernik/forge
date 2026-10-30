@@ -87,6 +87,8 @@ export const generate = async (answers) => {
   const fj = readJson(join(dest, '.claude/forge.json'));
   const raw = Object.fromEntries(DOCS.map((d) => [d, read(dest, d)]));
   if (/^pt/i.test(fj.langTag)) for (const d of DOCS) if (raw[d] !== undefined) writeFileSync(join(dest, d), translatePt(raw[d]));
+  // os briefs e o README dos checkpoints (F-06) também são prosa que a skill traduz e que o check.cjs mede
+  if (/^pt/i.test(fj.langTag)) for (const d of ['.checkpoints/README.md', ...['dev', 'critic', 'round-minus-1', 'batch'].map((b) => `.claude/briefs/${b}.md`)]) if (existsSync(join(dest, d))) writeFileSync(join(dest, d), translatePt(readFileSync(join(dest, d), 'utf8')));
   return { dest, fj, raw };
 };
 // Só o scaffold, sem tradução (para os literais)

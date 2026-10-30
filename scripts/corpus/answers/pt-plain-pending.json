@@ -34,6 +34,11 @@
       "reason": "the panel only records, it needs no deep reasoning"
     }
   },
+  "hooks": {
+    "killByName": true,
+    "backgroundTests": true,
+    "idleWatch": true
+  },
   "script": "ps",
   "plainStyle": true,
   "memory": {

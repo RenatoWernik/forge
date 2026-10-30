@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": ".claude/briefs/dev.md",
+  "find": ", and never with `run_in_background`",
+  "replace": "",
+  "line": "briefs"
+}

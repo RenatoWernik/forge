@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": ".claude/briefs/round-minus-1.md",
+  "find": "BAR GAPS",
+  "replace": "open points",
+  "line": "briefs"
+}

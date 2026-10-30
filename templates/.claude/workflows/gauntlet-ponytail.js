@@ -113,7 +113,7 @@ async function runUnit(u) {
     round++
     const bid = `pb-${CP.n}-${u.id}-r${round}`, cid = `pc-${CP.n}-${u.id}-r${round}`
     const fb = last ? `\nROUND ${round}. The critic did not approve. Biggest gap: ${last.biggestGap}\nRejections (restore what was cut wrongly): ${JSON.stringify(last.wronglyCut)}\nStill left to cut: ${JSON.stringify(last.remainingCuts)}\nTests passed: ${last.testsPass}; behavior preserved: ${last.behaviourPreserved}` : ''
-    cut = await agent(`You are the DEVELOPER of the Ponytail gauntlet (a loop separate from the build one; here you only cut), with your own context. Project: ${ROOT}. Checkpoint ${CP.n}: ${CP.title}.
+    cut = await agent(`You are the DEVELOPER of the Ponytail gauntlet (a loop separate from the build one; here you only cut), with your own context. Read .claude/briefs/dev.md first and follow it. Project: ${ROOT}. Checkpoint ${CP.n}: ${CP.title}.
 Unit "${u.title}": ${JSON.stringify(u.paths)}
 Spec, plan and tasks: ${CTX}
 Full suite: ${TEST}
@@ -129,7 +129,7 @@ ${panel(bid, 'Ponytail dev · ' + short, 'builder', round === 1 ? 'Cut excess in
     const cur = currentIsA(pid + ':' + round)
     const NOW = `version at ${JSON.stringify(u.paths)}`
     const BEFORE = `version at ${beforeDir}`
-    const v = await agent(`You are a HARSH CRITIC of the Ponytail gauntlet, with a fresh context. Praise is worthless, there is no numeric grade and you edit no file.
+    const v = await agent(`You are a HARSH CRITIC of the Ponytail gauntlet, with a fresh context. Read .claude/briefs/critic.md first and follow it. Praise is worthless, there is no numeric grade and you edit no file.
 Project: ${ROOT}. Unit: ${JSON.stringify(u.paths)}. Spec, plan and tasks: ${CTX}. Full suite: ${TEST}
 Two versions of the same unit, labeled blind (judge only by the code):
 A: ${cur ? NOW : BEFORE}
