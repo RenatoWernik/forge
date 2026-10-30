@@ -114,6 +114,8 @@ const arr = x => (Array.isArray(x) ? x : [])
 const str = x => (typeof x === 'string' ? x : '')
 const clip = s => (s.length > 400 ? s.slice(0, 400) + '...' : s)
 const norm = f => str(f).trim().replace(/\\/g, '/').replace(/^\.\//, '')
+const ROOTN = norm(ROOT).replace(/\/+$/, '').toLowerCase() + '/'
+const rel = f => { const n = norm(f); return n.toLowerCase().startsWith(ROOTN) ? n.slice(ROOTN.length) : n } // the tester may write a file with the project path in front: it is the same file as in owns (shortcut: case-insensitive on every system)
 const touches = (own, f) => { const o = norm(own); return !!o && (f === o || (o.endsWith('/') && f.startsWith(o))) } // shortcut: an own is a file or a folder ending in "/", no globs
 const state = results => (!results.length ? null : results.every(x => !x) ? 'all' : results.every(x => x) ? 'none' : 'some') // the executions on main that failed: all, none or some of them
 
@@ -131,7 +133,7 @@ function classify(ans) {
       if (!f || typeof f.test !== 'string' || !f.test.trim() || seenHere.has(f.test)) continue
       seenHere.add(f.test)
       const t = byTest.get(f.test) || { test: f.test, files: new Set(), outputs: [], fails: { suite: 0, e2e: 0 } }
-      arr(f.files).map(norm).filter(Boolean).forEach(x => t.files.add(x))
+      arr(f.files).map(rel).filter(Boolean).forEach(x => t.files.add(x))
       t.outputs.push(str(f.output))
       t.fails[r.kind]++
       byTest.set(f.test, t)
