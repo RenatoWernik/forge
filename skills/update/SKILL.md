@@ -76,4 +76,6 @@ It runs `claude plugin marketplace update forge` and then `claude plugin update 
 
 ## Exit codes
 
-`0` done or all ok, `1` another error of the command, `4` the check found a component to handle (`missing`, `outdated`, `unverified`, `customized` or `unknown`: show the table and ask, it is not a failure), `2` invalid use (more than one id, an id that does not exist, a project without `.specify/`), `3` a barrier that was not confirmed (a missing `--yes`, `--accept-unverified`, `--backup-confirmed` or `--overwrite`): nothing was run, so ask the user and run it again with the flag.
+`0` done or all ok, `1` another error of the command, `2` invalid use (more than one id, an id that does not exist, a project without `.specify/`), `3` a barrier that was not confirmed (a missing `--yes`, `--accept-unverified`, `--backup-confirmed` or `--overwrite`): nothing was run, so ask the user and run it again with the flag.
+
+`4` is only for `--check`: it found a component to handle (`missing`, `outdated`, `unverified`, `customized` or `unknown`). It is not a failure of the command: show the table and ask.
