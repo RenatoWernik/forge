@@ -126,7 +126,7 @@ export const contract = (id = 'pa', issue = 9101, { central = [], ui, criteria =
 });
 // A escalada do forge.json com as 4 condições; por defeito, NEUTRA (nenhuma condição dispara nos cenários dos critérios 1 a 4)
 export const escalation = (over = {}) => {
-  const v = { sameCriterionFailures: 9, attacksRedOnDelivery: false, minutesWithoutProgress: 9999, visualBelowReference: false, ...over };
+  const v = { sameCriterionFailures: 2, attacksRedOnDelivery: false, minutesWithoutProgress: 9999, visualBelowReference: false, ...over };
   return Object.fromEntries(CONDITIONS.map((c) => [c, { value: v[c], description: 'probe ' + c }]));
 };
 // A Ronda −1 limpa de uma peça (respostas 7 e 8 da #8): um ataque normal a falhar na base e uma guarda que já passa

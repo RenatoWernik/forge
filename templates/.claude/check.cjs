@@ -6,7 +6,7 @@
 //   mode   = rigorous | accelerated
 //   model  = alias or ID passed to agent() (sonnet, opus, ...); effort = low | medium | high | xhigh | max; reason = why this model and effort
 //   label  = name shown on the panel (default: model); match = regex the model ID declared by an agent must satisfy (default: model)
-//   escalation = sameCriterionFailures and minutesWithoutProgress (integer, 1 or more), attacksRedOnDelivery and visualBelowReference (true or false), each with a description
+//   escalation = sameCriterionFailures (integer, 2 or 3) and minutesWithoutProgress (integer, 1 or more), attacksRedOnDelivery and visualBelowReference (true or false), each with a description
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm'), { spawnSync } = require('node:child_process')
 process.chdir(path.join(__dirname, '..'))
 const H = os.homedir(), AIM = 'ai-memory', ENV = process.argv.includes('--env')
@@ -48,7 +48,7 @@ async function chk(name, f) {
   if (!isObj(E)) problems.push('escalation')
   else for (const [c, t] of Object.entries(LIMITS)) {
     const v = isObj(E[c]) ? E[c] : {}
-    if (!(t === 'bool' ? typeof v.value === 'boolean' : Number.isInteger(v.value) && v.value >= 1)) problems.push('escalation.' + c + '.value')
+    if (!(t === 'bool' ? typeof v.value === 'boolean' : Number.isInteger(v.value) && v.value >= (c === 'sameCriterionFailures' ? 2 : 1) && (c !== 'sameCriterionFailures' || v.value <= 3))) problems.push('escalation.' + c + '.value')
     if (typeof v.description !== 'string' || !v.description.trim()) problems.push('escalation.' + c + '.description')
   }
   await chk('forge.json: mode (rigorous or accelerated), the 5 roles (model, effort low, medium, high, xhigh or max, reason, and a match that accepts their own label) and the escalation (4 conditions, each with a value and a description)' + (problems.length ? ' (invalid: ' + problems.join(', ') + ')' : ''), () => !problems.length)
@@ -261,7 +261,7 @@ async function chk(name, f) {
   const r0 = (id, over = {}) => ({ id, attacks: [{ id: id + '-a1', file: 'tests/critico/' + id + '-r0/a1.test.mjs', passesOnBase: false }, { id: id + '-g1', file: 'tests/critico/' + id + '-r0/g1.test.mjs', guard: true, passesOnBase: true }], failingOnBase: true, gaps: [], ...over })
   const base = { checkpoint: { n: 1, title: 'T' }, root: 'C:\\p', dashboardUrl: 'https://x', context: 'CTX-SPEC-PLAN-TASKS', models: F, language: FJ.language }
   base.attacks = [r0('p'), r0('q')] // the Round -1 results the build workflow needs for pieces p and q
-  Object.assign(base, { mode: 'rigorous', escalation: FJ.escalation }) // the build workflow takes both from forge.json, like the models
+  Object.assign(base, { mode: 'rigorous', escalation: { ...FJ.escalation, sameCriterionFailures: { ...FJ.escalation.sameCriterionFailures, value: 2 } } }) // the build workflow takes both from forge.json, like the models; the simulations below assume the shipped sameCriterionFailures 2 (a project may set 3, which the lines of the escalation pin down apart)
   const rn = o => +o.label.match(/:r(\d+)$/)[1]
   const flip = l => (l === 'A' ? 'B' : 'A')
   const only = (calls, re) => calls.filter(c => re.test(c.opts.label))
@@ -369,6 +369,7 @@ async function chk(name, f) {
     return !r.won && r.blocked?.reason === 'gaps' && r.blocked.gaps.length > 0 && devs === 1
   })))).every(Boolean))
   await chk('panel: build: the verdict is recorded after the escalation or the block is decided, and never says ganhou/won/ok for a piece that escalated or was blocked', async () => (await Promise.all([v2({ escalation: escOf(ON) }, [{ attacks: RED }]), v2({ escalation: escOf(ON) }, [{ visualBelowReference: true }]), v2({}, [{ attacks: [] }])])).every(({ x }) => verdictOk(ver(x.calls, 'p:r1'), 1, 'GAP-1', LOST, WON)))
+  await chk('build: with sameCriterionFailures 3 (forge.json takes 2 or 3) the same criterion failed twice does not stop the piece, and the 3rd time returns contract in rigorous', async () => { const { r, devs } = await v2({ escalation: escOf({ sameCriterionFailures: 3 }) }, [fl([1, 1]), fl([2, 1]), fl([3, 1])]); return devs === 3 && r.stopped === 'contract' && r.metrics.sameCriterionFailures === 3 })
   await chk('build: in the rigorous mode the same criterion failed for the 3rd time returns contract, not redesign (2nd failure: redesign; 3rd: the contract is rewritten)', async () => { const { r, devs } = await v2({}, [fl([1, 1]), fl([2, 2]), fl([3, 1])]); return devs === 3 && r.stopped === 'contract' && !r.criterion && r.metrics.sameCriterionFailures === 2 })
   await chk('build: a mode other than rigorous or accelerated (or none), an escalation without its 4 conditions or with a wrong type, and a wrong ui, redesigns or central are refused with incomplete args naming the field, before any agent', async () => {
     const bads = [['mode', { mode: undefined }], ['mode', { mode: 'fast' }], ['escalation', { escalation: undefined }], ...Object.keys(FE).map(k => ['escalation.' + k, { escalation: { ...FE, [k]: undefined } }]), ['escalation.sameCriterionFailures', { escalation: { ...FE, sameCriterionFailures: { value: '2' } } }],
@@ -502,6 +503,9 @@ async function chk(name, f) {
   portD.runs.forEach(r => r.failures.forEach(f => { f.output = 'Error: listen EADDRINUSE: address already in use :::' + (f.test === 'z' ? 4808 : 4807) }))
   const bPort = await bwf(portD)
   await chk('batch: the tester is told to look for fixed ports repeated between tests (EADDRINUSE), and two failing tests with EADDRINUSE on the same port come back in fixedPorts with the port (a port that only one test hits does not)', () => /EADDRINUSE/.test(only(bPort.calls, /^batch:tester$/)[0].prompt) && JSON.stringify(bPort.out.fixedPorts) === '[{"port":4807,"tests":["x","y"]}]')
+  // pass numbers on every execution, as the schema asks: a kind with a single block is the whole command, so it must be the testCommand (suite) or the e2eCommand (E2E)
+  const numbered = (swap = {}) => { const d = decl(); return { ...d, runs: ['suite', 'e2e'].flatMap(k => d.runs.filter(r => r.kind === k).map((r, i) => ({ ...r, pass: i + 1, command: swap[k] ?? r.command }))) } }
+  await chk('batch: with pass numbers, an execution whose single block is not the testCommand (suite) or the e2eCommand (E2E) does not count: the batch fails with reason runs; with the right commands it passes', async () => (await Promise.all([[{}, 'pass'], [{ suite: 'echo ok' }, 'fail'], [{ suite: 'E2E-CMD' }, 'fail'], [{ suite: 'SUITE' }, 'fail'], [{ e2e: 'echo ok' }, 'fail']].map(async ([swap, want]) => { const x = await bwf(numbered(swap)); return x.out && x.out.batch.verdict === want && (want === 'pass' || x.out.batch.reason === 'runs') }))).every(Boolean))
   const bNoIssue = await wf('gauntlet-batch.js', bargs(), (p, o) => o.label === 'batch:flaky' ? { issues: [], model: declared(T) } : bt(decl([FX.alone]))(p, o))
   await chk('batch: a flaky failure (class c) is passed to a tester call that must open an issue with the label flaky for it, and the return has that issue; a batch without flaky failures makes no such call, and a flaky without an issue gets a WARNING in log() and does not fail the batch', () => only(bFlaky.calls, /^batch:flaky$/).length === 1 && only(bFlaky.calls, /^batch:flaky$/)[0].prompt.split('\n').some(l => /\bissues?\b/.test(l) && /\bflaky\b/.test(l)) && rolesOk(bFlaky.calls) && JSON.stringify(bFlaky.out.flaky.map(f => [f.test, f.issue])) === '[["alone","#alone"]]' && bFlaky.out.batch.verdict === 'pass'
     && !only(bok.calls, /^batch:flaky$/).length && bNoIssue.out.flaky[0].issue === null && bNoIssue.logs.some(l => l.startsWith('WARNING no issue')) && bNoIssue.out.batch.verdict === 'pass')
@@ -582,14 +586,19 @@ async function chk(name, f) {
   r = await wf('gauntlet-ponytail.js', { ...u2, escalateAfter: 1 }, pony)
   await chk('ponytail: escalateAfter changes the round of the "stuck" question (1 here) and the unit goes on until approved', () => stuck(r.calls).length === 1 && stuck(r.calls)[0].opts.label.endsWith(':r1') && r.out.results[0].won && r.out.results[0].rounds === 2)
   await chk('ponytail: approved only in round 300 (901 of 1000 agents): no exit by number of rounds', () => noCap('gauntlet-ponytail.js', u1, pony))
-  // CP0 only exists while BOOTSTRAP.md exists; its two json blocks are the args of step 8
-  if (has('BOOTSTRAP.md')) await chk('BOOTSTRAP.md: the step 8 args are accepted by both workflows (files exist, owns disjoint, checkpoint 0 as text)', async () => {
-    const [b, p] = [...fs.readFileSync('BOOTSTRAP.md', 'utf8').matchAll(/```json\r?\n([\s\S]*?)\r?\n```/g)].map(m => JSON.parse(m[1]))
-    const xb = await wf('gauntlet-build.js', { ...b, models: F, mode: FJ.mode, escalation: FJ.escalation }, win), xp = await wf('gauntlet-ponytail.js', { ...p, models: F }, pony), xa = await wf('gauntlet-attacks.js', { ...b, models: F }, attImpl())
-    const owns = b.pieces.flatMap(x => x.owns)
-    return xa.out.results.length === b.pieces.length && [...owns, ...p.units.flatMap(u => u.paths)].every(f => has(f)) && new Set(owns).size === owns.length && p.testCommand === 'node .claude/check.cjs'
-      && [xb, xp].every(x => x.out.results.every(y => y.won) && x.calls[0].prompt.includes('"checkpoint":"0"') && !/"checkpoint":[^"]/.test(x.calls[0].prompt))
-  })
+  // CP0 only exists while BOOTSTRAP.md exists; its three json blocks (in this order: pieces for attacks and build, batch, ponytail) are the args of step 8, one line per workflow
+  if (has('BOOTSTRAP.md')) {
+    const blk = i => JSON.parse([...fs.readFileSync('BOOTSTRAP.md', 'utf8').matchAll(/```json\r?\n([\s\S]*?)\r?\n```/g)][i][1])
+    const ownsOk = ps => { const owns = ps.flatMap(x => x.owns); return owns.every(f => has(f)) && new Set(owns).size === owns.length }
+    const cp0 = x => x.calls[0].prompt.includes('"checkpoint":"0"') && !/"checkpoint":[^"]/.test(x.calls[0].prompt)
+    await chk('bootstrap: args: gauntlet-attacks (step 8 block of the pieces: files exist, owns disjoint, one result per piece)', async () => { const b = blk(0), x = await wf('gauntlet-attacks.js', { ...b, models: F }, attImpl()); return x.out.results.length === b.pieces.length && ownsOk(b.pieces) })
+    await chk('bootstrap: args: gauntlet-build (step 8 block of the pieces: files exist, owns disjoint, checkpoint 0 as text)', async () => { const b = blk(0), x = await wf('gauntlet-build.js', { ...b, models: F, mode: FJ.mode, escalation: FJ.escalation }, win); return x.out.results.every(y => y.won) && cp0(x) && ownsOk(b.pieces) })
+    await chk('bootstrap: args: gauntlet-batch (step 8 block of the batch: files exist, owns disjoint, the suite of CP0 twice, checkpoint 0 as text)', async () => {
+      const c = blk(1), x = await wf('gauntlet-batch.js', { ...c, models: F, mode: FJ.mode }, (p, o) => o.label === 'batch:tester' ? { runs: [1, 2].map(n => ({ kind: 'suite', command: c.testCommand, pass: n, failures: [] })), isolated: [], main: [], model: declared(T) } : 'ok')
+      return x.out.batch.verdict === 'pass' && c.testCommand === 'node .claude/check.cjs' && x.calls[0].prompt.includes('Checkpoint 0:') && ownsOk(c.pieces)
+    })
+    await chk('bootstrap: args: gauntlet-ponytail (step 8 block of the units: files exist, checkpoint 0 as text)', async () => { const p = blk(2), x = await wf('gauntlet-ponytail.js', { ...p, models: F }, pony); return x.out.results.every(y => y.won) && cp0(x) && p.units.flatMap(u => u.paths).every(f => has(f)) && p.testCommand === 'node .claude/check.cjs' })
+  }
 
   // Workflow API contract (skill workflow-authoring), proven over the simulations above: three lines per workflow
   const OPTS = ['label', 'phase', 'schema', 'model', 'effort', 'isolation', 'agentType']

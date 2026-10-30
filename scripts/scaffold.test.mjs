@@ -40,6 +40,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     '.claude/dashboard/panel.html',
     '.claude/forge.json',
     '.claude/painel-leitor.mjs',
+    '.claude/painel-vida.mjs',
     '.claude/workflows/gauntlet-attacks.js',
     '.claude/workflows/gauntlet-batch.js',
     '.claude/workflows/gauntlet-build.js',
@@ -304,7 +305,7 @@ test('the generated check.cjs passes with no FAIL, in English and in Portuguese,
     const r = CHECK(dest);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.doesNotMatch(r.stdout, /^FAIL/m);
-    assert.match(r.stdout, /^ok {4}BOOTSTRAP\.md: the step 8 args are accepted by both workflows/m);
+    assert.match(r.stdout, /^ok {4}bootstrap: args: gauntlet-ponytail/m);
     assert.match(r.stdout, /^ok {4}manual: the args example in FRAMEWORK\.md/m);
     assert.match(r.stdout, /^ok {4}style: no dash, arrow or emoji/m);
     assert.match(r.stdout, /^ok {4}language: /m, language);
@@ -431,12 +432,12 @@ test('a translation that keeps the identifiers leaves the check green; one that 
   await rewrite(dest, [['"title":"Step 0: framework"', '"title":"Passo 0: framework"'], ['"title":"gauntlet-build"', '"title":"Gauntlet de construção"']], { headings: NATURAL });
   const kept = CHECK(dest);
   assert.equal(kept.status, 0, kept.stdout);
-  assert.match(kept.stdout, /^ok {4}BOOTSTRAP\.md: the step 8 args are accepted/m);
+  assert.match(kept.stdout, /^ok {4}bootstrap: args: gauntlet-build/m);
 
   await rewrite(dest, [['"checkpoint":{"n":0', '"ponto":{"n":0']]);
   const broken = CHECK(dest);
   assert.equal(broken.status, 1);
-  assert.match(broken.stdout, /^FAIL {2}BOOTSTRAP\.md: the step 8 args/m);
+  assert.match(broken.stdout, /^FAIL {2}bootstrap: args: gauntlet-build/m);
 });
 
 test('no generated file carries personal or company data, and the manual keeps its twelve invariants', async () => {

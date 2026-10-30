@@ -1,10 +1,10 @@
 export const meta = {
   name: 'gauntlet-build',
-  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, looping until ours wins or the user stops',
+  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, for the rounds the mode allows',
   whenToUse: 'Step 2 of every checkpoint, over the pieces assembled from the Spec-Kit tasks.md. args: {checkpoint:{n,title}, root, dashboardUrl, context, mode:"rigorous"|"accelerated" (no default), escalation:{<condition>:{value}} (the 4 conditions of forge.json), vida?:{<agent or piece id>:{minutos,vida}} (computed by the orchestrator), models:{developer,developerUi?,critic,aux}, pieces:[{id,title,goal,bar,owns[],tdd,ui?,redesigns?, issue,objective,input,criteria:[{text,oracle?,command,central?}],fails,outOfScope,env,output}], attacks:[results of gauntlet-attacks], parallel?, language?, memory?}. A piece without a clean Round -1 in attacks returns blocked and never reaches the developer. Per piece it returns {id,won,rounds,stopped,criterion?,condition?,metrics:{rounds,sameCriterionFailures,attacksRedOnDelivery,minutesWithoutProgress},followUps,...}; stopped is "redesign", "contract", "escalate" or {reason:"maxRounds"}',
   phases: [
     { title: 'Panel', detail: 'registers pieces and agents in the queue', model: '{{aux.model}}' },
-    { title: 'Build', detail: 'developer builds, critic judges blind, loop until ours wins' },
+    { title: 'Build', detail: 'developer builds, critic judges blind, rounds capped by the mode' },
   ],
 }
 // forge render: developer <{{developer}}> critic <{{critic}}>
@@ -38,7 +38,7 @@ const ESC = A.escalation
 const ESC_TYPES = { sameCriterionFailures: 'int', attacksRedOnDelivery: 'bool', minutesWithoutProgress: 'int', visualBelowReference: 'bool' } // the 4 conditions of forge.json
 const modeProblems = [
   ...(Object.hasOwn(ROUNDS, MODE) ? [] : ['mode: "rigorous" or "accelerated", copied from .claude/forge.json (there is no default)']),
-  ...Object.entries(ESC_TYPES).filter(([k, t]) => { const v = ESC && ESC[k] && ESC[k].value; return !(t === 'bool' ? typeof v === 'boolean' : Number.isInteger(v) && v >= 1) }).map(([k, t]) => `escalation.${k}.value: ${t === 'bool' ? 'true or false' : 'an integer, 1 or more'}, as in .claude/forge.json`),
+  ...Object.entries(ESC_TYPES).filter(([k, t]) => { const v = ESC && ESC[k] && ESC[k].value; return !(t === 'bool' ? typeof v === 'boolean' : Number.isInteger(v) && v >= (k === 'sameCriterionFailures' ? 2 : 1) && (k !== 'sameCriterionFailures' || v <= 3)) }).map(([k, t]) => `escalation.${k}.value: ${t === 'bool' ? 'true or false' : k === 'sameCriterionFailures' ? 'an integer, 2 or 3' : 'an integer, 1 or more'}, as in .claude/forge.json`),
   ...PIECES.flatMap(p => [
     ...(p.ui === undefined || typeof p.ui === 'boolean' ? [] : [`piece ${p.id}, ui: true or false`]),
     ...(p.redesigns === undefined || (Number.isInteger(p.redesigns) && p.redesigns >= 0) ? [] : [`piece ${p.id}, redesigns: an integer, 0 or more`]),
@@ -236,7 +236,7 @@ ${panel(bid, 'Dev · ' + short, 'builder', round === 1 ? p.goal.slice(0, 160) : 
     const prior = last && last.blocking.length ? `\nRound ${round}: check only the failures that the critic of the previous round listed (criterion, materiality, repro) and the regressions of the new diff. Verify each one yourself, they are claims: ${JSON.stringify(last.blocking)}` : ''
     const v = await agent(`You are a HARSH CRITIC in a gauntlet loop, with a fresh context: you do not know how much effort went in or what the developer thought. Read .claude/briefs/critic.md first and follow it. Praise is worthless, there is no numeric grade and you edit no file.
 Project: ${ROOT}. Piece "${p.title}": ${p.goal}
-Contract: issue #${p.issue}, read with gh issue view ${p.issue} --json body,comments
+Contract: issue #${p.issue}, read with gh issue view ${p.issue} --json body,comments (the body, the orchestrator's comments and the critics' comments only: the developer's Round 0 comment is never part of the contract)
 Spec, plan, tasks and test command: ${CTX}
 Files the piece may change: ${JSON.stringify(p.owns)}
 Two candidates, labeled blind (judge only by content, not origin):
@@ -260,6 +260,7 @@ ${panel(cid, 'Critic · ' + short, 'critic', `Round ${round}: judge blind agains
     last = v
 
     // The accelerated mode, in its last round, moves to followUps a failure that is not an always-fail (materiality 1 or a category) and not a criterion marked central; an unknown criterion stays blocking.
+    const critKey = c => { const s = String(c).trim().toUpperCase(), m = /^C0*(\d+)$/.exec(s); return m ? 'C' + m[1] : s } // C01, c1 and C001 are the criterion C1
     const at = b => { const m = /^C(\d+)$/i.exec(String(b.criterion).trim()); return m ? p.criteria[m[1] - 1] : undefined }
     const soft = b => MODE === 'accelerated' && round >= CAP && Number(b.materiality) !== 1 && (!b.category || b.category === 'criterion') && at(b) && at(b).central !== true
     const hard = v.blocking.filter(b => !soft(b))
@@ -274,10 +275,10 @@ ${panel(cid, 'Critic · ' + short, 'critic', `Round ${round}: judge blind agains
     else if (ESC.attacksRedOnDelivery.value && red > 0) { won = false; stop('escalate', { condition: 'attacksRedOnDelivery' }) }
     else if (ESC.visualBelowReference.value && v.visualBelowReference === true) { won = false; stop('escalate', { condition: 'visualBelowReference' }) }
     else if (!won) {
-      for (const c of new Set(hard.map(b => String(b.criterion).trim().toUpperCase()).filter(Boolean))) failed[c] = (failed[c] || 0) + 1
+      for (const c of new Set(hard.map(b => critKey(b.criterion)).filter(Boolean))) failed[c] = (failed[c] || 0) + 1
       // The same criterion failed twice asks the orchestrator for a REDESIGN, the first suspicion being the spec; only after a redesign (piece.redesigns >= 1) does a repetition escalate.
       // In rigorous the 3rd failed round is the CONTRACT, even when it is the same criterion for the 3rd time (2nd failure: redesign; 3rd: the contract is rewritten).
-      const repeated = Object.keys(failed).find(c => failed[c] >= 2)
+      const repeated = Object.keys(failed).find(c => failed[c] >= Math.min(ESC.sameCriterionFailures.value, CAP))
       if ((p.redesigns || 0) >= 1 && metrics().sameCriterionFailures >= ESC.sameCriterionFailures.value) stop('escalate', { condition: 'sameCriterionFailures' })
       else if (MODE === 'rigorous' && round >= CAP) stop('contract')
       else if (repeated) stop('redesign', { criterion: repeated })

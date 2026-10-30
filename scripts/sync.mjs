@@ -142,19 +142,22 @@ const strayCommon = (tLine, text, values, common) => [...common].some((n) => {
   return (text.match(re) ?? []).length > ((tLine ?? '').replace(/\{\{[\w.]+\}\}/g, '\0').match(re) ?? []).length;
 });
 
+// Personal data by shape, whatever the project: an e-mail address or an absolute path of a machine (a Windows drive, or a POSIX home, temp or system folder).
+const PERSONAL = [/[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b/, /(?<![\w])[A-Za-z]:[\\/](?![\\/])\S*/, /(?:^|[\s`"'(=])\/(?:home|Users|root|mnt|opt|srv|var|tmp|etc|usr)\/\S+/];
+
 // A model line the pairing could not tie to a template line keeps the models as typed: flagged like the project name (roles = their filled-in texts).
-function findLeaks(patch, answers, roles, skip) {
-  const secrets = [answers.projectName, answers.repo, answers.memory?.workspace, answers.memory?.project, answers.dashboardUrl?.split('/').pop(), ...roles]
+function findLeaks(patch, answers, roles, skip, projectDir) {
+  const secrets = [answers.projectName, answers.repo, answers.memory?.workspace, answers.memory?.project, answers.dashboardUrl?.split('/').pop(), projectDir, projectDir.replaceAll('\\', '/'), ...roles]
     .filter((s) => typeof s === 'string' && s.length >= 3 && !skip.includes(s)).map((s) => s.toLowerCase());
   const leaks = [];
   let file = '', header = false;
   for (const line of patch.split('\n')) {
     const d = /^diff --git a\/(.*) b\//.exec(line);
-    if (d) { file = d[1]; header = true; continue; }
+    if (d) { file = d[1].replace(/^templates\//, ''); header = true; continue; }
     if (line.startsWith('@@')) { header = false; continue; }
     if (header || !line.startsWith('+')) continue;
     const low = line.toLowerCase();
-    if (secrets.some((s) => low.includes(s))) leaks.push({ file, line: line.slice(1) });
+    if (secrets.some((s) => low.includes(s)) || PERSONAL.some((re) => re.test(line.slice(1)))) leaks.push({ file, line: line.slice(1) });
   }
   return leaks;
 }
@@ -184,6 +187,13 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
     const plain = Object.values(templates).join('\n').replace(/\{\{[\w.]+\}\}/g, '\0');
     const common = new Set(PRIVATE.filter((n) => values[n]?.length >= 3 && new RegExp(bounded(values[n]), 'u').test(plain)));
     const files = [], missing = [], flagged = [];
+    const stage = async (pkgRel, a, b) => { // the patch is written against the package root: a/<path> and b/<path>
+      for (const [side, text] of [['a', a], ['b', b]]) {
+        await mkdir(dirname(join(work, side, pkgRel)), { recursive: true });
+        await writeFile(join(work, side, pkgRel), text);
+      }
+    };
+    const COPIED = (await readdir(join(packageDir, 'scripts', 'hooks'))).map((n) => [`.claude/hooks/${n}`, `scripts/hooks/${n}`]).concat(['painel-leitor', 'painel-vida'].map((n) => [`.claude/${n}.mjs`, `scripts/${n}.mjs`]));
     for (const [rel, tText] of Object.entries(templates)) {
       let pText;
       try { pText = collapse(await readText(join(projectDir, rel))); } catch { missing.push(rel); continue; }
@@ -204,14 +214,19 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
         i = h.rStart + h.rLen;
       }
       out.push(...tl.slice(i));
-      for (const [side, text] of [['a', tText], ['b', out.join('\n') + (pText.endsWith('\n') && out.length ? '\n' : '')]]) {
-        await mkdir(dirname(join(work, side, rel)), { recursive: true });
-        await writeFile(join(work, side, rel), text);
-      }
+      await stage(`templates/${rel}`, tText, out.join('\n') + (pText.endsWith('\n') && out.length ? '\n' : ''));
       files.push(rel);
     }
+    // The files the scaffold copies as they are (no markers): the same name in the project and in the package, compared as text
+    for (const [rel, from] of COPIED) {
+      let pText, tText;
+      try { [pText, tText] = [await readText(join(projectDir, rel)), await readText(join(packageDir, from))]; } catch { continue; } // not in the project (a hook answered no): nothing to compare
+      if (pText === tText) continue;
+      await stage(from, tText, pText);
+      files.push(from);
+    }
     const patch = files.length ? git(['diff', '--no-index', '--no-color', '--no-prefix', '--', 'a', 'b'], work) : '';
-    const leaks = findLeaks(patch, inferred, ['developer', 'developerUi', 'critic', 'tester', 'aux'].map((r) => values[r]), [...common].map((n) => values[n]));
+    const leaks = findLeaks(patch, inferred, ['developer', 'developerUi', 'critic', 'tester', 'aux'].map((r) => values[r]), [...common].map((n) => values[n]), projectDir);
     for (const f of flagged) if (!leaks.some((l) => l.file === f.file && l.line === f.line)) leaks.push(f);
     return { patch, files, missing, leaks };
   } finally {
@@ -221,7 +236,7 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
 
 const PKG = fileURLToPath(new URL('../', import.meta.url));
 const USAGE = `usage: node sync.mjs --project <folder of the generated project> [--package <forge folder>] [--answers <file.json>] [--out <patch file>]
-       Prints a patch that git apply accepts inside <package>/templates (run it there, after the user says yes).
+       Prints a patch that git apply accepts at the root of <package> (run it there, after the user says yes): the templates and the copied scripts.
        Nothing is applied and neither folder is modified. Exit 0: patch ready (or nothing to sync); 3: the patch may carry project data; 2: error.`;
 
 export async function main(argv, write = (s) => process.stdout.write(s), warn = console.error) {

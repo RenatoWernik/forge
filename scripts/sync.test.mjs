@@ -43,15 +43,15 @@ async function edit(dir, rel, from, to) {
   await writeFile(join(dir, rel), text.replace(from, to));
 }
 
-// applies a patch to a fresh copy of the package templates, exactly as the user would after saying yes
+// applies a patch to a fresh copy of the package templates (at the package root, where the patch is written), exactly as the user would after saying yes
 async function applied(patch) {
-  const copy = await tmp();
+  const pkg = await tmp(), copy = join(pkg, 'templates');
   await cp(join(PKG, 'templates'), copy, { recursive: true });
   const file = join(await tmp(), 'sync.patch');
   await writeFile(file, patch);
-  const check = git(copy, 'apply', '--check', file);
+  const check = git(pkg, 'apply', '--check', file);
   assert.equal(check.status, 0, `git apply --check failed: ${check.stderr}`);
-  assert.equal(git(copy, 'apply', file).status, 0);
+  assert.equal(git(pkg, 'apply', file).status, 0);
   return copy;
 }
 
@@ -75,7 +75,7 @@ async function patchedPackage(patch) {
   await cp(join(PKG, 'scripts'), join(pkg, 'scripts'), { recursive: true });
   const file = join(await tmp(), 'sync.patch');
   await writeFile(file, patch);
-  const applyResult = git(join(pkg, 'templates'), 'apply', file);
+  const applyResult = git(pkg, 'apply', file);
   assert.equal(applyResult.status, 0, applyResult.stderr);
   return pkg;
 }
@@ -83,14 +83,14 @@ async function patchedPackage(patch) {
 test('bar: edits to a workflow and to FRAMEWORK.md come back as a patch that git applies, that scaffolds the same project and that never carries the project data', async () => {
   const dir = await project();
   const wf = '.claude/workflows/gauntlet-build.js';
-  await edit(dir, wf, 'looping until ours wins or the user stops', 'looping until ours wins, the user stops or the budget ends');
+  await edit(dir, wf, 'for the rounds the mode allows', 'for the rounds the mode allows, the user stops or the budget ends');
   await edit(dir, 'FRAMEWORK.md', 'Orchestrator manual of Acme Billing.', 'Orchestrator manual of Acme Billing (invoicing, acmeworks, panel https://claude.ai/artifact/AbC123_x-y).');
   const { patch, files, leaks } = await sync(dir, PKG);
   assert.deepEqual(files, [wf, 'FRAMEWORK.md']);
   assert.deepEqual(leaks, []);
   for (const secret of ['Acme Billing', 'acmeworks', 'invoicing', 'AbC123_x-y']) assert.ok(!patch.includes(secret), `patch leaks ${secret}`);
   assert.ok(patch.includes('+Orchestrator manual of {{PROJECT_NAME}} ({{MEM_PROJECT}}, {{MEM_WORKSPACE}}, panel {{DASHBOARD_URL}}).'));
-  assert.ok(patch.includes("looping until ours wins, the user stops or the budget ends"));
+  assert.ok(patch.includes("for the rounds the mode allows, the user stops or the budget ends"));
   assert.ok(patch.includes('per piece, {{developer}} builds')); // context lines keep the markers of the template
   const pkg = await patchedPackage(patch);
   const { scaffold: scaffoldPatched } = await import(pathToFileURL(join(pkg, 'scripts', 'scaffold.mjs')).href);
@@ -187,7 +187,7 @@ test('the command prints the patch, changes nothing in the project or the packag
   const before = [await read(dir, 'CLAUDE.md'), await template('CLAUDE.md')];
   let out = '', err = '';
   assert.equal(await main(['--project', dir, '--package', PKG], (s) => { out += s; }, (s) => { err += `${s}\n`; }), 0);
-  assert.match(out, /^diff --git a\/CLAUDE\.md b\/CLAUDE\.md\n/);
+  assert.match(out, /^diff --git a\/templates\/CLAUDE\.md b\/templates\/CLAUDE\.md\n/);
   assert.match(err, /1 file\(s\) differ from the templates: CLAUDE\.md/);
   assert.deepEqual([await read(dir, 'CLAUDE.md'), await template('CLAUDE.md')], before);
   await writeFile(join(dir, 'CLAUDE.md'), `${before[0]}Owner: ACME BILLING team.\n`);
@@ -219,11 +219,11 @@ test('a line inserted in the same hunk as an edited marker line does not steal i
   const dir = await project();
   const wf = '.claude/workflows/gauntlet-build.js';
   await edit(dir, wf, "  description: 'Build gauntlet", "  // new comment\n  description: 'Build gauntlet");
-  await edit(dir, wf, 'or the user stops', 'or the user stops it');
+  await edit(dir, wf, 'rounds the mode allows', 'rounds the mode allows it');
   const { patch, leaks } = await sync(dir, PKG);
   assert.deepEqual(leaks, []);
   assert.ok(patch.includes("+  // new comment\n"));
-  assert.ok(patch.includes('per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, looping until ours wins or the user stops it'), patch);
+  assert.ok(patch.includes('per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, for the rounds the mode allows it'), patch);
   assert.ok(!patch.includes('sonnet high builds'), patch);
   await assertRoundTrip(patch, ANSWERS, dir, [wf]);
 });
@@ -232,9 +232,9 @@ test('developer and critic on the same model and effort keep their own markers w
   const same = { ...ANSWERS, models: { ...ANSWERS.models, critic: { model: 'sonnet', effort: 'high', reason: 'same model as the developer' } } };
   const dir = await project(same);
   const wf = '.claude/workflows/gauntlet-build.js';
-  await edit(dir, wf, 'or the user stops', 'or the user stops it');
+  await edit(dir, wf, 'rounds the mode allows', 'rounds the mode allows it');
   const { patch } = await sync(dir, PKG);
-  assert.ok(patch.includes('per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, looping until ours wins or the user stops it'), patch);
+  assert.ok(patch.includes('per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, for the rounds the mode allows it'), patch);
   await assertRoundTrip(patch, same, dir, [wf]);
 });
 
@@ -250,7 +250,7 @@ test('an edit that turns a model or effort marker into a fixed value is flagged,
   const wf = '.claude/workflows/gauntlet-build.js';
   await edit(dir, wf, 'and opus high judges', 'and opus max judges');
   const { patch, leaks } = await sync(dir, PKG);
-  const line = "  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and opus max judges blind against the bar, looping until ours wins or the user stops',";
+  const line = "  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and opus max judges blind against the bar, for the rounds the mode allows',";
   assert.deepEqual(leaks, [{ file: wf, line }]);
   assert.ok(patch.includes(`+${line}\n`), patch);
   let out = '', err = '';
@@ -262,11 +262,11 @@ test('an edit that turns a model or effort marker into a fixed value is flagged,
 test('a project named with an everyday word (Build) gets no swap where the word is only text of the template, but keeps its name where the template has the marker', async () => {
   const dir = await project({ projectName: 'Build' });
   const wf = '.claude/workflows/gauntlet-build.js';
-  await edit(dir, wf, 'or the user stops', 'or the user stops it');
+  await edit(dir, wf, 'rounds the mode allows', 'rounds the mode allows it');
   await edit(dir, 'FRAMEWORK.md', 'Orchestrator manual of Build.', 'Orchestrator manual of Build (invoicing).');
   const { patch, leaks } = await sync(dir, PKG);
   assert.deepEqual(leaks, []);
-  assert.ok(patch.includes("+  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, looping until ours wins or the user stops it',"), patch);
+  assert.ok(patch.includes("+  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, for the rounds the mode allows it',"), patch);
   assert.ok(patch.includes('+Orchestrator manual of {{PROJECT_NAME}} ({{MEM_PROJECT}}).'), patch);
   assert.ok(!patch.includes('{{PROJECT_NAME}} gauntlet'), patch);
   await assertRoundTrip(patch, { ...ANSWERS, projectName: 'Build' }, dir, [wf, 'FRAMEWORK.md']);
@@ -328,9 +328,36 @@ test('"opus highest" in place of "opus high" is flagged as a frozen value, not t
   const wf = '.claude/workflows/gauntlet-build.js';
   await edit(dir, wf, 'and opus high judges', 'and opus highest judges');
   const { patch, leaks } = await sync(dir, PKG);
-  const line = "  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and opus highest judges blind against the bar, looping until ours wins or the user stops',";
+  const line = "  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and opus highest judges blind against the bar, for the rounds the mode allows',";
   assert.ok(patch.includes(`+${line}\n`), patch);
   assert.ok(!patch.includes('{{critic}}est'), patch);
   assert.deepEqual(leaks, [{ file: wf, line }]);
   assert.equal(await main(['--project', dir, '--package', PKG], () => {}, () => {}), 3);
+});
+
+test('a hook edited in the project comes back against scripts/hooks, applies at the package root, and a hook the project never installed is skipped', async () => {
+  const dir = await project({ hooks: { killByName: true, backgroundTests: false, idleWatch: false } });
+  const hook = '.claude/hooks/forge-matar-por-nome.mjs';
+  await writeFile(join(dir, hook), `${await read(dir, hook)}// a note\n`);
+  const { patch, files, missing, leaks } = await sync(dir, PKG);
+  assert.deepEqual(files, ['scripts/hooks/forge-matar-por-nome.mjs']);
+  assert.deepEqual([missing.filter((m) => m.includes('hooks')), leaks], [[], []]);
+  const pkg = await tmp();
+  await cp(join(PKG, 'scripts'), join(pkg, 'scripts'), { recursive: true });
+  const file = join(await tmp(), 'sync.patch');
+  await writeFile(file, patch);
+  assert.equal(git(pkg, 'apply', file).status, 0);
+  assert.equal(await read(pkg, 'scripts/hooks/forge-matar-por-nome.mjs'), await read(dir, hook));
+});
+
+test('an e-mail address or an absolute path in an added line is flagged as personal data (exit 3), the same words as plain text are not', async () => {
+  const bad = ['Ask maria.silva@example.org first.', 'Logs: C' + ':\\Users\\maria\\logs', 'Logs: /' + 'home/maria/logs'];
+  for (const line of bad) {
+    const dir = await project();
+    await writeFile(join(dir, 'CLAUDE.md'), `${await read(dir, 'CLAUDE.md')}${line}\n`);
+    assert.deepEqual((await sync(dir, PKG)).leaks, [{ file: 'CLAUDE.md', line }], line);
+  }
+  const dir = await project();
+  await writeFile(join(dir, 'CLAUDE.md'), `${await read(dir, 'CLAUDE.md')}Run plugin forge@forge and read docs/house/notes at https://example.org/x.\n`);
+  assert.deepEqual((await sync(dir, PKG)).leaks, []);
 });

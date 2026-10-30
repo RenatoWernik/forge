@@ -3,5 +3,5 @@
   "file": "BOOTSTRAP.md",
   "find": "\"checkpoint\":{\"n\":0",
   "replace": "\"ponto\":{\"n\":0",
-  "line": "BOOTSTRAP.md: the step 8 args are accepted by both workflows (files exist, owns disjoint, checkpoint 0 as text)"
+  "line": "bootstrap: args: gauntlet-build (step 8 block of the pieces: files exist, owns disjoint, checkpoint 0 as text)"
 }

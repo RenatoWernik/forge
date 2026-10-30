@@ -29,7 +29,7 @@ test('the cross references to steps follow the renumbering', () => {
   const t = flat(prose);
   assert.match(t, /language the user chooses in step 3/);
   assert.match(t, /so step 5 translates/);
-  assert.match(t, /offer the `doctor` \(step 1\)/);
+  assert.match(t, /offer the machine check \(step 1\)/);
 });
 
 test('the interview covers the five dimensions, states the certainty and has the stop rule', () => {

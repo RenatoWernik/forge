@@ -59,7 +59,7 @@ test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da m
   // que o ticket edita por outro motivo não reprova por ele.
   const base = new Map(), baseOf = (f) => { if (!base.has(f)) { const r = git('show', `${desde()}:${f}`); base.set(f, r.status === 0 ? r.stdout : ''); } return base.get(f); };
   const achados = [];
-  for (const [f, l] of acrescentadas()) for (const re of PROIBIDO) { const m = l.match(re), tok = m && l.slice(m.index).match(/^[^'"`\s,;)]+/)[0]; if (m && !baseOf(f).includes(tok)) achados.push(`${f}: ${re} → ${l.trim().slice(0, 100)}`); }
+  for (const [f, l] of acrescentadas()) for (const re of PROIBIDO) { const lx = l.replace(/(?:github(?:usercontent)?\.com\/(?:repos\/)?|(?<![\w\/.-]))RenatoWernik\/(?:gauntlet-loop|forge)(?![\w.-])/gi, ''), m = lx.match(re), tok = m && lx.slice(m.index).match(/^[^'"`\s,;)]+/)[0]; if (m && !baseOf(f).includes(tok)) achados.push(`${f}: ${re} → ${l.trim().slice(0, 100)}`); }
   assert.deepEqual(achados, []);
 });
 
