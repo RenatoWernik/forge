@@ -43,15 +43,15 @@ async function edit(dir, rel, from, to) {
   await writeFile(join(dir, rel), text.replace(from, to));
 }
 
-// applies a patch to a fresh copy of the package templates, exactly as the user would after saying yes
+// applies a patch to a fresh copy of the package templates (at the package root, where the patch is written), exactly as the user would after saying yes
 async function applied(patch) {
-  const copy = await tmp();
+  const pkg = await tmp(), copy = join(pkg, 'templates');
   await cp(join(PKG, 'templates'), copy, { recursive: true });
   const file = join(await tmp(), 'sync.patch');
   await writeFile(file, patch);
-  const check = git(copy, 'apply', '--check', file);
+  const check = git(pkg, 'apply', '--check', file);
   assert.equal(check.status, 0, `git apply --check failed: ${check.stderr}`);
-  assert.equal(git(copy, 'apply', file).status, 0);
+  assert.equal(git(pkg, 'apply', file).status, 0);
   return copy;
 }
 
@@ -75,7 +75,7 @@ async function patchedPackage(patch) {
   await cp(join(PKG, 'scripts'), join(pkg, 'scripts'), { recursive: true });
   const file = join(await tmp(), 'sync.patch');
   await writeFile(file, patch);
-  const applyResult = git(join(pkg, 'templates'), 'apply', file);
+  const applyResult = git(pkg, 'apply', file);
   assert.equal(applyResult.status, 0, applyResult.stderr);
   return pkg;
 }
@@ -187,7 +187,7 @@ test('the command prints the patch, changes nothing in the project or the packag
   const before = [await read(dir, 'CLAUDE.md'), await template('CLAUDE.md')];
   let out = '', err = '';
   assert.equal(await main(['--project', dir, '--package', PKG], (s) => { out += s; }, (s) => { err += `${s}\n`; }), 0);
-  assert.match(out, /^diff --git a\/CLAUDE\.md b\/CLAUDE\.md\n/);
+  assert.match(out, /^diff --git a\/templates\/CLAUDE\.md b\/templates\/CLAUDE\.md\n/);
   assert.match(err, /1 file\(s\) differ from the templates: CLAUDE\.md/);
   assert.deepEqual([await read(dir, 'CLAUDE.md'), await template('CLAUDE.md')], before);
   await writeFile(join(dir, 'CLAUDE.md'), `${before[0]}Owner: ACME BILLING team.\n`);
@@ -333,4 +333,31 @@ test('"opus highest" in place of "opus high" is flagged as a frozen value, not t
   assert.ok(!patch.includes('{{critic}}est'), patch);
   assert.deepEqual(leaks, [{ file: wf, line }]);
   assert.equal(await main(['--project', dir, '--package', PKG], () => {}, () => {}), 3);
+});
+
+test('a hook edited in the project comes back against scripts/hooks, applies at the package root, and a hook the project never installed is skipped', async () => {
+  const dir = await project({ hooks: { killByName: true, backgroundTests: false, idleWatch: false } });
+  const hook = '.claude/hooks/forge-matar-por-nome.mjs';
+  await writeFile(join(dir, hook), `${await read(dir, hook)}// a note\n`);
+  const { patch, files, missing, leaks } = await sync(dir, PKG);
+  assert.deepEqual(files, ['scripts/hooks/forge-matar-por-nome.mjs']);
+  assert.deepEqual([missing.filter((m) => m.includes('hooks')), leaks], [[], []]);
+  const pkg = await tmp();
+  await cp(join(PKG, 'scripts'), join(pkg, 'scripts'), { recursive: true });
+  const file = join(await tmp(), 'sync.patch');
+  await writeFile(file, patch);
+  assert.equal(git(pkg, 'apply', file).status, 0);
+  assert.equal(await read(pkg, 'scripts/hooks/forge-matar-por-nome.mjs'), await read(dir, hook));
+});
+
+test('an e-mail address or an absolute path in an added line is flagged as personal data (exit 3), the same words as plain text are not', async () => {
+  const bad = ['Ask maria.silva@example.org first.', 'Logs: C:\\Users\\maria\\logs', 'Logs: /home/maria/logs'];
+  for (const line of bad) {
+    const dir = await project();
+    await writeFile(join(dir, 'CLAUDE.md'), `${await read(dir, 'CLAUDE.md')}${line}\n`);
+    assert.deepEqual((await sync(dir, PKG)).leaks, [{ file: 'CLAUDE.md', line }], line);
+  }
+  const dir = await project();
+  await writeFile(join(dir, 'CLAUDE.md'), `${await read(dir, 'CLAUDE.md')}Run plugin forge@forge and read docs/home/notes at https://example.org/x.\n`);
+  assert.deepEqual((await sync(dir, PKG)).leaks, []);
 });
