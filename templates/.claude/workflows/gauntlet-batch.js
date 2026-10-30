@@ -126,9 +126,12 @@ const state = results => (!results.length ? null : results.every(x => !x) ? 'all
 //   c: out of the diff, flaky (intermittent in the batch, or on main): the batch does not fail and an issue "flaky" is opened
 function classify(ans) {
   // an execution is a pass: the entries with the same kind and pass are its blocks, and it is complete when it holds every block (command) that kind has; an entry without a valid pass is a pass of its own
-  const runs = arr(ans && ans.runs).filter(r => r && (r.kind === 'suite' || r.kind === 'e2e')).map((r, i) => ({ ...r, block: str(r.command).trim().replace(/\s+/g, ' '), pass: Number.isInteger(r.pass) && r.pass >= 1 ? r.pass : 'e' + i }))
+  const runs = arr(ans && ans.runs).filter(r => r && (r.kind === 'suite' || r.kind === 'e2e')).map((r, i) => ({ ...r, block: str(r.command).trim().replace(/\s+/g, ' '), own: !(Number.isInteger(r.pass) && r.pass >= 1), pass: Number.isInteger(r.pass) && r.pass >= 1 ? r.pass : 'e' + i }))
+  // an execution declared without a pass number is the whole command: it counts only when it is the testCommand (suite) or the e2eCommand (E2E), as written (spaces collapsed); blocks carry a pass number
+  const want = { suite: TEST.replace(/\s+/g, ' '), e2e: E2E.replace(/\s+/g, ' ') }
+  const counted = k => runs.filter(r => r.kind === k && (!r.own || r.block === want[k]))
   const of = (k, b) => runs.filter(r => r.kind === k && (b === undefined || r.block === b))
-  const count = k => { const blocks = new Set(of(k).map(r => r.block)); return [...new Set(of(k).map(r => r.pass))].filter(p => new Set(of(k).filter(r => r.pass === p).map(r => r.block)).size === blocks.size).length }
+  const count = k => { const cs = counted(k), blocks = new Set(cs.map(r => r.block)); return [...new Set(cs.map(r => r.pass))].filter(p => new Set(cs.filter(r => r.pass === p).map(r => r.block)).size === blocks.size).length }
   const byTest = new Map()
   for (const r of runs) {
     const seenHere = new Set()
