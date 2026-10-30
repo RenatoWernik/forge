@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync, existsSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, relative, extname, basename, sep } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { scaffold } from './scaffold.mjs';
 
@@ -59,7 +59,23 @@ const build = async (set) => {
   if (/^pt/i.test(forge.langTag)) for (const rel of [...PROSE, ...readdirSync(join(dest, '.claude/briefs')).map((f) => '.claude/briefs/' + f)]) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   return { dest, forge, pending };
 };
-const check = (cwd) => { const r = spawnSync(process.execPath, ['.claude/check.cjs'], { cwd, encoding: 'utf8', env, timeout: 240000 }); return { status: r.status, out: (r.stdout ?? '') + (r.stderr ?? '') }; };
+// At most 2 check.cjs run at once (a slot is handed to the next waiting call, so the count never goes above 2)
+let active = 0;
+const waiting = [];
+const slot = async () => { if (active >= 2) await new Promise((r) => waiting.push(r)); else active++; };
+const free = () => { const next = waiting.shift(); if (next) next(); else active--; };
+const check = async (cwd) => {
+  await slot();
+  try {
+    return await new Promise((done) => {
+      const c = spawn(process.execPath, ['.claude/check.cjs'], { cwd, env });
+      let out = '';
+      for (const s of [c.stdout, c.stderr]) s.on('data', (d) => { out += d; });
+      const timer = setTimeout(() => c.kill(), 240000);
+      c.on('close', (status) => { clearTimeout(timer); done({ status, out }); });
+    });
+  } finally { free(); }
+};
 // "ok" ou "FAIL" da linha `name` na saída do check: o nome exato, com ou sem o detalhe « (...)» que algumas linhas acrescentam ao falhar
 const state = (out, name) => {
   for (const l of out.split(/\r?\n/)) {
@@ -71,7 +87,7 @@ const state = (out, name) => {
 // Um projeto por conjunto, gerado e verificado uma só vez; as mutações reutilizam a saída para ver que a linha estava «ok» antes
 const baselines = new Map();
 const baseline = (set) => {
-  if (!baselines.has(set)) baselines.set(set, build(set).then(({ dest, forge, pending }) => ({ forge, pending, ...check(dest) })));
+  if (!baselines.has(set)) baselines.set(set, build(set).then(async ({ dest, forge, pending }) => ({ forge, pending, ...(await check(dest)) })));
   return baselines.get(set);
 };
 
@@ -86,7 +102,7 @@ async function verifyMutation(m) {
   const text = readFileSync(file, 'utf8');
   if (!text.includes(m.find)) return `o texto a procurar não existe em ${m.file}`;
   writeFileSync(file, text.replaceAll(m.find, m.replace));
-  const post = check(dest);
+  const post = await check(dest);
   return state(post.out, m.line) === 'FAIL' && post.status === 1 ? null : `mutação sem verificação: depois dela a linha «${m.line}» não falhou`;
 }
 
@@ -121,9 +137,12 @@ test('respostas: as 8 combinações de língua, plainStyle e painel estão cober
   assert.deepEqual(want.filter((w) => !seen.has(w)), [], 'combinações em falta (vistas: ' + [...seen].join(', ') + ')');
 });
 
+// every baseline and every mutation starts now (each mutation builds its own project), 2 checks at a time; the tests below only wait for the result
+const started = new Map([...mutations].map(([name, m]) => [name, verifyMutation(m)]));
+for (const p of [...started.values(), ...[...answers.keys()].map(baseline)]) p.catch(() => {}); // a result is reported by its own test, never as an unhandled rejection
 for (const [name, m] of mutations) {
   test(`mutação: ${name} faz falhar a linha «${m.line}»`, async () => {
-    const problem = await verifyMutation(m);
+    const problem = await started.get(name);
     assert.equal(problem, null, `mutação «${name}»: ${problem}`);
   });
 }
