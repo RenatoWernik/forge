@@ -49,7 +49,7 @@ test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da m
     ...(me && me.length >= 3 ? [new RegExp(`\\b${me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')] : [])];
   const achados = [];
   for (const [f, l0] of acrescentadas()) {
-    const l = l0.replace(/RenatoWernik/g, '');
+    const l = l0.replace(/(?:github(?:usercontent)?\.com\/(?:repos\/)?|(?<![\w\/.-]))RenatoWernik\/(?:gauntlet-loop|forge)(?![\w.-])/gi, '');
     for (const re of PROIBIDO) if (re.test(l)) achados.push(`${f}: ${re} → ${l0.trim().slice(0, 100)}`);
   }
   assert.deepEqual(achados, []);
