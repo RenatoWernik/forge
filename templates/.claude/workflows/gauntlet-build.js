@@ -265,23 +265,28 @@ ${panel(cid, 'Critic · ' + short, 'critic', `Round ${round}: judge blind agains
     const hard = v.blocking.filter(b => !soft(b))
     followUps.push(...v.blocking.filter(soft).map(b => ({ round, ...b })))
     won = v.winner === (ours ? 'A' : 'B') && v.testsPass && hard.length === 0
-    // Attacks red on delivery: counted from the list per attack that the critic ran, over the Round -1 ids only.
-    const ran = new Map(v.attacks.map(a => [a && a.id, a && a.passesOnDelivery]))
-    const unreported = attackIds.filter(id => !ran.has(id))
-    if (unreported.length) log(`WARNING ${p.id} r${round}: the critic did not report the attack(s) ${unreported.join(', ')}`)
-    red = attackIds.filter(id => ran.get(id) === false).length
+    // Attacks on delivery, measured by the critic one by one (passesOnDelivery, a boolean). Every Round -1 attack of the piece must be reported: a missing or non-boolean result leaves the
+    // piece blocked with {reason:"gaps"} (it fails closed, like passesOnBase at the gate); an id that is not one of the piece's is ignored. Red = reported false.
+    const reported = id => (Array.isArray(v.attacks) ? v.attacks : []).filter(a => a && a.id === id)
+    const gaps = attackIds.filter(id => !reported(id).some(a => typeof a.passesOnDelivery === 'boolean'))
+    red = attackIds.filter(id => reported(id).some(a => a.passesOnDelivery === false)).length
+    if (gaps.length) { won = false; more = { blocked: { reason: 'gaps', gaps: gaps.map(id => `attack ${id}: the critic did not report passesOnDelivery (true or false) on the delivery`) } }; log(`${p.id} r${round}: blocked (gaps): ${gaps.join(', ')}`) }
+    else if (ESC.attacksRedOnDelivery.value && red > 0) { won = false; stop('escalate', { condition: 'attacksRedOnDelivery' }) }
+    else if (ESC.visualBelowReference.value && v.visualBelowReference === true) { won = false; stop('escalate', { condition: 'visualBelowReference' }) }
+    else if (!won) {
+      for (const c of new Set(hard.map(b => String(b.criterion).trim().toUpperCase()).filter(Boolean))) failed[c] = (failed[c] || 0) + 1
+      // The same criterion failed twice asks the orchestrator for a REDESIGN, the first suspicion being the spec; only after a redesign (piece.redesigns >= 1) does a repetition escalate.
+      // In rigorous the 3rd failed round is the CONTRACT, even when it is the same criterion for the 3rd time (2nd failure: redesign; 3rd: the contract is rewritten).
+      const repeated = Object.keys(failed).find(c => failed[c] >= 2)
+      if ((p.redesigns || 0) >= 1 && metrics().sameCriterionFailures >= ESC.sameCriterionFailures.value) stop('escalate', { condition: 'sameCriterionFailures' })
+      else if (MODE === 'rigorous' && round >= CAP) stop('contract')
+      else if (repeated) stop('redesign', { criterion: repeated })
+      else if (round >= CAP) stop({ reason: 'maxRounds' })
+    }
+    // The panel records the verdict only now, after the escalation or the block was decided, so it never says "won" for a piece that did not win.
     log(`${p.id} r${round}: ${won ? 'won blind' : 'lost, ' + v.biggestGap.slice(0, 120)}`)
     await aux(verdict(p, pid, cid, round, won, v), `panel:verdict:${p.id}:r${round}`, 'Build')
-
-    if (ESC.attacksRedOnDelivery.value && red > 0) { won = false; stop('escalate', { condition: 'attacksRedOnDelivery' }); break }
-    if (ESC.visualBelowReference.value && v.visualBelowReference === true) { won = false; stop('escalate', { condition: 'visualBelowReference' }); break }
-    if (won) break
-    for (const c of new Set(hard.map(b => String(b.criterion).trim().toUpperCase()).filter(Boolean))) failed[c] = (failed[c] || 0) + 1
-    // The same criterion failed twice asks the orchestrator for a REDESIGN, the first suspicion being the spec; only after a redesign (piece.redesigns >= 1) does a repetition escalate.
-    const repeated = Object.keys(failed).find(c => failed[c] >= 2)
-    if ((p.redesigns || 0) >= 1 && metrics().sameCriterionFailures >= ESC.sameCriterionFailures.value) stop('escalate', { condition: 'sameCriterionFailures' })
-    else if (repeated) stop('redesign', { criterion: repeated })
-    else if (round >= CAP) stop(MODE === 'rigorous' ? 'contract' : { reason: 'maxRounds' })
+    if (more.blocked) break
   }
   return { id: p.id, won, rounds: round, stopped, ...more, metrics: metrics(), followUps, files: build && build.filesChanged, testCommand: build && build.testCommand, models: { builder: build && build.model, critic: last && last.model }, lastVerdict: last }
 }
