@@ -161,7 +161,9 @@ export const fakeImpl = ({ pieces = [], gapsOf = {}, failingOnBase = true, atksO
   }
   if (role === 'critic') {
     const ours = /^A: .*src\/a\.js/m.test(prompt) ? 'A' : 'B';
-    return fromSchema(opts.schema, { winner: ours, testsPass: true, blockingErrors: [], biggestGap: 'none', reasoning: 'r', model });
+    // F-08 (#9): the build critic also reports every Round -1 attack of the piece as passing on the delivery (a missing one blocks the piece); fixture only
+    const measured = (prompt.match(/as you measured it: (\[.*\])/) ? JSON.parse(prompt.match(/as you measured it: (\[.*\])/)[1]) : []).map((a) => ({ id: a.id, passesOnDelivery: true }));
+    return fromSchema(opts.schema, { winner: ours, testsPass: true, blockingErrors: [], attacks: measured, biggestGap: 'none', reasoning: 'r', model });
   }
   if (role) return fromSchema(opts.schema, { filesChanged: ['src/a.js'], testCommand: 'node --test', redEvidence: 'RED', greenEvidence: 'GREEN', model });
   return 'ok';
