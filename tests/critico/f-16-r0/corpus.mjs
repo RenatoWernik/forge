@@ -2,8 +2,7 @@
 // testCommand na suíte, o e2eCommand no E2E) e de um ficheiro que EXISTE nesse tipo (f). Nenhum destes blocos é «K seguido de um
 // filtro que existe»: cada um tem de dar fail com reason runs. As famílias pedidas no contrato: echo, prefixos, sufixos `; x`, `&& x`,
 // aspas, maiúsculas, caminhos inexistentes e `..`; mais as que o crítico juntou (redireções, substituições, sinais Unicode).
-// Ficam DE FORA, à espera das PERGUNTAS P2–P5 na #57: `./f`, `f/`, `tests\\a` (barras do Windows), globs, o comando nu entre blocos
-// com filtro e o e2eCommand como bloco da suíte (e o inverso).
+// O é o comando do OUTRO tipo (resposta P4: cada tipo usa só o seu). As formas válidas das respostas P2 e P3 estão em VALIDOS.
 
 export const HOSTIS = [
   ['echo', () => 'echo a'],
@@ -40,6 +39,16 @@ export const HOSTIS = [
   ['pai-a-meio', (K) => `${K} tests/../../fora.test.mjs`],
   ['pai-que-volta-a-uma-pasta-que-existe', (K) => `${K} tests/unit/../integ`],
   ['so-pai', (K) => `${K} ..`],
+  // respostas P2 e P4 do orquestrador (#57): globs e flags extra não são válidos; cada tipo usa só o seu comando
+  ['glob-ficheiros', (K) => `${K} tests/unit/*.test.mjs`],
+  ['glob-pasta', (K) => `${K} tests/*`],
+  ['glob-recursivo', (K) => `${K} tests/**`],
+  ['flag-extra-antes', (K, f) => `${K} --test-name-pattern=x ${f}`],
+  ['flag-extra-depois', (K, f) => `${K} ${f} --test-only`],
+  ['comando-do-outro-tipo', (K, f, O) => `${O} ${f}`],
+  ['comando-do-outro-tipo-nu', (K, f, O) => O],
+  ['barra-invertida-com-pai', (K) => `${K} tests\\..\\..\\x.test.mjs`],
+  ['ponto-barra-inexistente', (K) => `${K} ./tests/fantasma`],
 ];
 
 // Os blocos válidos (critério 1): K seguido de um ficheiro ou de uma pasta que existe (FICHEIROS em helpers.mjs)
@@ -49,9 +58,16 @@ export const VALIDOS = {
     ['tres-ficheiros', (K) => [`${K} tests/unit/a.test.mjs`, `${K} tests/unit/b.test.mjs`, `${K} tests/integ/c.test.mjs`]],
     ['ficheiro-e-pasta', (K) => [`${K} tests/unit/a.test.mjs`, `${K} tests/integ`]],
     ['espacos-repetidos', (K) => [`${K}   tests/unit`, `${K} tests/integ`]],
+    // respostas P2 e P3 (#57): ./f, pasta/, a barra \ (normaliza-se para /), vários filtros que existem todos, o comando nu como bloco
+    ['ponto-barra', (K) => [`${K} ./tests/unit`, `${K} tests/integ`]],
+    ['barra-final', (K) => [`${K} tests/unit/`, `${K} tests/integ/`]],
+    ['barra-invertida', (K) => [`${K} tests\\unit\\a.test.mjs`, `${K} tests\\unit\\b.test.mjs`, `${K} tests\\integ`]],
+    ['varios-filtros', (K) => [`${K} tests/unit/a.test.mjs tests/unit/b.test.mjs`, `${K} tests/integ`]],
+    ['comando-nu-e-filtro', (K) => [K, `${K} tests/unit`]],
   ],
   e2e: [
     ['ficheiro-e-pasta', (K) => [`${K} e2e/login.spec.ts`, `${K} e2e/flows`]],
+    ['ponto-barra-e-barra-final', (K) => [`${K} ./e2e/login.spec.ts`, `${K} e2e/flows/`]],
     ['dois-ficheiros', (K) => [`${K} e2e/login.spec.ts`, `${K} e2e/flows/cart.spec.ts`]],
   ],
 };

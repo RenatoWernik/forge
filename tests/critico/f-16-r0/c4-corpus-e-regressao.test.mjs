@@ -13,7 +13,7 @@ test('C4 o corpus hostil tem ≥ 20 entradas, nomes e blocos distintos em cada t
   assert.ok(HOSTIS.length >= 20, `só ${HOSTIS.length} blocos hostis`);
   assert.equal(new Set(HOSTIS.map(([n]) => n)).size, HOSTIS.length, 'nomes repetidos');
   for (const [kind, K] of [['suite', CMD.test], ['e2e', CMD.e2e]]) {
-    const blocks = HOSTIS.map(([, g]) => g(K, F[kind]));
+    const blocks = HOSTIS.map(([, g]) => g(K, F[kind], kind === 'suite' ? CMD.e2e : CMD.test));
     assert.equal(new Set(blocks).size, blocks.length, `${kind}: blocos repetidos`);
     const validos = new Set([PAR[kind](K), ...VALIDOS[kind].flatMap(([, g]) => g(K))].map((s) => s.replace(/\s+/g, ' ').trim()));
     assert.deepEqual(blocks.filter((b) => validos.has(b.replace(/\s+/g, ' ').trim()) && !/ /.test(b)), [], `${kind}: um bloco hostil é igual a um válido`);
@@ -29,7 +29,8 @@ test('C4 o corpus cobre as famílias do contrato: echo, prefixos, sufixos ; e &&
 
 test('C4 os ficheiros e as pastas dos blocos válidos existem no projeto falso; os dos hostis «inexistentes» não', () => {
   const pastas = new Set(FICHEIROS.flatMap((f) => f.split('/').slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join('/'))));
-  const existe = (p) => FICHEIROS.includes(p) || pastas.has(p);
+  const existe1 = (p) => FICHEIROS.includes(p) || pastas.has(p);
+  const existe = (rest) => rest.split(/\s+/).filter(Boolean).every((x) => existe1(x.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, ''))); // P2: ./f, pasta/, \ e vários filtros; P3: sem filtro
   for (const [kind, K] of [['suite', CMD.test], ['e2e', CMD.e2e]]) {
     for (const b of [PAR[kind](K), ...VALIDOS[kind].flatMap(([, g]) => g(K))]) assert.ok(existe(b.slice(K.length).trim()), `${kind}: ${b}`);
     assert.ok(existe(F[kind]), F[kind]);

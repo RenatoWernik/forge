@@ -10,8 +10,8 @@ test('C3 GUARDA bloco único = testCommand e e2eCommand, com e sem número de pa
     [...SUITE2(), ...E2E3()],
     [...SUITE2('  ' + CMD.test.replace(' ', '   ') + ' '), ...E2E3()],
     [{ kind: 'suite', command: CMD.test, failures: [] }, { kind: 'suite', command: CMD.test, failures: [] }, ...E2E3()],
-  ]) {
-    const r = await lote(runs);
+  ]) for (const over of [{}, { projectFiles: undefined }]) { // a falha fechada (P1) só toca nos blocos com filtro: sem projectFiles, o comando inteiro conta
+    const r = await lote(runs, over);
     assert.equal(verdictOf(r), 'pass', show(r));
     assert.equal(JSON.stringify(r.out.runs), '{"suite":2,"e2e":3}', show(r)); // JSON: o objeto vem da vm (outro Object.prototype)
   }

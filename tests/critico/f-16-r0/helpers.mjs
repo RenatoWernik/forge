@@ -7,17 +7,18 @@
 //     de um filtro que é um ficheiro ou uma pasta que EXISTE no projeto; um bloco que não o é dá `batch.verdict: 'fail'` com
 //     `reason: 'runs'` (critério 2);
 //   - um bloco único continua a ser exatamente o testCommand ou o e2eCommand (A4d, critério 3);
-//   - SEAM PROVISÓRIO (PERGUNTA P1 na #57): o workflow corre numa vm sem sistema de ficheiros («scripts cannot read files»), por isso
-//     só sabe que um filtro existe se os args lho disserem. Os ataques passam a lista dos ficheiros do projeto, relativos à raiz e com
-//     «/», em `args[EXISTE]`, e criam os mesmos ficheiros no disco, numa pasta temporária que é o `root`. Uma pasta existe quando um
-//     ficheiro da lista está dentro dela. Se o orquestrador fixar outro nome ou outra forma, só `EXISTE` e `argsDe()` mudam.
+//   - respostas do orquestrador às P1–P7 (comentário de 2026-10-30 na #57): os ficheiros chegam em `args.projectFiles` (os caminhos
+//     relativos do `git ls-files`); sem essa lista, qualquer bloco com filtro dá fail runs (falha fechada). `./f`, `pasta/` e a barra
+//     `\` (normalizada para `/`) são válidos, e vários filtros num bloco também, se existirem todos; globs e flags extra não. O comando
+//     nu pode ser um bloco. Cada tipo usa só o seu comando. Um bloco hostil solto faz falhar o lote. O prompt do tester e o batch.md
+//     documentam a forma dos blocos. Os ataques criam também os ficheiros no disco, numa pasta temporária que é o `root`.
 import { join, dirname } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmp, batchArgs, pieces, runWf, fakeImpl, BATCH, CMD } from '../f-09-r0/helpers.mjs';
 
 export * from '../f-09-r0/helpers.mjs';
 
-export const EXISTE = 'projectFiles'; // PERGUNTA P1
+export const EXISTE = 'projectFiles'; // resposta P1
 export const BASE = '712b690'; // a main antes do F-16
 
 // O projeto falso: ficheiros reais numa pasta temporária (o root dos args) e a mesma lista nos args
