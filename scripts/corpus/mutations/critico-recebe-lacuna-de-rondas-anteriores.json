@@ -3,5 +3,5 @@
   "file": ".claude/workflows/gauntlet-build.js",
   "find": "Developer evidence: red:",
   "replace": "Earlier gap: ${last ? last.biggestGap : ''} | Developer evidence: red:",
-  "line": "build: the critic gets neither the developer's reasoning (summary) nor the reasoning, gap and errors of earlier rounds"
+  "line": "build: the critic gets neither the developer's reasoning (summary) nor the reasoning and gap of earlier rounds"
 }
