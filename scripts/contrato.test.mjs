@@ -21,7 +21,8 @@ const piece = (set = {}, remove = []) => { const p = { ...structuredClone(base),
 // Corre o workflow com um agent() que não responde (null): o que interessa é se o contrato é recusado e quantos agentes foram lançados
 const run = async (file, pieces) => {
   const calls = [];
-  const args = { checkpoint: { n: 1, title: 'T' }, root: '/p', dashboardUrl: 'https://x', models, pieces, attacks: [] };
+  const escalation = { sameCriterionFailures: { value: 2 }, attacksRedOnDelivery: { value: true }, minutesWithoutProgress: { value: 30 }, visualBelowReference: { value: true } }; // the build workflow (F-08) refuses args without a mode and an escalation, before the contract is read
+  const args = { checkpoint: { n: 1, title: 'T' }, root: '/p', dashboardUrl: 'https://x', models, mode: 'rigorous', escalation, pieces, attacks: [] };
   const ctx = vm.createContext({ args, agent: async (prompt, opts) => { calls.push({ prompt, opts }); return null; }, parallel: (ts) => Promise.all(ts.map((t) => t())), phase: () => {}, log: () => {} });
   let err;
   try { await vm.runInContext('(async () => {' + src[file].replace(/^export const meta\s*=/m, 'const meta =') + '\n})()', ctx); } catch (e) { err = e; }

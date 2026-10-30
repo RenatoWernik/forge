@@ -1,6 +1,6 @@
 export const meta = {
   name: 'gauntlet-build',
-  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, in at most 3 rounds (rigorous) or 2 (accelerated); it returns redesign, contract, escalate or maxRounds to the orchestrator instead of looping on',
+  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, looping until ours wins or the user stops',
   whenToUse: 'Step 2 of every checkpoint, over the pieces assembled from the Spec-Kit tasks.md. args: {checkpoint:{n,title}, root, dashboardUrl, context, mode:"rigorous"|"accelerated" (no default), escalation:{<condition>:{value}} (the 4 conditions of forge.json), vida?:{<agent or piece id>:{minutos,vida}} (computed by the orchestrator), models:{developer,developerUi?,critic,aux}, pieces:[{id,title,goal,bar,owns[],tdd,ui?,redesigns?, issue,objective,input,criteria:[{text,oracle?,command,central?}],fails,outOfScope,env,output}], attacks:[results of gauntlet-attacks], parallel?, language?, memory?}. A piece without a clean Round -1 in attacks returns blocked and never reaches the developer. Per piece it returns {id,won,rounds,stopped,criterion?,condition?,metrics:{rounds,sameCriterionFailures,attacksRedOnDelivery,minutesWithoutProgress},followUps,...}; stopped is "redesign", "contract", "escalate" or {reason:"maxRounds"}',
   phases: [
     { title: 'Panel', detail: 'registers pieces and agents in the queue', model: '{{aux.model}}' },
