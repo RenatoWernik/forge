@@ -3,8 +3,9 @@
 //   - a regra, LITERAL e uma só vez, em skills/update/SKILL.md (REGRA em helpers.mjs, copiada do corpo da #58);
 //   - nenhuma frase da skill, frontmatter incluído, descreve um aviso como certo: a frase «The check also warns when…» desaparece e
 //     nenhuma frase (fora da regra) bate na lista fechada AFIRMA abaixo;
-//   - a skill documenta o código 4 na secção «## Exit codes», e o README.md na secção «## Update»: um parágrafo com `4` e as palavras
-//     missing, outdated e unverified (PERGUNTA P3 na #58: o README.pt-BR.md também?).
+//   - a skill documenta o código 4 na secção «## Exit codes», o README.md na secção «## Update» e o README.pt-BR.md na «## Atualização»
+//     (resposta P3): um parágrafo com `4` e as palavras missing, outdated e unverified (os nomes literais dos estados);
+//   - a regra vale também para a description do frontmatter (resposta P5).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ROOT, SKILL, REGRA, join, readFileSync } from './helpers.mjs';
@@ -43,6 +44,12 @@ test('C2 o README.md documenta o código 4 na secção «## Update» (missing, o
   const s = seccao(readFileSync(join(ROOT, 'README.md'), 'utf8').replaceAll('\r\n', '\n'), '## Update');
   assert.ok(s, 'o README.md perdeu a secção «## Update»');
   assert.ok(documenta4(s), 'a secção «## Update» do README.md não tem um parágrafo com `4` e missing, outdated e unverified');
+});
+
+test('C2 o README.pt-BR.md documenta o código 4 na secção «## Atualização» (missing, outdated, unverified; resposta P3)', () => {
+  const s = seccao(readFileSync(join(ROOT, 'README.pt-BR.md'), 'utf8').replaceAll('\r\n', '\n'), '## Atualização');
+  assert.ok(s, 'o README.pt-BR.md perdeu a secção «## Atualização»');
+  assert.ok(documenta4(s), 'a secção «## Atualização» do README.pt-BR.md não tem um parágrafo com `4` e missing, outdated e unverified');
 });
 
 test('C3 sanidade do oráculo: a lista AFIRMA apanha a frase antiga e a do frontmatter da base, e não apanha a regra', () => {

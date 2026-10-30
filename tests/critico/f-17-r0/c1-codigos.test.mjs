@@ -1,7 +1,7 @@
 // F-17 critério 1: a tabela dos códigos de saída, com a máquina falsa do F-15b (fonte de versões fixa, sem rede).
 // Oráculo: a tabela CASOS abaixo, fechada. Cada linha é uma máquina, os argumentos e o código que o contrato manda. As linhas do --check
 // correm nas três formas (`--check`, `--check --json` e sem flags) e dão o mesmo código. ATAQUE = vermelho na base 712b690 (que sai
-// com 1); GUARDA = verde na base e tem de continuar verde. As linhas de P1 e P2 só fixam o que o contrato já exclui.
+// com 1); GUARDA = verde na base e tem de continuar verde. customized e unknown dão 4 (respostas P1 e P2 do orquestrador na #58).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -20,6 +20,7 @@ const M = {
   referencia: () => instala(maquina(), TUDO_REFERENCIA),
   customized: () => instala(maquina(), { ...TUDO_VERIFICADO, 'gauntlet-loop': personalizada() }),
   unknown: () => instala(maquina({ fontes: latest({ sem: [URL_PONYTAIL] }) }), TUDO_VERIFICADO),
+  unknownEOutdated: () => instala(maquina({ fontes: latest({ sem: [URL_PONYTAIL] }) }), { ...TUDO_VERIFICADO, uv: '0.13.5' }),
 };
 
 // [nome, máquina, estados esperados (sanidade da fixture), código | conjunto de códigos aceites, ATAQUE/GUARDA]
@@ -32,8 +33,9 @@ const CASOS = [
   ['um unverified (ponytail 5.4.0 acima do verifiedWith), o resto ok', 'umUnverified', { unverified: 1, ok: 10 }, 4, 'ATAQUE'],
   ['só o alvo forge outdated', 'soForgeOutdated', { outdated: 1, ok: 10 }, 4, 'ATAQUE'],
   ['referência de 2026-09-30: vários outdated', 'referencia', { outdated: 9, ok: 2 }, 4, 'ATAQUE'],
-  ['P1: só um customized (nunca 1: não é um erro real)', 'customized', { customized: 1, ok: 10 }, [0, 4], 'ATAQUE'],
-  ['P2: só um unknown (nunca 0: não está tudo ok; nem 2 nem 3)', 'unknown', { unknown: 1, ok: 10 }, [1, 4], 'GUARDA'],
+  ['só um customized (resposta P1)', 'customized', { customized: 1, ok: 10 }, 4, 'ATAQUE'],
+  ['só um unknown (resposta P2)', 'unknown', { unknown: 1, ok: 10 }, 4, 'ATAQUE'],
+  ['um unknown e um outdated (resposta P2)', 'unknownEOutdated', { unknown: 1, outdated: 1, ok: 9 }, 4, 'ATAQUE'],
 ];
 
 const conta = (by) => Object.values(by).reduce((a, c) => ({ ...a, [c.status]: (a[c.status] ?? 0) + 1 }), {});
