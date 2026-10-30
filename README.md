@@ -138,6 +138,8 @@ Type `/forge:update` in any Claude Code session. It runs `scripts/update.mjs --c
 - `--backup-confirmed`: for ai-memory across a major version, after you took the backup yourself.
 - `--overwrite`: to replace a skill you customized, after a backup copy.
 
+`update.mjs --check` exits with `0` when every component is `ok`, and with `4` when something needs handling (`missing`, `outdated`, `unverified`, `customized` or `unknown`). Code `1` is only for an error of the command itself; `2` is invalid use and `3` is a barrier that was not confirmed.
+
 The update never rewrites the files already generated in your projects.
 
 ## Sync
