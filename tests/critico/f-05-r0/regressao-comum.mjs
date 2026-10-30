@@ -5,6 +5,9 @@ import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { ROOT, sandboxEnv } from './helpers.mjs';
 
+// Reexecutor aninhado: volta a correr outras suites dentro de um teste e não cabe nos 540 s de um comando com a máquina carregada. Fica em skip por omissão;
+// cada suite corre no seu próprio comando (Ronda 0, crítico e tester), e FORGE_NESTED=1 liga-o.
+export const NESTED_SKIP = process.env.FORGE_NESTED !== '1' && 'reexecutor aninhado: cada suite corre no seu comando; FORGE_NESTED=1 liga-o';
 export const PRIOR = ['f-01-r0', 'f-02-r0', 'f-03-r0', 'f-10-r0'];
 export const runTests = (globs) => {
   const r = spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...globs], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout: 520000 });

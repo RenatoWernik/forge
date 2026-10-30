@@ -1,7 +1,7 @@
 export const meta = {
   name: 'gauntlet-build',
   description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, looping until ours wins or the user stops',
-  whenToUse: 'Step 2 of every checkpoint, over the pieces assembled from the Spec-Kit tasks.md. args: {checkpoint:{n,title}, root, dashboardUrl, context, models:{developer,critic,aux}, pieces:[{id,title,goal,bar,owns[],tdd}], parallel?, escalateAfter?, language?, memory?}',
+  whenToUse: 'Step 2 of every checkpoint, over the pieces assembled from the Spec-Kit tasks.md. args: {checkpoint:{n,title}, root, dashboardUrl, context, models:{developer,critic,aux}, pieces:[{id,title,goal,bar,owns[],tdd, issue,objective,input,criteria:[{text,oracle?,command}],fails,outOfScope,env,output}], attacks:[results of gauntlet-attacks], parallel?, escalateAfter?, language?, memory?}. A piece without a clean Round -1 in attacks returns blocked and never reaches the developer',
   phases: [
     { title: 'Panel', detail: 'registers pieces and agents in the queue', model: '{{aux.model}}' },
     { title: 'Build', detail: 'developer builds, critic judges blind, loop until ours wins' },
@@ -30,6 +30,51 @@ const R = Object.fromEntries(['developer', 'critic', 'aux'].map(r => { const m =
 const bad = PIECES.filter(p => !(p.id && p.title && p.goal && p.bar && (p.owns || []).length))
 const badRoles = Object.keys(R).filter(r => !(typeof R[r].model === 'string' && R[r].model && EFFORTS.includes(R[r].effort) && R[r].match))
 if (!DASH || !ROOT || !PIECES.length || bad.length || badRoles.length) throw new Error('incomplete args: root, dashboardUrl and pieces with id, title, goal, bar and owns' + (bad.length ? ' (review: ' + bad.map(p => p.id || p.title).join(', ') + ')' : '') + '; models.developer, models.critic and models.aux each need model, effort (one of ' + EFFORTS.join(', ') + ') and, if present, a valid regex in match, from .claude/forge.json' + (badRoles.length ? ' (review: ' + badRoles.join(', ') + ')' : ''))
+
+// contract:begin (the same block is in gauntlet-attacks.js; scripts/contrato.test.mjs keeps the two identical)
+// The contract of each piece is the transcript of its GitHub issue; it is validated before any agent() is spent.
+const ORACLES = ['corpus', 'property', 'reference', 'threshold']
+const ABSOLUTE = /(?<![\p{L}\p{N}_])(?:never|always|any|all|every|nunca|sempre|qualquer|todos|todas|nenhum|nenhuma)(?![\p{L}\p{N}_])/iu // shortcut: Unicode letter boundaries, so "métodos" and "sempreviva" are not "todos" and "sempre"; add a word here and in scripts/contrato.test.mjs together
+const blank = s => typeof s !== 'string' || !s.trim()
+const contractProblems = p => {
+  const out = [], at = f => `piece ${p.id}, ${f}`
+  if (!Number.isInteger(p.issue) || p.issue < 1) out.push(at('issue: the number of the GitHub issue that holds the contract (an integer, 1 or more)'))
+  for (const k of ['objective', 'input', 'fails', 'outOfScope', 'env', 'output']) if (blank(p[k])) out.push(at(k + ': text of the contract, not empty'))
+  if (!Array.isArray(p.criteria) || !p.criteria.length) out.push(at('criteria: a list of 1 to 6 criteria {text, oracle?, command}'))
+  else {
+    if (p.criteria.length > 6) out.push(at(`criteria: ${p.criteria.length} criteria, at most 6 are allowed; split the piece (criteria[6] onwards go to another piece)`))
+    p.criteria.forEach((c, i) => {
+      const f = `criteria[${i}]`
+      if (!c || typeof c !== 'object') return out.push(at(f + ': must be {text, oracle?, command}'))
+      if (blank(c.text)) out.push(at(f + '.text: what the criterion says, not empty'))
+      if (blank(c.command)) out.push(at(f + '.command: the command that verifies it, not empty'))
+      if (c.oracle != null && !ORACLES.includes(c.oracle)) out.push(at(f + '.oracle: one of ' + ORACLES.join(', ')))
+      else if (c.oracle == null && typeof c.text === 'string' && ABSOLUTE.test(c.text)) out.push(at(f + '.oracle: the text has an absolute word (never, always, any, all, every, nunca, sempre, qualquer, todos, todas, nenhum, nenhuma), so it needs an oracle: ' + ORACLES.join(', ')))
+    })
+  }
+  return out
+}
+const contractErrors = PIECES.flatMap(contractProblems)
+if (contractErrors.length) throw new Error('invalid contract, no agent was launched: ' + contractErrors.join('; '))
+// contract:end
+
+// Round -1 gate (args.attacks = the results of gauntlet-attacks, as returned). A piece without a clean Round -1 never reaches the developer.
+// failingOnBase is recomputed from the attacks: the critic's own boolean is not read. Guards (guard: true) may pass on the base and are not counted.
+// blocked = {reason:"gaps", gaps} (no result, open gaps, an attack without id, file or passesOnBase, or no attack without guard) or {reason:"failingOnBase", attacks:[ids that already pass on the base]}.
+const R0 = Array.isArray(A.attacks) ? A.attacks : []
+const attacksOf = p => (R0.find(x => x && x.id === p.id) || {}).attacks
+const gate = p => {
+  const r = R0.find(x => x && x.id === p.id)
+  if (!r) return { reason: 'gaps', gaps: ['no Round -1 result for this piece'] }
+  const list = Array.isArray(r.attacks) ? r.attacks : []
+  const plain = list.filter(a => a && a.guard !== true)
+  const gaps = [...(Array.isArray(r.gaps) ? r.gaps : ['gaps is not a list'])]
+  list.forEach((a, i) => { if (!a || blank(a.id) || blank(a.file)) gaps.push(`attack ${i}: id and file are required`); else if (a.guard !== true && typeof a.passesOnBase !== 'boolean') gaps.push(`attack ${a.id}: passesOnBase is missing`) })
+  if (!plain.length) gaps.push('no attack without guard: nothing attacks the piece')
+  if (gaps.length) return { reason: 'gaps', gaps }
+  const passing = plain.filter(a => a.passesOnBase).map(a => a.id)
+  return passing.length ? { reason: 'failingOnBase', attacks: passing } : null
+}
 
 // Which label (A or B) carries ours: derived from piece and round, never told to the critic (the runtime's random draw would break resume).
 const oursIsA = s => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 2 === 0
@@ -103,6 +148,8 @@ ${PIECES.map(p => `- pieces/cp${CP.n}-${p.id}: {"title":${JSON.stringify(p.title
 Write every free-text value in ${LANG}. Reply only "ok" or the error.`, 'panel:seed', 'Panel')
 
 async function runPiece(p) {
+  const blocked = gate(p)
+  if (blocked) { log(`${p.id}: blocked before the developer (${blocked.reason}): ${JSON.stringify(blocked.gaps || blocked.attacks).slice(0, 200)}`); return { id: p.id, won: false, rounds: 0, blocked } }
   const pid = `cp${CP.n}-${p.id}`, short = p.title.slice(0, 40)
   let round = 0, won = false, last = null, build = null, stopped = null
   while (!won) {
@@ -117,6 +164,7 @@ Piece "${p.title}": ${p.goal}
 Bar (the critic compares blind against it): ${p.bar}
 You may edit only these files: ${JSON.stringify(p.owns)}
 Spec, plan, tasks and test command: ${CTX}
+Contract: issue ${p.issue}, read with gh issue view ${p.issue} --json body,comments. Round -1 attacks, which must be green when you deliver and which you never weaken or delete: ${JSON.stringify(attacksOf(p).map(a => a.file))}
 Rules:
 1. Before exploring code, run ai-memory memory_query (ToolSearch "select:mcp__ai-memory__memory_query"; ${MEM}) about the piece and, if graphify-out/ exists, graphify query and graphify affected on the files.
 2. ${tdd}
@@ -165,5 +213,5 @@ if (A.parallel) results = await parallel(PIECES.map(p => () => runPiece(p)))
 else for (const p of PIECES) results.push(await runPiece(p))
 const done = results.filter(Boolean)
 if (done.length < PIECES.length) log(`ATTENTION: ${PIECES.length - done.length} piece(s) without a result because of a workflow error`)
-log(`${done.filter(r => r.won).length}/${PIECES.length} pieces won blind`)
+log(`${done.filter(r => r.won).length}/${PIECES.length} pieces won blind` + (done.some(r => r.blocked) ? `, ${done.filter(r => r.blocked).length} blocked by the Round -1` : ''))
 return { checkpoint: CP, results: done }

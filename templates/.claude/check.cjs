@@ -256,19 +256,24 @@ async function chk(name, f) {
   }
   const rejects = async (file, args) => { let n = 0; const x = await wf(file, args, () => ++n); return n === 0 && /incomplete args/.test(x.err?.message) }
   const [D, C, X] = WFR.map(k => F[k])
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // Round -1 result of a piece as gauntlet-attacks returns it and gauntlet-build gets it in args.attacks: an attack that fails on the base and a guard that already passes
+  const r0 = (id, over = {}) => ({ id, attacks: [{ id: id + '-a1', file: 'tests/critico/' + id + '-r0/a1.test.mjs', passesOnBase: false }, { id: id + '-g1', file: 'tests/critico/' + id + '-r0/g1.test.mjs', guard: true, passesOnBase: true }], failingOnBase: true, gaps: [], ...over })
   const base = { checkpoint: { n: 1, title: 'T' }, root: 'C:\\p', dashboardUrl: 'https://x', context: 'CTX-SPEC-PLAN-TASKS', models: F, language: FJ.language }
+  base.attacks = [r0('p'), r0('q')] // the Round -1 results the build workflow needs for pieces p and q
   const rn = o => +o.label.match(/:r(\d+)$/)[1]
   const flip = l => (l === 'A' ? 'B' : 'A')
   const only = (calls, re) => calls.filter(c => re.test(c.opts.label))
   const stuck = calls => calls.filter(c => c.prompt.includes('-stuck'))
   const veto = c => ['Do not consult memory', 'do not open FRAMEWORK.md or .claude/workflows/', 'unless the context above allows it', 'you edit no file'].every(t => c.prompt.includes(t)) // what invariant 3 forbids the critic
   const key = r => r.model + ',' + r.effort
-  const ROLE = { build: key(D), pony: key(D), critic: key(C), 'pony-critic': key(C), panel: key(X) } // invariant 3: model,effort of each role by label prefix, from forge.json
+  const ROLE = { build: key(D), pony: key(D), critic: key(C), 'pony-critic': key(C), attacks: key(C), panel: key(X) } // invariant 3: model,effort of each role by label prefix, from forge.json
   const rolesOk = (calls, roles = ROLE) => calls.every(c => roles[c.opts.label.split(':')[0]] === c.opts.model + ',' + c.opts.effort)
   const ver = (calls, l) => only(calls, new RegExp('^panel:verdict:' + l + '$'))[0].prompt // what the workflow tells the panel to record at the end of a round (only it knows whether ours really won)
   const LOST = ['"verdict":"perdeu"', '"status":"building"', '"kind":"fail"'], WON = ['"verdict":"ganhou"', '"status":"won"', '"kind":"ok"'] // "ganhou"/"perdeu" are fixed panel values the dashboard reads
   const verdictOk = (p, n, gap, yes, no) => [...yes, `"rounds":${n},`].every(t => p.includes(t)) && !no.some(t => p.includes(t)) && p.split(`"gap":"${gap}"`).length === 3 // the gap goes twice: on the agent and on the piece
-  const piece = { id: 'p', title: 'P', goal: 'META-P', bar: 'BAR-X', owns: ['src/a.js', 'src/only-owns.js'], tdd: true } // only-owns.js reaches the agents through owns alone: the fake developer changes only src/a.js
+  const contract = { issue: 7, objective: 'OBJ-P', input: 'branch main, files src/a.js', criteria: [{ text: 'The export returns 3 rows', oracle: 'corpus', command: 'node --test src/a.test.js' }, { text: 'The header has 4 columns', command: 'node --test src/h.test.js' }], fails: 'a criterion that fails', outOfScope: 'the PDF export', env: 'Node 20', output: 'a draft PR' }
+  const piece = { id: 'p', title: 'P', goal: 'META-P', bar: 'BAR-X', owns: ['src/a.js', 'src/only-owns.js'], tdd: true, ...contract } // only-owns.js reaches the agents through owns alone: the fake developer changes only src/a.js
   const MARKS = [piece.goal, piece.bar, base.context, base.root, 'src/only-owns.js'] // what the piece args hand to the developer and to the critic
   const dev = { summary: 'DEV-REASONING', filesChanged: ['src/a.js'], testCommand: 'TEST-DEV', redEvidence: 'RED-EV', greenEvidence: 'GREEN-EV', model: declared(D) }
   const critic = (p, o, at = 9) => { const ours = /^A: .*src\/a\.js/m.test(p) ? 'A' : 'B'; return { winner: rn(o) >= at ? ours : flip(ours), testsPass: true, blockingErrors: rn(o) >= at ? [] : ['BLOCK-' + rn(o)], biggestGap: 'GAP-' + rn(o), reasoning: 'CRITIC-REASONING-' + rn(o), model: declared(C) } }
@@ -311,16 +316,61 @@ async function chk(name, f) {
   await chk('build: args without root, dashboardUrl or pieces, or a piece without id, title, goal, bar or owns, bring the workflow down with incomplete args, before spending an agent', async () => (await Promise.all([{ root: '' }, { dashboardUrl: '' }, { pieces: [] }, ...['id', 'title', 'goal', 'bar', 'owns'].map(k => ({ pieces: [{ ...piece, [k]: undefined }] }))].map(a => rejects('gauntlet-build.js', { ...base, pieces: [piece], ...a })))).every(Boolean))
   // args.models missing or wrong: the workflow stops with an error that names the role and points to forge.json, before spending an agent
   const badModels = WFR.flatMap(k => [{ ...F, [k]: undefined }, { ...F, [k]: { ...F[k], model: '' } }, { ...F, [k]: { ...F[k], effort: 'ultra' } }, { ...F, [k]: { ...F[k], effort: undefined } }, { ...F, [k]: { ...F[k], match: '(' } }].map(m => [k, m]))
-  const rejectsModels = async (file, args) => (await Promise.all([[null, undefined], [null, {}], ...badModels].map(async ([k, m]) => { let n = 0; const x = await wf(file, { ...args, models: m }, () => ++n), msg = x.err?.message || ''; return n === 0 && /incomplete args/.test(msg) && msg.includes('.claude/forge.json') && (!k || msg.includes('(review: ' + k + ')')) }))).every(Boolean)
+  const rejectsModels = async (file, args, roles = WFR) => (await Promise.all([[null, undefined], [null, {}], ...badModels.filter(([k]) => roles.includes(k))].map(async ([k, m]) => { let n = 0; const x = await wf(file, { ...args, models: m }, () => ++n), msg = x.err?.message || ''; return n === 0 && /incomplete args/.test(msg) && msg.includes('.claude/forge.json') && (!k || msg.includes('(review: ' + k + ')')) }))).every(Boolean)
   await chk('build: args without models, or with a role missing model or a valid effort, or with a match that is not a valid regex, bring the workflow down with incomplete args naming the role and pointing to forge.json, before spending an agent', () => rejectsModels('gauntlet-build.js', { ...base, pieces: [piece] }))
   const big = 'x'.repeat(100000)
   r = await wf('gauntlet-build.js', { ...base, pieces: [piece] }, (p, o) => o.label === 'build:p:r1' ? { ...dev, redEvidence: big } : win(p, o))
   await chk('build: evidence over the limit reaches the critic cut, flagged there and recorded with log() (only the cut field)', () => { const c = only(r.calls, /^critic:/)[0].prompt; return !c.includes(big) && c.includes('[cut') && r.logs.some(l => l.includes('p r1 red') && l.includes('100000')) && !r.logs.some(l => l.includes('p r1 green')) })
 
-  if (has('FRAMEWORK.md')) await chk('manual: the args example in FRAMEWORK.md (section 5, step 2) is accepted by gauntlet-build', async () => {
+  // Round -1 (process v3): the contract of each piece is validated before any agent() is spent, in gauntlet-build and in gauntlet-attacks;
+  // gauntlet-attacks runs one critic per piece; gauntlet-build never launches the developer of a piece without a clean Round -1 (args.attacks).
+  const attImpl = (over = {}) => (p, o) => { // the Round -1 critic answers from a table: attacks by piece, the failingOnBase it claims, gaps by piece
+    if (!o.label.startsWith('attacks:')) return 'ok'
+    const id = o.label.split(':')[1]
+    return { attacks: (over.attacks || {})[id] || r0(id).attacks, failingOnBase: over.claim ?? true, gaps: (over.gaps || {})[id] || [], model: declared(C) }
+  }
+  const [A1, G1] = r0('p').attacks, q = { ...piece, id: 'q', title: 'Q', owns: ['src/b.js'], issue: 8 }
+  const C0 = contract.criteria[0], many = n => Array.from({ length: n }, (_, i) => ({ text: 'Step ' + i + ' returns 3 rows', command: 'node --test t' + i }))
+  const NAMED = [['issue', { issue: undefined }], ['issue', { issue: 0 }], ['issue', { issue: 'abc' }], ['criteria', { criteria: undefined }], ['criteria', { criteria: [] }], ['criteria', { criteria: many(7) }],
+    ['criteria[0].command', { criteria: [{ ...C0, command: ' ' }] }], ['criteria[0].text', { criteria: [{ ...C0, text: '' }] }], ['criteria[0].oracle', { criteria: [{ ...C0, oracle: 'vibes' }] }],
+    ...['objective', 'input', 'fails', 'outOfScope', 'env', 'output'].flatMap(k => [[k, { [k]: undefined }], [k, { [k]: '  ' }]])]
+  const refuses = async (file, pieces, field, id) => { let n = 0; const x = await wf(file, { ...base, pieces }, () => ++n), m = x.err?.message || ''; return n === 0 && /invalid contract/.test(m) && new RegExp('(?<![\\w.-])' + esc(field) + '(?![\\w])').test(m) && (!id || m.includes('piece ' + id + ',')) }
+  const accepts = async (file, p) => { const x = await wf(file, { ...base, pieces: [p] }, file === 'gauntlet-attacks.js' ? attImpl() : win); return !x.err && x.calls.length > 0 }
+  for (const file of ['gauntlet-attacks.js', 'gauntlet-build.js']) {
+    const tag = file.replace('gauntlet-', '').replace('.js', '')
+    await chk(`${tag}: each invalid contract (issue, objective, input, fails, outOfScope, env, output, criteria, and per criterion text, command and oracle; more than 6 criteria) is refused before any agent(), and the error names the field (and the piece to split)`, async () => (await Promise.all(NAMED.map(([f, patch]) => refuses(file, [{ ...piece, ...patch }], f, 'p')))).every(Boolean) && await refuses(file, [piece, { ...q, issue: undefined }], 'issue', 'q') && await refuses(file, [{ ...q, ...NAMED[5][1] }, piece], 'criteria', 'q'))
+    await chk(`${tag}: a criterion with an absolute word (never, always, any, all, every, nunca, sempre, qualquer, todos, todas, nenhum, nenhuma) and no oracle is refused, in English and in Portuguese; words that only contain them, and the same criterion with an oracle, are not`, async () => {
+      const pos = ['The export never drops a row', 'Always redirect to HTTPS', 'Rejects any file over 10 MB', 'ALL rows are imported', 'Every request is signed', 'O relatório nunca perde uma linha', 'A página carrega sempre', 'Qualquer ficheiro', 'Todos os testes passam', 'Todas as páginas têm título', 'Nenhum segredo sai', 'Nenhuma fatura fica por emitir']
+      const neg = ['Install the plugin in a temp folder', 'Many small files are merged', 'The company name is in the footer', 'Everyday usage stays small', 'Allocate 2 workers per batch', 'The alloy price has 2 decimals', 'Os métodos aceites são 2', 'Uma sempreviva decora o cabeçalho']
+      const on = (text, oracle) => ({ ...piece, criteria: [{ text, command: 'node --test t', ...(oracle ? { oracle } : {}) }] })
+      return (await Promise.all(pos.map(s => refuses(file, [on(s)], 'criteria[0].oracle')))).every(Boolean) && (await Promise.all([...neg.map(s => accepts(file, on(s))), ...pos.map(s => accepts(file, on(s, 'property')))])).every(Boolean)
+    })
+  }
+  r = await wf('gauntlet-attacks.js', { ...base, pieces: [piece, q] }, attImpl({ gaps: { q: ['GAP-Q'] } }))
+  const ac = only(r.calls, /^attacks:/)
+  await chk('attacks: one critic per piece, with the model and effort of forge.json (critic, aux) and no developer; each prompt reads its own issue with gh issue view <n> --json body,comments and points to the Round -1 brief that the project has', () => ac.length === 2 && rolesOk(r.calls) && !only(r.calls, /^build:/).length && ac[0].prompt.includes('gh issue view 7 --json body,comments') && !ac[0].prompt.includes('issue view 8') && ac[1].prompt.includes('gh issue view 8 --json body,comments') && !ac[1].prompt.includes('issue view 7') && ac.every(c => c.prompt.includes('.claude/briefs/round-minus-1.md')) && has('.claude/briefs/round-minus-1.md'))
+  await chk('attacks: the return has, per piece, id, attacks (id, file, guard and passesOnBase as the critic gave them), failingOnBase and gaps', () => { const [x, y] = r.out.results; return r.out.results.length === 2 && x.id === 'p' && JSON.stringify(x.attacks) === JSON.stringify(r0('p').attacks) && x.failingOnBase === true && x.gaps.length === 0 && y.id === 'q' && y.gaps.join() === 'GAP-Q' })
+  const CALC = [[[A1, G1], true], [[{ ...A1, passesOnBase: true }, G1], false], [[A1, { ...A1, id: 'p-a2', passesOnBase: true }], false], [[A1, { ...G1, passesOnBase: false }], true], [[G1], false], [[], false], [[{ ...A1, passesOnBase: undefined }], false]]
+  await chk('attacks: failingOnBase is computed (true only if some attack without guard exists and none of them passes on the base), whatever boolean the critic claims', async () => (await Promise.all(CALC.flatMap(([list, want]) => [true, false].map(async claim => (await wf('gauntlet-attacks.js', { ...base, pieces: [piece] }, attImpl({ attacks: { p: list }, claim }))).out.results[0].failingOnBase === want)))).every(Boolean))
+  r = await wf('gauntlet-attacks.js', { ...base, pieces: [piece, q], parallel: true }, (p, o) => o.label === 'attacks:q' ? Promise.reject(new Error('agent failure')) : attImpl()(p, o))
+  const rn0 = await wf('gauntlet-attacks.js', { ...base, pieces: [piece] }, (p, o) => o.label.startsWith('attacks:') ? null : 'ok')
+  await chk('attacks: a critic without an answer leaves open gaps and log() says so; parallel:true runs the pieces together and a piece that throws leaves the result with ATTENTION in log()', () => rn0.out.results[0].gaps.length > 0 && rn0.out.results[0].failingOnBase === false && rn0.logs.some(l => l.startsWith('p:') && l.includes('no answer')) && r.out.results.length === 1 && r.out.results[0].id === 'p' && r.logs.some(l => l.startsWith('ATTENTION')))
+  const gate = async res => { const x = await wf('gauntlet-build.js', { ...base, pieces: [piece, q], attacks: res }, win); return { won: id => !!x.out.results.find(y => y.id === id).won, why: id => x.out.results.find(y => y.id === id).blocked, devs: id => only(x.calls, new RegExp('^build:' + id + ':')).length } }
+  const alreadyPasses = { ...A1, passesOnBase: true }, noState = { id: 'q-a1', file: 'tests/critico/q-r0/a1.test.mjs' }
+  await chk('build: a piece without a clean Round -1 returns blocked and never reaches the developer: open gaps, no result, an attack that already passes on the base (failingOnBase:true claimed or not), an attack without passesOnBase, only guards; failing guards do not block', async () => {
+    const [gaps, none, pass, state, guards, ok, off] = await Promise.all([gate([r0('p'), r0('q', { gaps: ['G'] })]), gate([r0('p')]), gate([r0('p'), { ...r0('q'), attacks: [{ ...A1, id: 'q-a1', passesOnBase: true }, { ...A1, id: 'q-a2' }] }]), gate([r0('p'), r0('q', { attacks: [noState, G1] })]), gate([r0('p'), r0('q', { attacks: [G1] })]), gate([r0('p'), r0('q', { attacks: [A1, { ...G1, passesOnBase: false }] })]), gate(undefined)])
+    return [gaps, none, state, guards].every(g => g.why('q').reason === 'gaps' && g.devs('q') === 0 && g.won('p')) && pass.why('q').reason === 'failingOnBase' && pass.why('q').attacks.join() === 'q-a1' && pass.devs('q') === 0 && pass.won('p')
+      && ok.won('p') && ok.won('q') && !ok.why('q') && [off.why('p'), off.why('q')].every(b => b.reason === 'gaps') && off.devs('p') + off.devs('q') === 0
+  })
+  const order = [], track = impl => (p, o) => { order.push(o.label); return impl(p, o) }
+  const ra = await wf('gauntlet-attacks.js', { ...base, pieces: [piece, q] }, track(attImpl({ gaps: { q: ['GAP-Q'] } })))
+  const rb = await wf('gauntlet-build.js', { ...base, pieces: [piece, q], attacks: ra.out.results }, track(win))
+  await chk('checkpoint: the output of gauntlet-attacks goes as it is to gauntlet-build in args.attacks; the first developer of a piece comes after its Round -1 agent(), and a piece with open gaps never reaches the developer', () => order.indexOf('attacks:p') >= 0 && order.indexOf('build:p:r1') > order.indexOf('attacks:p') && order.indexOf('attacks:q') >= 0 && !order.some(l => l.startsWith('build:q:')) && rb.out.results.find(y => y.id === 'p').won && rb.out.results.find(y => y.id === 'q').blocked.reason === 'gaps')
+
+  if (has('FRAMEWORK.md')) await chk('manual: the args example in FRAMEWORK.md (section 5, step 2) is accepted by gauntlet-build and by gauntlet-attacks', async () => {
     const ex = JSON.parse(fs.readFileSync('FRAMEWORK.md', 'utf8').match(/```json\r?\n([\s\S]*?)\r?\n```/)[1])
-    const x = await wf('gauntlet-build.js', { ...ex, models: F }, win)
-    return x.out.results[0].won && x.out.results[0].rounds === 1
+    const [x, y] = [await wf('gauntlet-build.js', { ...ex, models: F }, win), await wf('gauntlet-attacks.js', { ...ex, models: F }, attImpl())]
+    return x.out.results[0].won && x.out.results[0].rounds === 1 && y.out.results.length === ex.pieces.length
   })
 
   const units = [{ id: 'u1', title: 'U1', paths: ['src/a.js'] }, { id: 'u2', title: 'U2', paths: ['src/b.js'] }]
@@ -349,14 +399,13 @@ async function chk(name, f) {
   // FRAMEWORK.md section 6: whoever writes painel.json writes its exact copy in painel/estado right after it, in the same step (the panel page reads only that copy)
   const sameData = t => /painel\.json[\s\S]{0,400}painel\/estado/.test(t)
   const panelCalls = f => seen[f].flatMap(x => x.calls).filter(c => c.opts.label.startsWith('panel:'))
-  await chk('panel: same data: FRAMEWORK.md and every panel agent of both workflows say that whoever writes .checkpoints/painel.json writes its exact copy in painel/estado right after it, in the same step', () => (!has('FRAMEWORK.md') || sameData(fs.readFileSync('FRAMEWORK.md', 'utf8'))) && ['gauntlet-build.js', 'gauntlet-ponytail.js'].every(f => panelCalls(f).length > 0 && panelCalls(f).every(c => sameData(c.prompt))))
-  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const rec = (role, m) => new RegExp(`"role":"${role}","loop":"\\w+","model":"${esc(label(m))}","effort":"${esc(m.effort)}"`)
+  await chk('panel: same data: FRAMEWORK.md and every panel agent of both workflows say that whoever writes .checkpoints/painel.json writes its exact copy in painel/estado right after it, in the same step', () => (!has('FRAMEWORK.md') || sameData(fs.readFileSync('FRAMEWORK.md', 'utf8'))) && ['gauntlet-attacks.js', 'gauntlet-build.js', 'gauntlet-ponytail.js'].every(f => panelCalls(f).length > 0 && panelCalls(f).every(c => sameData(c.prompt))))
+  const rec =(role, m) => new RegExp(`"role":"${role}","loop":"\\w+","model":"${esc(label(m))}","effort":"${esc(m.effort)}"`)
   const [dv, ct, pB, pC] = [[...devs, ...pd], [...crit, ...pc], rec('builder', D), rec('critic', C)]
   await chk('panel: the panel records say the model and effort of each role from forge.json (developer, critic), in the seed and in every agent of both workflows', () => dv.length > 0 && ct.length > 0 && dv.every(c => pB.test(c.prompt)) && ct.every(c => pC.test(c.prompt)) && [seedB, r.calls[0].prompt].every(s => pB.test(s) && pC.test(s)))
   // probe: distinct models per role. A workflow that ignores args.models fails here even when forge.json equals what it hardcodes.
   const PROBE = { developer: { model: 'probe-dev', effort: 'xhigh', label: 'Probe Dev 1.0' }, critic: { model: 'probe-critic', effort: 'low', label: 'Probe Critic 2.0' }, aux: { model: 'probe-aux', effort: 'max', label: 'Probe Aux 3.0' } }
-  const PR = { build: 'probe-dev,xhigh', pony: 'probe-dev,xhigh', critic: 'probe-critic,low', 'pony-critic': 'probe-critic,low', panel: 'probe-aux,max' }
+  const PR = { build: 'probe-dev,xhigh', pony: 'probe-dev,xhigh', critic: 'probe-critic,low', 'pony-critic': 'probe-critic,low', attacks: 'probe-critic,low', panel: 'probe-aux,max' }
   const probe = async (file, args, impl) => {
     const x = await wf(file, { ...args, models: PROBE, language: 'Probe-Language', memory: { workspace: 'probe-ws', project: 'probe-proj' } }, (p, o) => { const y = impl(p, o); return typeof y === 'object' ? { ...y, model: declared(PROBE[/^(build|pony):/.test(o.label) ? 'developer' : 'critic']) } : y })
     seen[file].pop() // the probe runs are not part of the contract checks below (their aux model differs from the meta phases)
@@ -366,6 +415,10 @@ async function chk(name, f) {
   const [pbD, pbC, ppD, ppC] = [only(PB.calls, /^build:/), only(PB.calls, /^critic:/), only(PP.calls, /^pony:/), only(PP.calls, /^pony-critic:/)]
   await chk('models: with distinct probe models in args.models, every agent() of both workflows uses them (model, effort and panel text) and warns about none, whatever forge.json says', () => [PB, PP].every(x => x.out.results[0].won && rolesOk(x.calls, PR) && !x.logs.some(l => l.startsWith('WARNING')) && [rec('builder', PROBE.developer), rec('critic', PROBE.critic)].every(re => re.test(x.calls[0].prompt))) && [...pbD, ...ppD].every(c => rec('builder', PROBE.developer).test(c.prompt)) && [...pbC, ...ppC].every(c => rec('critic', PROBE.critic).test(c.prompt)) && pbD.length > 0 && ppD.length > 0 && pbC.length > 0 && ppC.length > 0)
   await chk('args: language reaches every agent() prompt of both workflows and memory reaches the build developer (ai-memory workspace and project), whatever forge.json says', () => [PB, PP].every(x => x.calls.length > 3 && x.calls.every(c => c.prompt.includes('Probe-Language'))) && pbD.length > 0 && pbD.every(c => c.prompt.includes('workspace "probe-ws", project "probe-proj"')) && devs.every(c => !c.prompt.includes('probe-ws') && c.prompt.includes('.ai-memory.toml')))
+  const PA = await probe('gauntlet-attacks.js', { ...base, pieces: [piece] }, attImpl())
+  await chk('models: with distinct probe models in args.models, every agent() of gauntlet-attacks uses them (model and effort), warns about none, and the panel text names them, whatever forge.json says', () => PA.out.results.length === 1 && PA.calls.length === 2 && rolesOk(PA.calls, PR) && !PA.logs.some(l => l.startsWith('WARNING')) && rec('critic', PROBE.critic).test(PA.calls[1].prompt))
+  await chk('attacks: args without root, dashboardUrl or pieces, or a piece without id, title, goal, bar or owns, bring the workflow down with incomplete args, before spending an agent', async () => (await Promise.all([{ root: '' }, { dashboardUrl: '' }, { pieces: [] }, ...['id', 'title', 'goal', 'bar', 'owns'].map(k => ({ pieces: [{ ...piece, [k]: undefined }] }))].map(a => rejects('gauntlet-attacks.js', { ...base, pieces: [piece], ...a })))).every(Boolean))
+  await chk('attacks: args without models, or with a role missing model or a valid effort, or with a match that is not a valid regex, bring the workflow down with incomplete args naming the role and pointing to forge.json, before spending an agent', () => rejectsModels('gauntlet-attacks.js', { ...base, pieces: [piece] }, ['critic', 'aux']))
   await chk('ponytail: args without root, dashboardUrl, testCommand or units, or a unit without id, title or paths, bring the workflow down with incomplete args, before spending an agent', async () => (await Promise.all([{ root: '' }, { dashboardUrl: '' }, { testCommand: '' }, { units: [] }, ...['id', 'title', 'paths'].map(k => ({ units: [{ ...units[0], [k]: undefined }] }))].map(a => rejects('gauntlet-ponytail.js', { ...uAll, ...a })))).every(Boolean))
   await chk('ponytail: args without models, or with a role missing model or a valid effort, or with a match that is not a valid regex, bring the workflow down with incomplete args naming the role and pointing to forge.json, before spending an agent', () => rejectsModels('gauntlet-ponytail.js', uAll))
   // panel down: the seed does not answer (null) and the verdicts answer an error; the work goes on and every failure goes to log()
@@ -391,15 +444,15 @@ async function chk(name, f) {
   // CP0 only exists while BOOTSTRAP.md exists; its two json blocks are the args of step 8
   if (has('BOOTSTRAP.md')) await chk('BOOTSTRAP.md: the step 8 args are accepted by both workflows (files exist, owns disjoint, checkpoint 0 as text)', async () => {
     const [b, p] = [...fs.readFileSync('BOOTSTRAP.md', 'utf8').matchAll(/```json\r?\n([\s\S]*?)\r?\n```/g)].map(m => JSON.parse(m[1]))
-    const xb = await wf('gauntlet-build.js', { ...b, models: F }, win), xp = await wf('gauntlet-ponytail.js', { ...p, models: F }, pony)
+    const xb = await wf('gauntlet-build.js', { ...b, models: F }, win), xp = await wf('gauntlet-ponytail.js', { ...p, models: F }, pony), xa = await wf('gauntlet-attacks.js', { ...b, models: F }, attImpl())
     const owns = b.pieces.flatMap(x => x.owns)
-    return [...owns, ...p.units.flatMap(u => u.paths)].every(f => has(f)) && new Set(owns).size === owns.length && p.testCommand === 'node .claude/check.cjs'
+    return xa.out.results.length === b.pieces.length && [...owns, ...p.units.flatMap(u => u.paths)].every(f => has(f)) && new Set(owns).size === owns.length && p.testCommand === 'node .claude/check.cjs'
       && [xb, xp].every(x => x.out.results.every(y => y.won) && x.calls[0].prompt.includes('"checkpoint":"0"') && !/"checkpoint":[^"]/.test(x.calls[0].prompt))
   })
 
   // Workflow API contract (skill workflow-authoring), proven over the simulations above: three lines per workflow
   const OPTS = ['label', 'phase', 'schema', 'model', 'effort', 'isolation', 'agentType']
-  const RUN = { build: ['gauntlet-build.js', { ...base, pieces: [piece] }, build], ponytail: ['gauntlet-ponytail.js', uAll, pony] }
+  const RUN = { attacks: ['gauntlet-attacks.js', { ...base, pieces: [piece, q, ...[3, 4, 5].map(n => ({ ...piece, id: 'x' + n, title: 'X' + n, owns: ['src/x' + n + '.js'], issue: 20 + n }))] }, attImpl()], build: ['gauntlet-build.js', { ...base, pieces: [piece] }, build], ponytail: ['gauntlet-ponytail.js', uAll, pony] }
   for (const [tag, [file, args, impl]] of Object.entries(RUN)) {
     const raw = () => fs.readFileSync('.claude/workflows/' + file, 'utf8'), lit = () => raw().match(META)[1], meta = () => vm.runInNewContext('(' + lit() + ')')
     const used = new Set(seen[file].flatMap(x => x.phases)), calls = seen[file].flatMap(x => x.calls)
