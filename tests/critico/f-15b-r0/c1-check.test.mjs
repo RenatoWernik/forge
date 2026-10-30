@@ -18,12 +18,12 @@ const soLe = (m, r, antes) => {
 };
 const estados = (by, ids = ALVOS) => Object.fromEntries(ids.map((id) => [id, by[id]?.status]));
 
-test('C1 máquina 1 (vazia): tudo missing, incluindo o alvo forge; código 1; só lê', async () => {
+test('C1 máquina 1 (vazia): tudo missing, incluindo o alvo forge; código 4; só lê', async () => {
   const m = maquina();
   const antes = manifesto(m.root);
   const r = await estado(m);
   assert.deepEqual(estados(r.by), Object.fromEntries(ALVOS.map((id) => [id, 'missing'])));
-  assert.equal(r.code, 1);
+  assert.equal(r.code, 4);
   soLe(m, r, antes);
 });
 
@@ -37,7 +37,7 @@ test('C1 máquina 2 (tudo no verifiedWith, forge na mais recente): tudo ok; cód
   soLe(m, r, antes);
 });
 
-test('C1 máquina 3 (tudo na referência de 2026-09-30): outdated onde a mais recente ≤ verifiedWith, sem unverified nem customized falsos; código 1', async () => {
+test('C1 máquina 3 (tudo na referência de 2026-09-30): outdated onde a mais recente ≤ verifiedWith, sem unverified nem customized falsos; código 4', async () => {
   const m = instala(maquina(), TUDO_REFERENCIA);
   const antes = manifesto(m.root);
   const r = await estado(m);
@@ -47,7 +47,7 @@ test('C1 máquina 3 (tudo na referência de 2026-09-30): outdated onde a mais re
   });
   assert.equal(r.by.uv.installedVersion, REFERENCIA.uv);
   assert.equal(r.by.uv.latestVersion, '0.13.6');
-  assert.equal(r.code, 1);
+  assert.equal(r.code, 4);
   soLe(m, r, antes);
 });
 
@@ -62,7 +62,7 @@ test('C1 máquina 4 [F-15a: AI_MEMORY_BIN e mattpocock-skills@*] («máquina do 
     sdd: 'missing', 'mattpocock-skills': 'outdated', graphify: 'outdated', 'graphify-skill': 'missing', forge: 'missing',
   });
   assert.equal(r.by['ai-memory'].installedVersion, '2.3.2', 'a versão do ai-memory não veio do AI_MEMORY_BIN');
-  assert.equal(r.code, 1);
+  assert.equal(r.code, 4);
   soLe(m, r, antes);
 });
 
@@ -75,7 +75,7 @@ test('C1 máquina 5 (a mais recente acima do verifiedWith): unverified, «não t
   const r = await estado(m);
   for (const id of ['ponytail', 'uv', 'graphify', 'graphify-skill']) assert.equal(r.by[id].status, 'unverified', id);
   for (const id of ['ai-memory', 'spec-kit', 'sdd', 'mattpocock-skills', 'gauntlet-loop']) assert.equal(r.by[id].status, 'ok', id + ': unverified falso');
-  assert.equal(r.code, 1);
+  assert.equal(r.code, 4);
   soLe(m, r, antes);
   const txt = await upd(m, ['--check']);
   assert.match(txt.out, NAO_TESTADA, 'o texto não diz «não testada com o forge»');
@@ -85,13 +85,13 @@ test('C1 máquina 5 (a mais recente acima do verifiedWith): unverified, «não t
   assert.deepEqual(txt.execs, []);
 });
 
-test('C1 máquina 6 (um URL ausente da fonte de versões): a componente fica unknown, as outras não; código 1', async () => {
+test('C1 máquina 6 (um URL ausente da fonte de versões): a componente fica unknown, as outras não; código 4', async () => {
   const m = instala(maquina({ fontes: latest({ sem: [URL_PONYTAIL] }) }), TUDO_VERIFICADO);
   const antes = manifesto(m.root);
   const r = await estado(m);
   assert.equal(r.by.ponytail.status, 'unknown');
   for (const id of ALVOS.filter((x) => x !== 'ponytail')) assert.equal(r.by[id].status, 'ok', id);
-  assert.equal(r.code, 1);
+  assert.equal(r.code, 4);
   soLe(m, r, antes);
 });
 
@@ -99,7 +99,7 @@ test('C1: sem flags, o update é o --check (só lê, não executa, não escreve)
   const m = instala(maquina(), TUDO_REFERENCIA);
   const antes = manifesto(m.root);
   const r = await upd(m, []);
-  assert.equal(r.code, 1);
+  assert.equal(r.code, 4);
   soLe(m, r, antes);
 });
 

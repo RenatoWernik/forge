@@ -54,10 +54,10 @@ const urls = (over = {}) => Object.fromEntries([
   ...Object.entries(over),
 ]);
 
-test('--check on an empty machine: everything missing, exit 1, nothing run', async () => {
+test('--check on an empty machine: everything missing, exit 4, nothing run', async () => {
   const m = machine({ urls: urls() });
   const r = await run(m, '--check');
-  assert.equal(r.code, 1);
+  assert.equal(r.code, 4);
   assert.deepEqual(m.calls, []);
   assert.match(r.out, /\[missing\] uv/);
   assert.ok(Object.values(await status(m)).every((s) => s === 'missing'));

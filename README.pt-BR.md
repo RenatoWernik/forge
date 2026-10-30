@@ -138,6 +138,8 @@ Digite `/forge:update` em qualquer sessão do Claude Code. Ele roda o `scripts/u
 - `--backup-confirmed`: para o ai-memory numa mudança de versão maior, depois de você mesmo fazer o backup.
 - `--overwrite`: para substituir uma skill que você personalizou, depois de uma cópia de segurança.
 
+O `update.mjs --check` sai com `0` quando todos os componentes estão `ok`, e com `4` quando há algo a tratar (`missing`, `outdated`, `unverified`, `customized` ou `unknown`). O código `1` fica só para um erro do próprio comando; `2` é uso inválido e `3` é uma barreira não confirmada.
+
 A atualização nunca reescreve os arquivos já gerados nos seus projetos.
 
 ## Sync

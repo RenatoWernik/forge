@@ -26,12 +26,12 @@ test('emenda: o passo 1 da skill new-project corre o update.mjs --check e já n�
   assert.doesNotMatch(c, /doctor\.mjs/, 'o passo 1 ainda corre o doctor.mjs');
 });
 
-test('emenda guarda: o update.mjs --check com a fixture, sem rede e sem PATH, só lê: sai 0 ou 1, diz que nada correu nem foi escrito, e não escreve no HOME', () => {
+test('emenda guarda: o update.mjs --check com a fixture, sem rede e sem PATH, só lê: sai 0 ou 4, diz que nada correu nem foi escrito, e não escreve no HOME', () => {
   const log = join(tmp(), 'rede.log');
   const antes = walk(FAKE_HOME).length;
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(SEM_REDE).href,join(ROOT, 'scripts/update.mjs'), '--check', '--versions', FIXTURE], { cwd: tmp(), encoding: 'utf8', env: sandboxEnv({ PATH: '', Path: '', CRITICO_REDE_LOG: log }), timeout: 120000 });
   const out = (r.stdout ?? '') + (r.stderr ?? '');
-  assert.ok([0, 1].includes(r.status), `código ${r.status}\n${out.slice(-1500)}`);
+  assert.ok([0, 4].includes(r.status), `código ${r.status}\n${out.slice(-1500)}`);
   assert.match(out, /\d+ ok, \d+ outdated/);
   assert.match(out, /Nothing was run and nothing was written/);
   assert.equal(existsSync(log) ? readFileSync(log, 'utf8') : '', '', 'tentativas de rede');

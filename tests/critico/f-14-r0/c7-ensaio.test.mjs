@@ -1,7 +1,7 @@
 // F-14 critério 4 e emenda 6503240709: o ensaio de ponta a ponta, na parte que corre sem rede, sem a config real e sem sessão `claude`
 // (a entrevista real fica para a captura da Ronda 0). Para um projeto EN e um PT em cada modo:
 //   1. o scaffold gera o projeto (PT com o substituto da tradução do corpus) e o check.cjs dá «All ok.»;
-//   2. o `update.mjs --check` com a fixture de versões, na raiz do projeto, sem rede e sem PATH, só lê: sai 0 ou 1, diz que nada correu
+//   2. o `update.mjs --check` com a fixture de versões, na raiz do projeto, sem rede e sem PATH, só lê: sai 0 ou 4, diz que nada correu
 //      nem foi escrito e não muda nenhum ficheiro do projeto;
 //   3. o painel lê o painel.json: o leitor do projeto (.claude/painel-leitor.mjs) lê o .checkpoints/painel.json gerado sem erro, com o
 //      projeto e o modo das respostas, e a página .claude/dashboard/panel.html tem o leitor embutido e lê painel/estado;
@@ -38,7 +38,7 @@ for (const [nome, set, mode, hooks] of CASOS) {
     const log = join(tmp(), 'rede.log'), antes = foto(proj);
     const u = spawnSync(process.execPath, ['--import', pathToFileURL(SEM_REDE).href, join(ROOT, 'scripts/update.mjs'), '--check', '--versions', FIXTURE], { cwd: proj, encoding: 'utf8', env: sandboxEnv({ PATH: '', Path: '', CRITICO_REDE_LOG: log }), timeout: 120000 });
     const uo = (u.stdout ?? '') + (u.stderr ?? '');
-    assert.ok([0, 1].includes(u.status) && /Nothing was run and nothing was written/.test(uo), `2. update --check: código ${u.status}\n${uo.slice(-1200)}`);
+    assert.ok([0, 4].includes(u.status) && /Nothing was run and nothing was written/.test(uo), `2. update --check: código ${u.status}\n${uo.slice(-1200)}`);
     assert.equal(existsSync(log) ? readFileSync(log, 'utf8') : '', '', '2. tentativas de rede');
     assert.deepEqual(foto(proj), antes, '2. o update --check mudou ficheiros do projeto');
 

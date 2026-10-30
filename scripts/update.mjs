@@ -7,7 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { compareVersions, runDoctor } from './doctor.mjs';
 
 // /forge:update. --check (the default) reads and reports; --apply <id> --yes runs, for one component, the command the doctor prints for
-// it. Exit codes: 0 done (or all ok), 1 any other error, 2 invalid use or a forbidden target, 3 a barrier that was not confirmed.
+// it. Exit codes: 0 done (or all ok), 1 any other error, 2 invalid use or a forbidden target, 3 a barrier that was not confirmed,
+// 4 --check found something to handle (a component that is not ok).
 const FORGE = { repo: 'RenatoWernik/forge', plugin: 'forge@forge', commands: ['claude plugin marketplace update forge', 'claude plugin update forge@forge'] };
 const SPECKIT_PROJECT = 'specify integration upgrade claude';
 const FLAGS = ['--check', '--json', '--yes', '--accept-unverified', '--backup-confirmed', '--overwrite'];
@@ -298,7 +299,7 @@ export async function main(argv, sys, write) {
   if (id === undefined) {
     const report = await check(registry, compat, sys);
     write(o.flags.has('--json') ? jsonSafe(JSON.stringify({ ...report, components: report.components.map(toJson) }, null, 2)) : formatText(report));
-    return report.components.every((c) => c.status === 'ok') ? 0 : 1;
+    return report.components.every((c) => c.status === 'ok') ? 0 : 4;
   }
   if (![...registry.components.map((c) => c.id), 'forge', 'speckit-project'].includes(id)) { write(`Not a component: ${show(id)}\n${USAGE}`); return 2; }
   const report = await check(registry, compat, sys);

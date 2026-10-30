@@ -30,12 +30,12 @@ const verifica = (r) => {
   assert.deepEqual(r.eventos.filter((e) => e.t === 'proc' && !sonda(e.cmd, e.args, { shell: e.shell })), [], 'o --check lançou um processo que não é uma sonda de versão');
 };
 
-test('C1 processo real: --check --versions <fixture> numa máquina vazia, sem rede, sem escritas, só sondas; código 1 e o forge na lista', () => {
+test('C1 processo real: --check --versions <fixture> numa máquina vazia, sem rede, sem escritas, só sondas; código 4 e o forge na lista', () => {
   assert.ok(existsSync(UPDATE), 'falta scripts/update.mjs');
   assert.ok(existsSync(FIXTURE), 'falta scripts/fixtures/versions-2026-10-29.json');
   const r = corre(['--check', '--versions', FIXTURE]);
   verifica(r);
-  assert.equal(r.status, 1, 'máquina vazia: tudo missing, código 1\n' + r.out.slice(-1500));
+  assert.equal(r.status, 4, 'máquina vazia: tudo missing, código 4\n' + r.out.slice(-1500));
   assert.match(r.out, /forge/i, 'o --check não inclui o alvo forge');
 });
 

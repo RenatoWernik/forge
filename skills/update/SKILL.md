@@ -1,7 +1,7 @@
 ---
 name: update
 description: >-
-  Checks the components that forge uses (uv, the gauntlet-loop and sdd skills, ai-memory, ponytail, Spec-Kit, Matt Pocock's skills, Graphify) and the forge plugin itself against their latest public release, shows what is outdated, and updates one component at a time, only after your yes for that component. It never touches a skill you customized unless you say so (and backs it up first), warns about versions not tested with forge and about the ai-memory backup, and never rewrites the files already generated in your projects. Use when the user says "update forge", "update the tools", "is anything outdated", "/forge:update".
+  Checks the components that forge uses (uv, the gauntlet-loop and sdd skills, ai-memory, ponytail, Spec-Kit, Matt Pocock's skills, Graphify) and the forge plugin itself against their latest public release, shows what is outdated, and updates one component at a time, only after your yes for that component. It never touches a skill you customized unless you say so (and backs it up first), asks for a separate yes when a version is not tested with forge and for your own backup before ai-memory crosses a major version, reports only the warnings that appear in the command output (it never infers or adds one), and never rewrites the files already generated in your projects. Use when the user says "update forge", "update the tools", "is anything outdated", "/forge:update".
 ---
 
 # forge: update
@@ -32,7 +32,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/update.mjs" --check
 - `missing`: not installed. This skill only updates; the doctor (`node "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.mjs"`) prints the install command.
 - `unknown`: the latest version could not be read (usually the network). Say so; do not treat it as ok.
 
-The check also warns when the original gauntlet-loop repository has new commits. That is information only: they are never applied for the user.
+The output can end with warnings, and only some runs have any: for example, a line saying that the original gauntlet-loop repository has new commits. Warnings are information only: they are never applied for the user. Report only the warnings that appear in the command output; never infer or add a warning that is not there.
+
+The check exits with `4` when something needs handling (`missing`, `outdated`, `unverified`, `customized` or `unknown`) and with `0` when every component is `ok`: `4` is not a failure of the command, it is the cue to show the table and ask.
 
 ## 2. Update, one component at a time
 
@@ -74,4 +76,6 @@ It runs `claude plugin marketplace update forge` and then `claude plugin update 
 
 ## Exit codes
 
-`0` done or all ok, `1` another error, `2` invalid use (more than one id, an id that does not exist, a project without `.specify/`), `3` a barrier that was not confirmed (a missing `--yes`, `--accept-unverified`, `--backup-confirmed` or `--overwrite`): nothing was run, so ask the user and run it again with the flag.
+`0` done or all ok, `1` another error of the command, `2` invalid use (more than one id, an id that does not exist, a project without `.specify/`), `3` a barrier that was not confirmed (a missing `--yes`, `--accept-unverified`, `--backup-confirmed` or `--overwrite`): nothing was run, so ask the user and run it again with the flag.
+
+`4` is only for `--check`: it found a component to handle (`missing`, `outdated`, `unverified`, `customized` or `unknown`). It is not a failure of the command: show the table and ask.
