@@ -127,9 +127,10 @@ const state = results => (!results.length ? null : results.every(x => !x) ? 'all
 function classify(ans) {
   // an execution is a pass: the entries with the same kind and pass are its blocks, and it is complete when it holds every block (command) that kind has; an entry without a valid pass is a pass of its own
   const runs = arr(ans && ans.runs).filter(r => r && (r.kind === 'suite' || r.kind === 'e2e')).map((r, i) => ({ ...r, block: str(r.command).trim().replace(/\s+/g, ' '), own: !(Number.isInteger(r.pass) && r.pass >= 1), pass: Number.isInteger(r.pass) && r.pass >= 1 ? r.pass : 'e' + i }))
-  // an execution declared without a pass number is the whole command: it counts only when it is the testCommand (suite) or the e2eCommand (E2E), as written (spaces collapsed); blocks carry a pass number
+  // an execution without a pass number, or the only block of its kind, is the whole command: it counts only when it is the testCommand (suite) or the e2eCommand (E2E), as written (spaces collapsed); several blocks (a command split to fit 540 s) carry pass numbers
   const want = { suite: TEST.replace(/\s+/g, ' '), e2e: E2E.replace(/\s+/g, ' ') }
-  const counted = k => runs.filter(r => r.kind === k && (!r.own || r.block === want[k]))
+  // a kind whose executions all carry one single block is the whole command, with or without pass numbers: that block must be the testCommand or the e2eCommand
+  const counted = k => { const all = runs.filter(r => r.kind === k), whole = new Set(all.map(r => r.block)).size === 1; return all.filter(r => !(r.own || whole) || r.block === want[k]) }
   const of = (k, b) => runs.filter(r => r.kind === k && (b === undefined || r.block === b))
   const count = k => { const cs = counted(k), blocks = new Set(cs.map(r => r.block)); return [...new Set(cs.map(r => r.pass))].filter(p => new Set(cs.filter(r => r.pass === p).map(r => r.block)).size === blocks.size).length }
   const byTest = new Map()
