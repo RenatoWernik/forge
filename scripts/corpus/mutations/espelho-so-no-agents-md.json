@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": "AGENTS.md",
+  "find": "stop and wait for the answer.",
+  "replace": "stop and wait for the answer, then record it.",
+  "line": "AGENTS.md mirrors CLAUDE.md: the 12 invariants are the same text in both"
+}

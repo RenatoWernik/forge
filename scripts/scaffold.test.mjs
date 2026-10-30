@@ -11,6 +11,7 @@ const answers = (over = {}) => ({
   projectName: 'Acme Billing',
   language: 'English',
   mode: 'rigorous',
+  repo: 'acme/billing',
   models: {
     developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
     developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
@@ -29,15 +30,22 @@ test('dry run lists the generated tree and writes nothing to the destination', a
   const { files } = await scaffold(answers(), { dest, dryRun: true });
   assert.deepEqual([...files].sort(), [
     '.ai-memory.toml',
+    '.checkpoints/README.md',
     '.checkpoints/painel.json',
+    '.claude/briefs/batch.md',
+    '.claude/briefs/critic.md',
+    '.claude/briefs/dev.md',
+    '.claude/briefs/round-minus-1.md',
     '.claude/check.cjs',
     '.claude/dashboard/panel.html',
     '.claude/forge.json',
     '.claude/painel-leitor.mjs',
+    '.claude/workflows/gauntlet-attacks.js',
     '.claude/workflows/gauntlet-build.js',
     '.claude/workflows/gauntlet-ponytail.js',
     '.graphifyignore',
     '.gitignore',
+    'AGENTS.md',
     'BOOTSTRAP.md',
     'CLAUDE.md',
     'FRAMEWORK.md',
@@ -86,6 +94,18 @@ test('invalid answers are all reported at once and nothing is written', async ()
     return true;
   });
   assert.deepEqual(await readdir(dest), []);
+});
+
+test('repo is validated as owner/name, named in the error, and the valid value reaches the manual and the bootstrap', async () => {
+  const dest = await tmp();
+  for (const repo of [undefined, '', 'acme', 'acme/billing/x', 'https://github.com/acme/billing', 'acme/..', 'acme/bil$ling', 7]) {
+    await assert.rejects(scaffold(answers({ repo }), { dest }), /^Error: invalid answers:\n(- .*\n)*- repo: /m, String(repo));
+  }
+  assert.deepEqual(await readdir(dest), []);
+  await scaffold(answers({ repo: 'Acme-Org/billing.app' }), { dest });
+  for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) assert.doesNotMatch(await read(dest, rel), /\{\{REPO\}\}/, rel);
+  assert.match(await read(dest, 'FRAMEWORK.md'), /`Acme-Org\/billing\.app`/);
+  assert.match(await read(dest, 'BOOTSTRAP.md'), /tracker = GitHub \(`Acme-Org\/billing\.app`\)/);
 });
 
 test('mode, the 5 roles and their reasons are validated all at once, naming each field; a flag never drops the reason of the file', async () => {
@@ -186,7 +206,7 @@ test('plainStyle false drops the style rule from CLAUDE.md and forge.json record
   assert.doesNotMatch(await read(dest, 'CLAUDE.md'), /No dash, arrow or emoji/);
   const plain = await tmp();
   await scaffold(answers(), { dest: plain });
-  assert.match(await read(plain, 'CLAUDE.md'), /No dash, arrow or emoji in the prose of CLAUDE\.md, FRAMEWORK\.md and BOOTSTRAP\.md\./);
+  assert.match(await read(plain, 'CLAUDE.md'), /No dash, arrow or emoji in the prose of CLAUDE\.md, AGENTS\.md, FRAMEWORK\.md and BOOTSTRAP\.md\./);
 });
 
 const CHECK = (cwd) => spawnSync(process.execPath, ['.claude/check.cjs'], { cwd, encoding: 'utf8' });
@@ -329,11 +349,14 @@ const translate = (text, { line = LINE.pt, headings = {}, prose = true } = {}) =
     if (fence || !l.trim() || /^[|\s:-]+$/.test(l)) return l;
     if (l.startsWith('#')) return headings[l] ?? l.replace(/^(#{2,} )(\d+\. )?.*$/, '$1$2Seção');
     if (!prose) return l;
-    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + line + ' ' + (l.match(/`[^`]*`/g) ?? []).join(' ');
+    return l.match(/^\s*(?:[-*] |\d+\. |> |\| )?/)[0] + line + (l.includes('Verifies:') ? ' Verifica: ' : ' ') + (l.match(/`[^`]*`/g) ?? []).join(' ');
   }).join('\n');
 };
+// the files of the language check: the four documents, the four role briefs and the format of the checkpoints
+const BRIEFS = ['dev', 'critic', 'round-minus-1', 'batch'].map((b) => `.claude/briefs/${b}.md`);
+const PROSE = ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', ...BRIEFS, '.checkpoints/README.md'];
 const rewrite = async (dest, rules, opts) => {
-  for (const rel of ['CLAUDE.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) {
+  for (const rel of PROSE) {
     const text = opts ? translate(await read(dest, rel), opts) : await read(dest, rel);
     await writeFile(join(dest, rel), rules.reduce((t, [from, to]) => t.replaceAll(from, to), text));
   }
@@ -395,7 +418,7 @@ test('the generated check scores each sub-step too: a Portuguese FRAMEWORK.md wi
   const KEPT = /^### Step [4-7]\./;
   const mixed = original.split(/^(?=#{2,} )/m).map((s) => (KEPT.test(s) ? s : translate(s, { headings: NATURAL, line: LINE.pt.repeat(2) }))).join('');
   await writeFile(join(dest, 'FRAMEWORK.md'), mixed);
-  for (const rel of ['CLAUDE.md', 'BOOTSTRAP.md']) await writeFile(join(dest, rel), translate(await read(dest, rel), { headings: NATURAL }));
+  for (const rel of PROSE.filter((f) => f !== 'FRAMEWORK.md')) await writeFile(join(dest, rel), translate(await read(dest, rel), { headings: NATURAL }));
   const r = CHECK(dest);
   assert.equal(r.status, 1, r.stdout);
   assert.match(r.stdout, /^FAIL {2}language: .*\(not in Portuguese \(Brazil\): FRAMEWORK\.md \[Step 4\. Graphify, Step 5\. Memory, Step 6\. Panel, Step 7\. Approval and tag\]\)$/m);
@@ -415,17 +438,109 @@ test('a translation that keeps the identifiers leaves the check green; one that 
   assert.match(broken.stdout, /^FAIL {2}BOOTSTRAP\.md: the step 8 args/m);
 });
 
-test('no generated file carries personal or company data, and the manual keeps its ten invariants', async () => {
+test('no generated file carries personal or company data, and the manual keeps its twelve invariants', async () => {
   // built from pieces so this test file does not contain the words it forbids
   const forbidden = new RegExp(['Key' + 'rus', 'Kri' + 'ti', 'One' + 'Drive', 'Ren' + 'ato', 'Wer' + 'nik', 'DGG1' + 'oUcP', 'Users' + '[/' + String.fromCharCode(92) + String.fromCharCode(92) + ']'].join('|'), 'i');
   const dest = await tmp();
   const { files } = await scaffold(answers({ language: 'Portuguese (Brazil)' }), { dest });
   for (const rel of files) assert.doesNotMatch(await read(dest, rel), forbidden, rel);
   const claude = await read(dest, 'CLAUDE.md');
-  for (let n = 1; n <= 10; n++) assert.ok(claude.includes(`\n${n}. **`), 'invariant ' + n);
+  for (let n = 1; n <= 12; n++) assert.ok(claude.includes(`\n${n}. **`), 'invariant ' + n);
   for (const h of ['## Terms', '## Invariants', '## Where things are', '## Style', '## Generated blocks']) assert.ok(claude.includes(h), h);
   const upToBlocks = claude.slice(0, claude.indexOf('## Generated blocks')).split('\n').length + 2;
   assert.ok(upToBlocks < 80, 'CLAUDE.md is ' + upToBlocks + ' lines up to its generated blocks');
+});
+
+test('no generated file, in English or Portuguese, cites the skill resolving-merge-conflicts (removed from the Matt Pocock skills)', async () => {
+  for (const language of ['English', 'Portuguese (Brazil)']) {
+    const dest = await tmp();
+    const { files } = await scaffold(answers({ language }), { dest });
+    for (const rel of files) assert.doesNotMatch(await read(dest, rel), /resolving-merge-conflicts/, `${language}: ${rel}`);
+  }
+});
+
+test('the .checkpoints/README.md names the 7 fields of a checkpoint and the file name <role>-<ticket>.md, in the language of the template', async () => {
+  const dest = await tmp();
+  await scaffold(answers(), { dest });
+  const readme = await read(dest, '.checkpoints/README.md');
+  assert.ok(readme.includes('`.checkpoints/<role>-<ticket>.md`'));
+  for (const field of ['role', 'ticket', 'phase', 'round', 'HEAD', 'next step', 'pending']) assert.match(readme, new RegExp('^\\| `' + field + '` \\|', 'm'), field);
+  assert.doesNotMatch(readme, /\b(papel|fase|ronda)\b|pr[óo]ximo passo|pend[êe]ncias/i);
+});
+
+test('each of the 4 role briefs opens with the warning that the hook context alerts belong to the orchestrator, within its first 5 lines', async () => {
+  const dest = await tmp();
+  await scaffold(answers(), { dest });
+  for (const rel of BRIEFS) {
+    const text = await read(dest, rel);
+    const top = text.split('\n').slice(0, 5).join('\n');
+    assert.ok(top.includes('`CONTEXT WARNING`') && top.includes('`CONTEXT CRITICAL`') && /orchestrator's session, never to yours/.test(top) && /never a reason to stop/.test(top), rel);
+    assert.doesNotMatch(text, /\{\{[\w.]+\}\}/, rel);
+  }
+});
+
+test('invariants: any one of the 12 items without its label (Verifies: in English, Verifica: in Portuguese) fails the line', async () => {
+  for (const [language, label] of [['English', 'Verifies:'], ['Portuguese (Brazil)', 'Verifica:']]) {
+    const dest = await tmp();
+    await scaffold(answers({ language }), { dest });
+    if (language !== 'English') await rewrite(dest, [], { headings: NATURAL });
+    const original = await read(dest, 'CLAUDE.md'), lines = original.split('\n');
+    assert.match(CHECK(dest).stdout, /^ok {4}invariants: /m, language);
+    const items = lines.flatMap((l, i) => (/^\d+\. /.test(l) ? [i] : [])).slice(0, 12);
+    assert.equal(items.length, 12, language);
+    for (const i of items) {
+      assert.ok(lines[i].includes(label), `${language}: item at line ${i + 1} has no ${label}`);
+      await writeFile(join(dest, 'CLAUDE.md'), lines.map((l, j) => (j === i ? l.replace(label, 'Seen in:') : l)).join('\n'));
+      assert.match(CHECK(dest).stdout, /^FAIL {2}invariants: /m, `${language}: item at line ${i + 1}`);
+    }
+  }
+});
+
+const GH = '`gh issue view <n> --json body,comments`', KEEP = GH + ' and keep a copy in `docs/tickets/<n>.md`';
+test('ticket contract: a contract kept in a project file fails the line in each of the four documents, in English and in Portuguese, and in CLAUDE.md and AGENTS.md together the mirror line stays ok', async () => {
+  for (const language of ['English', 'Portuguese (Brazil)']) {
+    const make = async () => {
+      const dest = await tmp();
+      await scaffold(answers({ language }), { dest });
+      if (language !== 'English') await rewrite(dest, [], { headings: NATURAL });
+      return dest;
+    };
+    const swap = async (dest, rel) => { const t = await read(dest, rel); assert.ok(t.includes(GH), rel); await writeFile(join(dest, rel), t.replaceAll(GH, KEEP)); };
+    const ok = await make();
+    assert.match(CHECK(ok).stdout, /^ok {4}ticket contract: GitHub Issues/m, language);
+    for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md']) {
+      const dest = await make();
+      await swap(dest, rel);
+      assert.match(CHECK(dest).stdout, /^FAIL {2}ticket contract: GitHub Issues/m, `${language} ${rel}`);
+    }
+    const boot = await make();
+    await writeFile(join(boot, 'BOOTSTRAP.md'), (await read(boot, 'BOOTSTRAP.md')) + '\nSave each contract in `docs/tickets/<n>.md`.\n');
+    assert.match(CHECK(boot).stdout, /^FAIL {2}ticket contract: GitHub Issues/m, `${language} BOOTSTRAP.md`);
+    const both = await make();
+    await swap(both, 'CLAUDE.md');
+    await swap(both, 'AGENTS.md');
+    const r = CHECK(both).stdout;
+    assert.match(r, /^FAIL {2}ticket contract: GitHub Issues/m, language + ' CLAUDE.md and AGENTS.md together');
+    assert.match(r, /^ok {4}AGENTS\.md mirrors CLAUDE\.md/m, language);
+    const noGh = await make();
+    for (const rel of ['CLAUDE.md', 'AGENTS.md']) await writeFile(join(noGh, rel), (await read(noGh, rel)).replaceAll(GH, '`gh issue view <n>`'));
+    assert.match(CHECK(noGh).stdout, /^FAIL {2}ticket contract: GitHub Issues/m, language + ' without the gh command in CLAUDE.md and AGENTS.md');
+  }
+});
+
+// The class of «the contract in a project file»: a file reference named like a contract, in any folder, with or without code spans. The first six are the variants a critic tried.
+const LOCAL_FILES = ['`.gauntlet/contracts/T012.md`', 'docs/tickets/12.md', '`specs/001-x/contract.md`', '`CONTRACT.md`', '`docs/tickets/12.md`', '`.gauntlet/<n>.md`', '`tickets/<id>.json`'];
+test('ticket contract: every contract file name of the class fails the line, and a tickets/ folder or ticketing code that is not a contract file does not', async () => {
+  for (const language of ['English', 'Portuguese (Brazil)']) {
+    const dest = await tmp();
+    await scaffold(answers({ language }), { dest });
+    if (language !== 'English') await rewrite(dest, [], { headings: NATURAL });
+    const original = await read(dest, 'FRAMEWORK.md');
+    const verdict = async (extra) => { await writeFile(join(dest, 'FRAMEWORK.md'), original + '\n' + extra + '\n'); return CHECK(dest).stdout; };
+    for (const f of LOCAL_FILES) assert.match(await verdict(`- Agents read the contract from ${f} and work from that file.`), /^FAIL {2}ticket contract: GitHub Issues/m, `${language}: ${f}`);
+    const fine = await verdict('- The helpdesk code lives in `src/tickets/api.ts` and the folder `tickets/`, with `docs/tickets/README.md` and `tickets/` tests.');
+    assert.match(fine, /^ok {4}ticket contract: GitHub Issues/m, language + ': a tickets/ folder is not a contract file');
+  }
 });
 
 // developerUi, tester and the reasons only come through --answers; the flags still override the roles of the file
@@ -449,6 +564,13 @@ test('the command line: a dry run lists the tree, a real run writes it, and a mi
   assert.equal(missing.status, 2);
   assert.match(missing.stdout, /models\.developer: missing[\s\S]*usage: node scaffold\.mjs/);
   assert.match(missing.stdout, /^- mode: /m);
+});
+
+test('--repo overrides the repo of the answers file and an invalid one exits 2', async () => {
+  const dest = await tmp();
+  assert.equal(await main([...FLAGS, '--repo', 'flag-owner/flag-name', '--dest', dest], () => {}), 0);
+  assert.match(await read(dest, 'FRAMEWORK.md'), /`flag-owner\/flag-name`/);
+  assert.equal(await main([...FLAGS, '--repo', 'not a repo', '--dest', await tmp()], () => {}), 2);
 });
 
 test('--answers reads a JSON file and a flag overrides the same key', async () => {

@@ -2,6 +2,7 @@
   "projectName": "Acme Billing",
   "language": "English",
   "mode": "rigorous",
+  "repo": "acme/billing",
   "models": {
     "developer": {
       "model": "sonnet",

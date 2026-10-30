@@ -2,6 +2,7 @@
   "projectName": "Harbor Notes",
   "language": "English",
   "mode": "accelerated",
+  "repo": "acme/notes",
   "models": {
     "developer": {
       "model": "haiku",

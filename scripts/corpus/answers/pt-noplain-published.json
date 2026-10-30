@@ -2,6 +2,7 @@
   "projectName": "Loja Aurora",
   "language": "Portuguese (Brazil)",
   "mode": "accelerated",
+  "repo": "acme/loja",
   "models": {
     "developer": {
       "model": "haiku",

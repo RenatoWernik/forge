@@ -2,6 +2,7 @@
   "projectName": "Acme Billing",
   "language": "English",
   "mode": "accelerated",
+  "repo": "acme/billing",
   "models": {
     "developer": {
       "model": "sonnet",
@@ -28,6 +29,11 @@
       "effort": "medium",
       "reason": "the panel only records, it needs no deep reasoning"
     }
+  },
+  "hooks": {
+    "killByName": true,
+    "backgroundTests": true,
+    "idleWatch": true
   },
   "script": "sh",
   "plainStyle": true,

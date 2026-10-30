@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": "AGENTS.md",
+  "find": "`gh issue view <n> --json body,comments`",
+  "replace": "`gh issue view <n> --json body,comments` and keep a copy in `docs/tickets/<n>.md`",
+  "line": "ticket contract: GitHub Issues (CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md read it with `gh issue view <n> --json body,comments`, with no contract file in the project)"
+}

@@ -1,0 +1,74 @@
+{
+  "base": {
+    "id": "pa", "title": "Export the invoices", "goal": "Export the invoices as CSV", "bar": "The CSV matches the reference file", "owns": ["src/export.js"], "tdd": true,
+    "issue": 12,
+    "objective": "Export the invoices as CSV",
+    "input": "branch main at HEAD abc1234; files src/export.js and test/export.test.mjs",
+    "criteria": [
+      { "text": "The export returns 3 rows for the sample file", "oracle": "corpus", "command": "node --test test/export.test.mjs" },
+      { "text": "The header row matches the reference CSV byte for byte", "oracle": "reference", "command": "node --test test/header.test.mjs" }
+    ],
+    "fails": "a criterion that fails or has no evidence; a regression",
+    "outOfScope": "pagination and the PDF export",
+    "env": "Node 20 or newer, standard library only",
+    "output": "draft PR and a Round 0 comment on the issue"
+  },
+  "validos": [
+    { "label": "the base contract" },
+    { "label": "a large issue number", "set": { "issue": 123456 } },
+    { "label": "one criterion with no absolute word and no oracle", "set": { "criteria": [{ "text": "The export returns 3 rows", "command": "node --test a.test.mjs" }] } },
+    { "label": "the 4 kinds of oracle", "set": { "criteria": [
+      { "text": "Step 0 returns 3 rows", "oracle": "corpus", "command": "c0" }, { "text": "Step 1 returns 3 rows", "oracle": "property", "command": "c1" },
+      { "text": "Step 2 returns 3 rows", "oracle": "reference", "command": "c2" }, { "text": "Step 3 returns 3 rows", "oracle": "threshold", "command": "c3" }] } },
+    { "label": "6 criteria", "set": { "criteria": [
+      { "text": "Step 0 returns 3 rows", "command": "c0" }, { "text": "Step 1 returns 3 rows", "command": "c1" }, { "text": "Step 2 returns 3 rows", "command": "c2" },
+      { "text": "Step 3 returns 3 rows", "command": "c3" }, { "text": "Step 4 returns 3 rows", "command": "c4" }, { "text": "Step 5 returns 3 rows", "command": "c5" }] } },
+    { "label": "texts in Portuguese", "set": { "objective": "Exportar as faturas em CSV", "fails": "um critério falhado", "criteria": [{ "text": "O ficheiro tem 3 linhas para o exemplo", "command": "node --test a.test.mjs" }] } },
+    { "label": "an absolute word with an oracle", "set": { "criteria": [{ "text": "The token never reaches the log", "oracle": "corpus", "command": "node --test leak.test.mjs" }] } }
+  ],
+  "invalidos": [
+    { "label": "issue missing", "campo": "issue", "remove": ["issue"] },
+    { "label": "issue null", "campo": "issue", "set": { "issue": null } },
+    { "label": "issue 0", "campo": "issue", "set": { "issue": 0 } },
+    { "label": "issue negative", "campo": "issue", "set": { "issue": -3 } },
+    { "label": "issue fractional", "campo": "issue", "set": { "issue": 1.5 } },
+    { "label": "issue as text", "campo": "issue", "set": { "issue": "abc" } },
+    { "label": "objective missing", "campo": "objective", "remove": ["objective"] },
+    { "label": "objective blank", "campo": "objective", "set": { "objective": "   " } },
+    { "label": "input missing", "campo": "input", "remove": ["input"] },
+    { "label": "input null", "campo": "input", "set": { "input": null } },
+    { "label": "fails missing", "campo": "fails", "remove": ["fails"] },
+    { "label": "fails empty", "campo": "fails", "set": { "fails": "" } },
+    { "label": "outOfScope missing", "campo": "outOfScope", "remove": ["outOfScope"] },
+    { "label": "outOfScope a number", "campo": "outOfScope", "set": { "outOfScope": 3 } },
+    { "label": "env missing", "campo": "env", "remove": ["env"] },
+    { "label": "env blank", "campo": "env", "set": { "env": "  " } },
+    { "label": "output missing", "campo": "output", "remove": ["output"] },
+    { "label": "output empty", "campo": "output", "set": { "output": "" } },
+    { "label": "criteria missing", "campo": "criteria", "remove": ["criteria"] },
+    { "label": "criteria null", "campo": "criteria", "set": { "criteria": null } },
+    { "label": "criteria empty", "campo": "criteria", "set": { "criteria": [] } },
+    { "label": "criteria as text", "campo": "criteria", "set": { "criteria": "node --test" } },
+    { "label": "criteria as an object", "campo": "criteria", "set": { "criteria": { "text": "x", "command": "c" } } },
+    { "label": "a criterion that is not an object", "campo": "criteria[1]", "set": { "criteria": [{ "text": "ok", "command": "c" }, "just text"] } },
+    { "label": "criterion 1 without command", "campo": "criteria[0].command", "set": { "criteria": [{ "text": "ok" }] } },
+    { "label": "criterion 2 with a blank command", "campo": "criteria[1].command", "set": { "criteria": [{ "text": "ok", "command": "c" }, { "text": "ok", "command": "  " }] } },
+    { "label": "criterion 2 with a null command", "campo": "criteria[1].command", "set": { "criteria": [{ "text": "ok", "command": "c" }, { "text": "ok", "command": null }] } },
+    { "label": "criterion 1 without text", "campo": "criteria[0].text", "set": { "criteria": [{ "command": "c" }] } },
+    { "label": "criterion 2 with an empty text", "campo": "criteria[1].text", "set": { "criteria": [{ "text": "ok", "command": "c" }, { "text": "", "command": "c" }] } },
+    { "label": "oracle outside the list", "campo": "criteria[1].oracle", "set": { "criteria": [{ "text": "ok", "command": "c" }, { "text": "ok", "command": "c", "oracle": "vibes" }] } },
+    { "label": "oracle with a capital letter", "campo": "criteria[0].oracle", "set": { "criteria": [{ "text": "ok", "command": "c", "oracle": "Corpus" }] } },
+    { "label": "oracle a number", "campo": "criteria[0].oracle", "set": { "criteria": [{ "text": "ok", "command": "c", "oracle": 1 }] } },
+    { "label": "an absolute word without oracle", "campo": "criteria[0].oracle", "set": { "criteria": [{ "text": "The queue never loses a job", "command": "c" }] } },
+    { "label": "an absolute word in the 6th criterion without oracle", "campo": "criteria[5].oracle", "set": { "criteria": [
+      { "text": "Step 0 returns 3 rows", "command": "c0" }, { "text": "Step 1 returns 3 rows", "command": "c1" }, { "text": "Step 2 returns 3 rows", "command": "c2" },
+      { "text": "Step 3 returns 3 rows", "command": "c3" }, { "text": "Step 4 returns 3 rows", "command": "c4" }, { "text": "Every row is exported", "command": "c5" }] } },
+    { "label": "7 criteria", "campo": "criteria", "set": { "criteria": [
+      { "text": "Step 0 returns 3 rows", "command": "c0" }, { "text": "Step 1 returns 3 rows", "command": "c1" }, { "text": "Step 2 returns 3 rows", "command": "c2" }, { "text": "Step 3 returns 3 rows", "command": "c3" },
+      { "text": "Step 4 returns 3 rows", "command": "c4" }, { "text": "Step 5 returns 3 rows", "command": "c5" }, { "text": "Step 6 returns 3 rows", "command": "c6" }] } },
+    { "label": "12 criteria", "campo": "criteria", "set": { "criteria": [
+      { "text": "S0 returns 3 rows", "command": "c" }, { "text": "S1 returns 3 rows", "command": "c" }, { "text": "S2 returns 3 rows", "command": "c" }, { "text": "S3 returns 3 rows", "command": "c" },
+      { "text": "S4 returns 3 rows", "command": "c" }, { "text": "S5 returns 3 rows", "command": "c" }, { "text": "S6 returns 3 rows", "command": "c" }, { "text": "S7 returns 3 rows", "command": "c" },
+      { "text": "S8 returns 3 rows", "command": "c" }, { "text": "S9 returns 3 rows", "command": "c" }, { "text": "S10 returns 3 rows", "command": "c" }, { "text": "S11 returns 3 rows", "command": "c" }] } }
+  ]
+}
