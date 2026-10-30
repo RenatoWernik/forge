@@ -47,7 +47,7 @@ test('C8 propriedade: 90 lotes com a suíte em k ∈ {1, 2, 3} blocos e 2 passag
   const r = rng(20261030), bad = [];
   const tally = { 1: 0, 2: 0, 3: 0 };
   for (let i = 0; i < 90; i++) {
-    const k = 1 + (i % 3), blocks = Array.from({ length: k }, (_, j) => `node --test bloco${j}`), own = Math.floor(r() * k);
+    const k = 1 + (i % 3), blocks = k === 1 ? [CMD.test] : Array.from({ length: k }, (_, j) => `node --test bloco${j}`), own = Math.floor(r() * k);
     const all = r() < 0.5, isolated = r() < 0.5, main = pick(r, [undefined, 'all', 'some', 'none']);
     const failIn = all ? [1, 2] : [pick(r, [1, 2])];
     const runs = [];
