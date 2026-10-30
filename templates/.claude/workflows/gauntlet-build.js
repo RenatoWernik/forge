@@ -244,7 +244,7 @@ A: ${ours ? OURS : p.bar}
 B: ${ours ? p.bar : OURS}
 Binary question: which of the two better does what this piece needs to do? Pick one, no tie.
 Method:
-1. Get the real reference (repository, page, binary, test suite) and compare directly against it, never against a description. If you cannot get it, put "bar unreachable" in blocking.
+1. Get the real reference (repository, page, binary, test suite) and compare directly against it, never against a description. If you cannot get it, list "bar unreachable" as a blocking failure (criterion "bar", materiality 2).
 2. Run the tests yourself and re-run the red and green commands below: they are claims to verify, not facts.
 3. Check coverage: every behavior of the goal (T### and FR###, per spec.md and tasks.md) needs a test through the public interface.
 4. Do not consult memory about this piece (ai-memory memory_*; the graph, Read and Grep are allowed), and do not open FRAMEWORK.md or .claude/workflows/ (the label definitions live there), unless the context above allows it: the developer's history would contaminate the judgment.

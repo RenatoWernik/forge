@@ -453,6 +453,7 @@ async function chk(name, f) {
   const pd = only(r.calls, /^pony:u1:/), pc = only(r.calls, /^pony-critic:/)
   await chk('ponytail: each round calls, in separate agent() calls and in this order, the developer, the critic and the panel', () => r.calls.length === 31 && r.calls.slice(0, 4).map(c => c.opts.label).join() === 'panel:seed,pony:u1:r1,pony-critic:u1:r1,panel:verdict:u1:r1' && r.calls.slice(-3).map(c => c.opts.label).join() === 'pony:u2:r2,pony-critic:u2:r2,panel:verdict:u2:r2')
   await chk('ponytail: roles use the models and effort from forge.json (developer, critic, aux); no other model', () => pd.length > 0 && pc.length > 0 && rolesOk(r.calls))
+  await chk('ponytail: the developer prompt points to .claude/briefs/dev.md and the critic prompt to .claude/briefs/critic.md', () => has('.claude/briefs/dev.md') && has('.claude/briefs/critic.md') && pd.length > 0 && pc.length > 0 && pd.every(c => c.prompt.includes('.claude/briefs/dev.md')) && pc.every(c => c.prompt.includes('.claude/briefs/critic.md')))
   await chk('ponytail: the label of the current version alternates between rounds', () => new Set(pc.map(c => /^A: .*\.gauntlet/m.test(c.prompt))).size === 2)
   await chk('ponytail: the critic is told not to consult memory, not to open FRAMEWORK.md or .claude/workflows/ (unless the context allows it) and not to edit files', () => pc.length > 0 && pc.every(veto))
   await chk('ponytail: the critic gets neither the gap nor the remaining cuts of earlier rounds', () => pc.length === 10 && pc.every(c => !/GAP-|CUT-LEFT-/.test(c.prompt)))
