@@ -193,7 +193,7 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
         await writeFile(join(work, side, pkgRel), text);
       }
     };
-    const COPIED = (await readdir(join(packageDir, 'scripts', 'hooks'))).map((n) => [`.claude/hooks/${n}`, `scripts/hooks/${n}`]).concat([['.claude/painel-leitor.mjs', 'scripts/painel-leitor.mjs']]);
+    const COPIED = (await readdir(join(packageDir, 'scripts', 'hooks'))).map((n) => [`.claude/hooks/${n}`, `scripts/hooks/${n}`]).concat(['painel-leitor', 'painel-vida'].map((n) => [`.claude/${n}.mjs`, `scripts/${n}.mjs`]));
     for (const [rel, tText] of Object.entries(templates)) {
       let pText;
       try { pText = collapse(await readText(join(projectDir, rel))); } catch { missing.push(rel); continue; }

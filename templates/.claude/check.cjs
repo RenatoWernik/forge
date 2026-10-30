@@ -6,7 +6,7 @@
 //   mode   = rigorous | accelerated
 //   model  = alias or ID passed to agent() (sonnet, opus, ...); effort = low | medium | high | xhigh | max; reason = why this model and effort
 //   label  = name shown on the panel (default: model); match = regex the model ID declared by an agent must satisfy (default: model)
-//   escalation = sameCriterionFailures and minutesWithoutProgress (integer, 1 or more), attacksRedOnDelivery and visualBelowReference (true or false), each with a description
+//   escalation = sameCriterionFailures (integer, 2 or 3) and minutesWithoutProgress (integer, 1 or more), attacksRedOnDelivery and visualBelowReference (true or false), each with a description
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm'), { spawnSync } = require('node:child_process')
 process.chdir(path.join(__dirname, '..'))
 const H = os.homedir(), AIM = 'ai-memory', ENV = process.argv.includes('--env')
@@ -48,7 +48,7 @@ async function chk(name, f) {
   if (!isObj(E)) problems.push('escalation')
   else for (const [c, t] of Object.entries(LIMITS)) {
     const v = isObj(E[c]) ? E[c] : {}
-    if (!(t === 'bool' ? typeof v.value === 'boolean' : Number.isInteger(v.value) && v.value >= 1)) problems.push('escalation.' + c + '.value')
+    if (!(t === 'bool' ? typeof v.value === 'boolean' : Number.isInteger(v.value) && v.value >= (c === 'sameCriterionFailures' ? 2 : 1) && (c !== 'sameCriterionFailures' || v.value <= 3))) problems.push('escalation.' + c + '.value')
     if (typeof v.description !== 'string' || !v.description.trim()) problems.push('escalation.' + c + '.description')
   }
   await chk('forge.json: mode (rigorous or accelerated), the 5 roles (model, effort low, medium, high, xhigh or max, reason, and a match that accepts their own label) and the escalation (4 conditions, each with a value and a description)' + (problems.length ? ' (invalid: ' + problems.join(', ') + ')' : ''), () => !problems.length)

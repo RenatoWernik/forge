@@ -83,14 +83,14 @@ async function patchedPackage(patch) {
 test('bar: edits to a workflow and to FRAMEWORK.md come back as a patch that git applies, that scaffolds the same project and that never carries the project data', async () => {
   const dir = await project();
   const wf = '.claude/workflows/gauntlet-build.js';
-  await edit(dir, wf, 'looping until ours wins or the user stops', 'looping until ours wins, the user stops or the budget ends');
+  await edit(dir, wf, 'for the rounds the mode allows', 'for the rounds the mode allows, the user stops or the budget ends');
   await edit(dir, 'FRAMEWORK.md', 'Orchestrator manual of Acme Billing.', 'Orchestrator manual of Acme Billing (invoicing, acmeworks, panel https://claude.ai/artifact/AbC123_x-y).');
   const { patch, files, leaks } = await sync(dir, PKG);
   assert.deepEqual(files, [wf, 'FRAMEWORK.md']);
   assert.deepEqual(leaks, []);
   for (const secret of ['Acme Billing', 'acmeworks', 'invoicing', 'AbC123_x-y']) assert.ok(!patch.includes(secret), `patch leaks ${secret}`);
   assert.ok(patch.includes('+Orchestrator manual of {{PROJECT_NAME}} ({{MEM_PROJECT}}, {{MEM_WORKSPACE}}, panel {{DASHBOARD_URL}}).'));
-  assert.ok(patch.includes("looping until ours wins, the user stops or the budget ends"));
+  assert.ok(patch.includes("for the rounds the mode allows, the user stops or the budget ends"));
   assert.ok(patch.includes('per piece, {{developer}} builds')); // context lines keep the markers of the template
   const pkg = await patchedPackage(patch);
   const { scaffold: scaffoldPatched } = await import(pathToFileURL(join(pkg, 'scripts', 'scaffold.mjs')).href);
@@ -219,11 +219,11 @@ test('a line inserted in the same hunk as an edited marker line does not steal i
   const dir = await project();
   const wf = '.claude/workflows/gauntlet-build.js';
   await edit(dir, wf, "  description: 'Build gauntlet", "  // new comment\n  description: 'Build gauntlet");
-  await edit(dir, wf, 'or the user stops', 'or the user stops it');
+  await edit(dir, wf, 'rounds the mode allows', 'rounds the mode allows it');
   const { patch, leaks } = await sync(dir, PKG);
   assert.deepEqual(leaks, []);
   assert.ok(patch.includes("+  // new comment\n"));
-  assert.ok(patch.includes('per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, looping until ours wins or the user stops it'), patch);
+  assert.ok(patch.includes('per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, for the rounds the mode allows it'), patch);
   assert.ok(!patch.includes('sonnet high builds'), patch);
   await assertRoundTrip(patch, ANSWERS, dir, [wf]);
 });
@@ -232,9 +232,9 @@ test('developer and critic on the same model and effort keep their own markers w
   const same = { ...ANSWERS, models: { ...ANSWERS.models, critic: { model: 'sonnet', effort: 'high', reason: 'same model as the developer' } } };
   const dir = await project(same);
   const wf = '.claude/workflows/gauntlet-build.js';
-  await edit(dir, wf, 'or the user stops', 'or the user stops it');
+  await edit(dir, wf, 'rounds the mode allows', 'rounds the mode allows it');
   const { patch } = await sync(dir, PKG);
-  assert.ok(patch.includes('per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, looping until ours wins or the user stops it'), patch);
+  assert.ok(patch.includes('per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, for the rounds the mode allows it'), patch);
   await assertRoundTrip(patch, same, dir, [wf]);
 });
 
@@ -250,7 +250,7 @@ test('an edit that turns a model or effort marker into a fixed value is flagged,
   const wf = '.claude/workflows/gauntlet-build.js';
   await edit(dir, wf, 'and opus high judges', 'and opus max judges');
   const { patch, leaks } = await sync(dir, PKG);
-  const line = "  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and opus max judges blind against the bar, looping until ours wins or the user stops',";
+  const line = "  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and opus max judges blind against the bar, for the rounds the mode allows',";
   assert.deepEqual(leaks, [{ file: wf, line }]);
   assert.ok(patch.includes(`+${line}\n`), patch);
   let out = '', err = '';
@@ -262,11 +262,11 @@ test('an edit that turns a model or effort marker into a fixed value is flagged,
 test('a project named with an everyday word (Build) gets no swap where the word is only text of the template, but keeps its name where the template has the marker', async () => {
   const dir = await project({ projectName: 'Build' });
   const wf = '.claude/workflows/gauntlet-build.js';
-  await edit(dir, wf, 'or the user stops', 'or the user stops it');
+  await edit(dir, wf, 'rounds the mode allows', 'rounds the mode allows it');
   await edit(dir, 'FRAMEWORK.md', 'Orchestrator manual of Build.', 'Orchestrator manual of Build (invoicing).');
   const { patch, leaks } = await sync(dir, PKG);
   assert.deepEqual(leaks, []);
-  assert.ok(patch.includes("+  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, looping until ours wins or the user stops it',"), patch);
+  assert.ok(patch.includes("+  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, for the rounds the mode allows it',"), patch);
   assert.ok(patch.includes('+Orchestrator manual of {{PROJECT_NAME}} ({{MEM_PROJECT}}).'), patch);
   assert.ok(!patch.includes('{{PROJECT_NAME}} gauntlet'), patch);
   await assertRoundTrip(patch, { ...ANSWERS, projectName: 'Build' }, dir, [wf, 'FRAMEWORK.md']);
@@ -328,7 +328,7 @@ test('"opus highest" in place of "opus high" is flagged as a frozen value, not t
   const wf = '.claude/workflows/gauntlet-build.js';
   await edit(dir, wf, 'and opus high judges', 'and opus highest judges');
   const { patch, leaks } = await sync(dir, PKG);
-  const line = "  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and opus highest judges blind against the bar, looping until ours wins or the user stops',";
+  const line = "  description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and opus highest judges blind against the bar, for the rounds the mode allows',";
   assert.ok(patch.includes(`+${line}\n`), patch);
   assert.ok(!patch.includes('{{critic}}est'), patch);
   assert.deepEqual(leaks, [{ file: wf, line }]);
