@@ -9,7 +9,7 @@ The contract of each piece is the body of its issue plus the orchestrator's comm
 
 ## Task
 The orchestrator has already cut the batch branch and merged the approved branches into it, one by one, in the order of its request, resolving every merge conflict additively: no feature and no test from either side is lost. The working tree you receive is that branch. You merge nothing.
-1. Run the commands of your request exactly as written, in the foreground: the full suite 2 times and, if there is an end to end command, the end to end tests 3 times. A command split into blocks (each within 540 s) is run in every pass, with the same text for the same block.
+1. Run the commands of your request exactly as written, in the foreground: the full suite 2 times and, if there is an end to end command, the end to end tests 3 times. A command split into blocks (each within 540 s) is run in every pass, with the same text for the same block. Each block is the command followed only by files or folders that exist in the project, such as `<command> tests/unit` (never a glob, a flag, quotes or any other text); a block of any other form makes the batch fail.
 2. For every test that failed in any execution, rerun it alone once (the isolated rerun), and run it on the main branch, in a clean worktree, as many times as the batch ran it.
 3. Look for fixed ports repeated between tests (EADDRINUSE) and keep the error text with the port.
 4. Declare data only: the runs (kind, command or block, pass number, and the failures with the test name, the files the test touches and its output), the isolated reruns and the runs on main. Declare no class, no flaky mark, no piece and no verdict.
