@@ -261,7 +261,7 @@ async function chk(name, f) {
   const r0 = (id, over = {}) => ({ id, attacks: [{ id: id + '-a1', file: 'tests/critico/' + id + '-r0/a1.test.mjs', passesOnBase: false }, { id: id + '-g1', file: 'tests/critico/' + id + '-r0/g1.test.mjs', guard: true, passesOnBase: true }], failingOnBase: true, gaps: [], ...over })
   const base = { checkpoint: { n: 1, title: 'T' }, root: 'C:\\p', dashboardUrl: 'https://x', context: 'CTX-SPEC-PLAN-TASKS', models: F, language: FJ.language }
   base.attacks = [r0('p'), r0('q')] // the Round -1 results the build workflow needs for pieces p and q
-  Object.assign(base, { mode: 'rigorous', escalation: FJ.escalation }) // the build workflow takes both from forge.json, like the models
+  Object.assign(base, { mode: 'rigorous', escalation: { ...FJ.escalation, sameCriterionFailures: { ...FJ.escalation.sameCriterionFailures, value: 2 } } }) // the build workflow takes both from forge.json, like the models; the simulations below assume the shipped sameCriterionFailures 2 (a project may set 3, which the lines of the escalation pin down apart)
   const rn = o => +o.label.match(/:r(\d+)$/)[1]
   const flip = l => (l === 'A' ? 'B' : 'A')
   const only = (calls, re) => calls.filter(c => re.test(c.opts.label))
@@ -369,6 +369,7 @@ async function chk(name, f) {
     return !r.won && r.blocked?.reason === 'gaps' && r.blocked.gaps.length > 0 && devs === 1
   })))).every(Boolean))
   await chk('panel: build: the verdict is recorded after the escalation or the block is decided, and never says ganhou/won/ok for a piece that escalated or was blocked', async () => (await Promise.all([v2({ escalation: escOf(ON) }, [{ attacks: RED }]), v2({ escalation: escOf(ON) }, [{ visualBelowReference: true }]), v2({}, [{ attacks: [] }])])).every(({ x }) => verdictOk(ver(x.calls, 'p:r1'), 1, 'GAP-1', LOST, WON)))
+  await chk('build: with sameCriterionFailures 3 (forge.json takes 2 or 3) the same criterion failed twice does not stop the piece, and the 3rd time returns contract in rigorous', async () => { const { r, devs } = await v2({ escalation: escOf({ sameCriterionFailures: 3 }) }, [fl([1, 1]), fl([2, 1]), fl([3, 1])]); return devs === 3 && r.stopped === 'contract' && r.metrics.sameCriterionFailures === 3 })
   await chk('build: in the rigorous mode the same criterion failed for the 3rd time returns contract, not redesign (2nd failure: redesign; 3rd: the contract is rewritten)', async () => { const { r, devs } = await v2({}, [fl([1, 1]), fl([2, 2]), fl([3, 1])]); return devs === 3 && r.stopped === 'contract' && !r.criterion && r.metrics.sameCriterionFailures === 2 })
   await chk('build: a mode other than rigorous or accelerated (or none), an escalation without its 4 conditions or with a wrong type, and a wrong ui, redesigns or central are refused with incomplete args naming the field, before any agent', async () => {
     const bads = [['mode', { mode: undefined }], ['mode', { mode: 'fast' }], ['escalation', { escalation: undefined }], ...Object.keys(FE).map(k => ['escalation.' + k, { escalation: { ...FE, [k]: undefined } }]), ['escalation.sameCriterionFailures', { escalation: { ...FE, sameCriterionFailures: { value: '2' } } }],
