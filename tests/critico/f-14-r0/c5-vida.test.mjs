@@ -2,8 +2,8 @@
 // Hoje o projeto gerado só recebe o leitor (.claude/painel-leitor.mjs) e o FRAMEWORK.md manda o orquestrador calcular à mão.
 // Leitura do crítico (PERGUNTA 1 na #15): o comando aparece em código (`node .claude/...`) num parágrafo de um documento gerado
 // (CLAUDE.md, AGENTS.md, FRAMEWORK.md, briefs ou .checkpoints/README.md) que fala de `painel/vida`; o ficheiro existe no projeto;
-// corrido tal como está escrito, na raiz do projeto, sai 0 e imprime no stdout o JSON do documento, `{ t, agentes }` ou
-// `{ "painel/vida": { t, agentes } }`, que o orquestrador grava com «set». Oráculo: o leitor do pacote (docsVida em scripts/painel.mjs)
+// corrido tal como está escrito, na raiz do projeto, sai 0 e imprime no stdout o JSON
+// `{ "painel/vida": { t, agentes } }` (resposta 1 do orquestrador na #15), que o orquestrador grava com «set». Oráculo: o leitor do pacote (docsVida em scripts/painel.mjs)
 // com os mesmos mtimes: as vidas iguais, os minutos a ±1 e o `t` a ±2 min do relógio.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -52,7 +52,8 @@ for (const set of ['en-plain-published', 'pt-plain-published']) {
     assert.equal(r.status, 0, `${c.cmd}: código ${r.status}; ${(r.stderr ?? '').slice(0, 500)}`);
     let o;
     try { o = JSON.parse(r.stdout.trim()); } catch { assert.fail(`${c.cmd} não imprime JSON: ${r.stdout.slice(0, 300)}`); }
-    const doc = o['painel/vida'] ?? o;
+    const doc = o['painel/vida'];
+    assert.ok(doc && typeof doc === 'object', 'o stdout não é { "painel/vida": { t, agentes } } (resposta 1): ' + r.stdout.slice(0, 200));
     const { docsVida } = await import(pathToFileURL(join(ROOT, 'scripts/painel.mjs')).href);
     const ref = docsVida(readFileSync(join(proj, '.checkpoints/painel.json'), 'utf8'), mtimes, Date.now())['painel/vida'];
     assert.ok(Math.abs(Date.parse(doc.t) - Date.now()) < 2 * MIN, 't fora do relógio: ' + doc.t);

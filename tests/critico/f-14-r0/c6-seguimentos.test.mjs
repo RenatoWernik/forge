@@ -72,6 +72,21 @@ test('#53: com redesigns 1 e sameCriterionFailures 3, o mesmo critério reprovad
   assert.equal(x.devs.length, 3, show(x));
 });
 
+// Resposta 2 do orquestrador na #15: sameCriterionFailures aceita só 2 a 3; com 3 e redesigns 0 a R2 continua e a R3 dá contract.
+test('#53 resposta 2: com redesigns 0 e sameCriterionFailures 3, o mesmo critério na R1 e na R2 não para a peça; a 3.ª reprovação dá contract', async () => {
+  const x = await runBuild(args({ escalation: ESC({ sameCriterionFailures: 3 }) }), [{ blocking: [B('C1')] }, { blocking: [B('C1')] }, { blocking: [B('C1')] }]);
+  assert.equal(x.devs.length, 3, show(x));
+  assert.equal(reasonOf(x.r?.stopped), 'contract', show(x));
+});
+
+for (const v of [1, 4]) {
+  test(`#53 resposta 2: sameCriterionFailures ${v} (fora de 2 a 3) é recusado antes de qualquer desenvolvedor`, async () => {
+    const x = await runBuild(args({ escalation: ESC({ sameCriterionFailures: v }) }));
+    assert.equal(x.devs.length, 0, show(x));
+    assert.ok(x.err || !x.out?.results?.some((r) => r.won), show(x));
+  });
+}
+
 test('#53 guarda: com redesigns 1 e sameCriterionFailures 2, o mesmo critério reprovado 2× continua a escalar na R2', async () => {
   const x = await runBuild(args({ pieces: [piece({ redesigns: 1 })] }), [{ blocking: [B('C1')] }, { blocking: [B('C1')] }]);
   assert.equal(reasonOf(x.r?.stopped), 'escalate', show(x));

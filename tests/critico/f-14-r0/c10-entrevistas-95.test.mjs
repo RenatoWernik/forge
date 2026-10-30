@@ -3,7 +3,7 @@
 // perguntas ao utilizador. A certeza é declarada por dimensão, e a entrevista para quando todas chegam a 95 % ou quando o utilizador
 // diz «chega»/«enough». Hoje a regra só existe no passo 2 do new-project (F-04).
 // Oráculo (leitura do crítico, PERGUNTA 7 na #15):
-//   - passo que pergunta = uma secção `##` de um skills/*/SKILL.md cujo texto tem ask/asks/asked, question ou uma pergunta entre aspas;
+//   - passo de entrevista = a lista fechada ENTREVISTAS abaixo (resposta à P7: as confirmações sim/não ficam fora);
 //   - cada um desses passos cita a regra: «95 %» (ou «95%») na própria secção;
 //   - cada skill com um passo que pergunta tem a regra completa: 95 %, «dimension», «enough» e «chega» no mesmo parágrafo;
 //   - o projeto gerado (EN) leva a regra ao passo em que o orquestrador entrevista o utilizador (Clarify, com o grilling): o parágrafo
@@ -15,20 +15,21 @@ import { join } from 'node:path';
 import { readdirSync } from 'node:fs';
 import { ROOT, gerar, corpusAnswers, traduzSePt, readFileSync, existsSync } from './helpers.mjs';
 
+// Resposta à P7 do orquestrador na #15: as confirmações sim/não (o sim por componente do update ou do passo 1, «Apply this patch?»)
+// não são entrevistas e ficam fora. A lista fechada dos passos de entrevista na base 248ed1c (o título da secção começa assim):
 const P95 = /\b95\s?%/;
-const PERGUNTA = /\bask(s|ed|ing)?\b|\bquestions?\b|"[^"\n]*\?"/i;
 const seccoes = (t) => t.split(/\r?\n(?=## )/).filter((s) => s.startsWith('## '));
-const SKILLS = readdirSync(join(ROOT, 'skills')).filter((d) => existsSync(join(ROOT, 'skills', d, 'SKILL.md')));
+void readdirSync;
+const ENTREVISTAS = { 'new-project': ['## 2.', '## 3.', '## 4.'], sync: ['## 1.'] };
 
-for (const s of SKILLS) {
-  test(`emenda 95 %: cada passo da skill ${s} que faz perguntas ao utilizador cita a regra dos 95 %`, () => {
+for (const [s, passos] of Object.entries(ENTREVISTAS)) {
+  test(`emenda 95 %: cada passo de entrevista da skill ${s} (${passos.join(' ')}) cita a regra dos 95 %`, () => {
     const t = readFileSync(join(ROOT, 'skills', s, 'SKILL.md'), 'utf8');
-    const sem = seccoes(t).filter((x) => PERGUNTA.test(x) && !P95.test(x)).map((x) => x.split('\n')[0]);
+    const sem = passos.filter((p) => { const x = seccoes(t).find((y) => y.startsWith(p)); return !x || !P95.test(x); });
     assert.deepEqual(sem, []);
   });
-  test(`emenda 95 %: a skill ${s}, se pergunta alguma coisa, tem a regra completa (95 % por dimensão, para com «enough» ou «chega»)`, () => {
+  test(`emenda 95 %: a skill ${s} tem a regra completa (95 % por dimensão, para com «enough» ou «chega»)`, () => {
     const t = readFileSync(join(ROOT, 'skills', s, 'SKILL.md'), 'utf8');
-    if (!seccoes(t).some((x) => PERGUNTA.test(x))) return;
     assert.ok(t.split(/\r?\n\s*\r?\n/).some((p) => P95.test(p) && /dimension/i.test(p) && /\benough\b/i.test(p) && /\bchega\b/i.test(p)), 'nenhum parágrafo com 95 %, dimension, enough e chega');
   });
 }

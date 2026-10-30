@@ -2,8 +2,7 @@
 // marcadores ({{PROJECT_NAME}}, {{MEM_WORKSPACE}}, {{REPO}}, ...), sem dados do projeto, e sai com 3 quando o patch tem dados pessoais.
 // Oráculo (o do contrato): um projeto do corpus com um brief e um hook alterados (o patch só tem as linhas alteradas e os marcadores),
 // mais um caso com um e-mail e um caminho absoluto (código 3).
-// Leitura do crítico (PERGUNTA 5 na #15): o patch tem de ser aceite por `git apply --check` na raiz do pacote OU em templates/ (o hook
-// vive em scripts/hooks/ no pacote, por isso o dev escolhe a base); o nome de cada ficheiro alterado aparece num cabeçalho `diff --git`.
+// Resposta 5 do orquestrador na #15: o patch aplica-se a partir da raiz do pacote (`git apply --check` na raiz); o nome de cada ficheiro alterado aparece num cabeçalho `diff --git`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, basename } from 'node:path';
@@ -22,7 +21,7 @@ const HOOK = '.claude/hooks/forge-matar-por-nome.mjs';
 const aplica = (patch) => {
   const f = join(tmp(), 'p.patch');
   writeFileSync(f, patch);
-  return [ROOT, join(ROOT, 'templates')].some((cwd) => spawnSync('git', ['apply', '--check', f], { cwd, encoding: 'utf8' }).status === 0);
+  return spawnSync('git', ['apply', '--check', f], { cwd: ROOT, encoding: 'utf8' }).status === 0;
 };
 
 test('C2 guarda: um projeto do corpus (com os 3 hooks) que ninguém editou dá código 0 e um patch vazio', async () => {
@@ -54,7 +53,7 @@ test('C2: um brief, um hook, o AGENTS.md, o painel e o .checkpoints/README.md ed
   for (const rel of ['AGENTS.md', ...Object.keys(novas)]) assert.ok(r.patch.split('\n').some((l) => l.startsWith('diff --git') && l.includes(basename(rel))), 'o patch não traz ' + rel);
   const dados = [A.projectName, A.repo, A.dashboardUrl.split('/').pop(), proj, proj.replace(/\\/g, '/')];
   assert.deepEqual(mais(r.patch).filter((l) => dados.some((d) => l.includes(d))), []);
-  assert.ok(aplica(r.patch), 'git apply --check recusa o patch na raiz do pacote e em templates/');
+  assert.ok(aplica(r.patch), 'git apply --check recusa o patch na raiz do pacote');
 });
 
 const PESSOAIS = [
