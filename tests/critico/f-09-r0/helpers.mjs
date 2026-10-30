@@ -246,7 +246,9 @@ export const generate = async (answers) => {
   const dest = tmp('proj');
   await scaffold(answers, { dest });
   const fj = readJson(join(dest, '.claude/forge.json'));
-  if (/^pt/i.test(fj.langTag)) for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']) if (existsSync(join(dest, rel))) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
+  // a base mudou com o F-06 (nota do dev, Ronda 0): o check também mede a língua dos briefs e do .checkpoints/README.md, que o passo de tradução cobre (como nos helpers do f-02, f-03 e f-07)
+  const briefs = ['dev', 'critic', 'round-minus-1', 'batch'].map((b) => `.claude/briefs/${b}.md`);
+  if (/^pt/i.test(fj.langTag)) for (const rel of ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', '.checkpoints/README.md', ...briefs]) if (existsSync(join(dest, rel))) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   return { dest, fj };
 };
 export const check = (cwd, args = []) => {

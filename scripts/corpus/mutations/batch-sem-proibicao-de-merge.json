@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-batch.js",
+  "find": "Never push, open a PR or merge into the main branch: each one needs the yes of the user, which only the orchestrator can ask for.",
+  "replace": "You may push the batch branch once the suite is green.",
+  "line": "batch: no merge: every prompt of the tester forbids, in one line, push, PR and merge without the yes of the user"
+}

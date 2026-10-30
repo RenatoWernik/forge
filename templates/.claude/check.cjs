@@ -255,7 +255,7 @@ async function chk(name, f) {
     return run
   }
   const rejects = async (file, args) => { let n = 0; const x = await wf(file, args, () => ++n); return n === 0 && /incomplete args/.test(x.err?.message) }
-  const [D, C, X] = WFR.map(k => F[k])
+  const [D, C, X] = WFR.map(k => F[k]), T = F.tester
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // Round -1 result of a piece as gauntlet-attacks returns it and gauntlet-build gets it in args.attacks: an attack that fails on the base and a guard that already passes
   const r0 = (id, over = {}) => ({ id, attacks: [{ id: id + '-a1', file: 'tests/critico/' + id + '-r0/a1.test.mjs', passesOnBase: false }, { id: id + '-g1', file: 'tests/critico/' + id + '-r0/g1.test.mjs', guard: true, passesOnBase: true }], failingOnBase: true, gaps: [], ...over })
@@ -268,7 +268,7 @@ async function chk(name, f) {
   const stuck = calls => calls.filter(c => c.prompt.includes('-stuck'))
   const veto = c => ['Do not consult memory', 'do not open FRAMEWORK.md or .claude/workflows/', 'unless the context above allows it', 'you edit no file'].every(t => c.prompt.includes(t)) // what invariant 3 forbids the critic
   const key = r => r.model + ',' + r.effort
-  const ROLE = { build: key(D), pony: key(D), critic: key(C), 'pony-critic': key(C), attacks: key(C), panel: key(X) } // invariant 3: model,effort of each role by label prefix, from forge.json
+  const ROLE = { build: key(D), pony: key(D), critic: key(C), 'pony-critic': key(C), attacks: key(C), batch: key(T), panel: key(X) } // invariant 3: model,effort of each role by label prefix, from forge.json
   const rolesOk = (calls, roles = ROLE) => calls.every(c => roles[c.opts.label.split(':')[0]] === c.opts.model + ',' + c.opts.effort)
   const ver = (calls, l) => only(calls, new RegExp('^panel:verdict:' + l + '$'))[0].prompt // what the workflow tells the panel to record at the end of a round (only it knows whether ours really won)
   const LOST = ['"verdict":"perdeu"', '"status":"building"', '"kind":"fail"'], WON = ['"verdict":"ganhou"', '"status":"won"', '"kind":"ok"'] // "ganhou"/"perdeu" are fixed panel values the dashboard reads
@@ -387,7 +387,7 @@ async function chk(name, f) {
   await chk('build: parallel:true runs the pieces together; the one that throws leaves the result and log() records it (ATTENTION), without taking the other down', () => r.calls[1].opts.label === 'build:p:r1' && r.calls[2].opts.label === 'build:q:r1' && r.out.results.length === 1 && r.out.results[0].id === 'p' && r.out.results[0].won && r.logs.some(l => l.startsWith('ATTENTION')))
   await chk('build: args without root, dashboardUrl or pieces, or a piece without id, title, goal, bar or owns, bring the workflow down with incomplete args, before spending an agent', async () => (await Promise.all([{ root: '' }, { dashboardUrl: '' }, { pieces: [] }, ...['id', 'title', 'goal', 'bar', 'owns'].map(k => ({ pieces: [{ ...piece, [k]: undefined }] }))].map(a => rejects('gauntlet-build.js', { ...base, pieces: [piece], ...a })))).every(Boolean))
   // args.models missing or wrong: the workflow stops with an error that names the role and points to forge.json, before spending an agent
-  const badModels = WFR.flatMap(k => [{ ...F, [k]: undefined }, { ...F, [k]: { ...F[k], model: '' } }, { ...F, [k]: { ...F[k], effort: 'ultra' } }, { ...F, [k]: { ...F[k], effort: undefined } }, { ...F, [k]: { ...F[k], match: '(' } }].map(m => [k, m]))
+  const badModels = [...WFR, 'tester'].flatMap(k => [{ ...F, [k]: undefined }, { ...F, [k]: { ...F[k], model: '' } }, { ...F, [k]: { ...F[k], effort: 'ultra' } }, { ...F, [k]: { ...F[k], effort: undefined } }, { ...F, [k]: { ...F[k], match: '(' } }].map(m => [k, m]))
   const rejectsModels = async (file, args, roles = WFR) => (await Promise.all([[null, undefined], [null, {}], ...badModels.filter(([k]) => roles.includes(k))].map(async ([k, m]) => { let n = 0; const x = await wf(file, { ...args, models: m }, () => ++n), msg = x.err?.message || ''; return n === 0 && /incomplete args/.test(msg) && msg.includes('.claude/forge.json') && (!k || msg.includes('(review: ' + k + ')')) }))).every(Boolean)
   await chk('build: args without models, or with a role missing model or a valid effort, or with a match that is not a valid regex, bring the workflow down with incomplete args naming the role and pointing to forge.json, before spending an agent', () => rejectsModels('gauntlet-build.js', { ...base, pieces: [piece] }))
   const big = 'x'.repeat(100000)
@@ -445,6 +445,64 @@ async function chk(name, f) {
     return x.out.results[0].won && x.out.results[0].rounds === 1 && y.out.results.length === ex.pieces.length
   })
 
+  // Batch (F-09): one tester declares data (runs, isolated, main) and the workflow works out the class of each failure from it, never from a label of the tester.
+  // The fake tester declares from a table: f = { test, files, suite: [executions 1-2 where it fails], e2e: [executions 1-3], alone: passes alone, main: 'all' | 'some' | 'none' }
+  const bpn = n => Array.from({ length: n }, (_, i) => ({ id: 'p' + i, title: 'P' + i, owns: ['src/p' + i + '.js'] }))
+  const bp = ['pa', 'pb', 'pc'].map(id => ({ id, title: id.toUpperCase(), owns: ['src/' + id + '.js', 'tests/' + id + '.test.js'] }))
+  const bargs = (over = {}) => ({ ...base, mode: 'rigorous', pieces: bp, testCommand: 'SUITE-CMD', e2eCommand: 'E2E-CMD', ...over })
+  const decl = (fs = [], n = { suite: 2, e2e: 3 }) => ({
+    runs: ['suite', 'e2e'].flatMap(k => Array.from({ length: n[k] }, (_, i) => ({ kind: k, command: k === 'suite' ? 'SUITE-CMD' : 'E2E-CMD', failures: fs.filter(f => (f[k] || []).includes(i + 1)).map(f => ({ test: f.test, files: f.files, output: 'OUT<' + f.test + '>' })) }))),
+    isolated: fs.map(f => ({ test: f.test, passed: !!f.alone, output: 'ISO' })),
+    main: fs.filter(f => f.main).map(f => ({ test: f.test, results: [0, 1].map(i => f.main === 'none' ? true : f.main === 'all' ? false : i === 0), output: 'MAIN' })),
+  })
+  const LIE = { batch: { verdict: 'pass', failures: [] }, regressions: [], flaky: [], verdict: 'pass', passed: true, approved: true }
+  const bt = (d, lie) => (p, o) => o.label === 'batch:tester' ? { ...d, ...(lie ? LIE : {}), model: declared(T) } : o.label === 'batch:flaky' ? { issues: JSON.parse(p.match(/Tests \(data\): (\[.*\])/)[1]).map(x => ({ test: x.test, issue: '#' + x.test })), model: declared(T) } : 'ok'
+  const bwf = (d, over, lie) => wf('gauntlet-batch.js', bargs(over), bt(d, lie))
+  const sum = x => !x.out ? 'refused' : x.out.batch.failures.map(f => f.test + '=' + f.class).sort().join() + '|' + x.out.regressions.map(g => g.piece + '/' + g.test).sort().join() + '|' + x.out.batch.verdict
+  const core = ['tests/core.test.js', 'src/core.js'], ta = ['tests/pa.test.js', 'src/pa.js']
+  const CASES = [ // [the failures the tester declares, tests=classes|piece/test of the regressions|verdict]
+    [[], '||pass'],
+    [[{ test: 'ta', files: ta, suite: [1, 2] }], 'ta=a|pa/ta|fail'],
+    [[{ test: 'ta', files: ta, suite: [1, 2] }, { test: 'tc', files: ['src/pc.js'], e2e: [1, 2, 3] }], 'ta=a,tc=a|pa/ta,pc/tc|fail'],
+    [[{ test: 'both', files: [...core, 'src/pa.js', 'src/pb.js'], suite: [1, 2] }], 'both=a|pa/both,pb/both|fail'],
+    [[{ test: 'x', files: core, suite: [2], alone: true }], 'x=c||pass'],
+    [[{ test: 'x', files: core, suite: [1] }], 'x=a||fail'],
+    [[{ test: 'x', files: ta, suite: [1], alone: true }], 'x=a|pa/x|fail'],
+    [[{ test: 'x', files: core, e2e: [3], alone: true }], 'x=c||pass'],
+    [[{ test: 'x', files: core, suite: [1, 2], main: 'all' }], 'x=b||pass'],
+    [[{ test: 'x', files: core, suite: [1, 2], main: 'some' }], 'x=c||pass'],
+    [[{ test: 'x', files: core, suite: [1, 2], main: 'none' }], 'x=a||fail'],
+    [[{ test: 'x', files: core, suite: [1, 2] }], 'x=a||fail'],
+    [[{ test: 'x', files: core, e2e: [1, 2, 3], alone: true, main: 'some' }], 'x=c||pass'],
+    [[{ test: 'x', files: core, e2e: [1, 2, 3], alone: true, main: 'all' }], 'x=b||pass'],
+    [[{ test: 'x', files: core, e2e: [1, 2, 3], alone: true, main: 'none' }], 'x=a||fail'],
+    [[{ test: 'x', files: core, e2e: [1, 2, 3], alone: true }], 'x=a||fail'],
+    [[{ test: 'x', files: core, suite: [1, 2], main: 'all' }, { test: 'y', files: core, suite: [1], alone: true }], 'x=b,y=c||pass'],
+    [[{ test: 'x', files: core, suite: [1, 2], main: 'all' }, { test: 'y', files: ['src/pb.js'], suite: [1, 2] }], 'x=b,y=a|pb/y|fail'],
+  ]
+  const SIZES = [['rigorous', 3, true], ['rigorous', 4, false], ['rigorous', 5, false], ['rigorous', 6, false], ['accelerated', 3, true], ['accelerated', 4, true], ['accelerated', 5, true], ['accelerated', 6, false]]
+  await chk('batch: a batch over the size of its mode (more than 3 pieces in rigorous, more than 5 in accelerated) is refused before any agent(), and the error says so; up to the limit the tester runs (3, 4, 5 and 6 pieces in both modes)', async () => (await Promise.all(SIZES.map(async ([mode, n, ok]) => { const x = await bwf(decl(), { mode, pieces: bpn(n) }); return ok ? !x.err && x.calls.length > 0 && !!x.out.batch : x.calls.length === 0 && /batch too large/.test(x.err?.message) && !x.out }))).every(Boolean))
+  await chk('batch: args without root, dashboardUrl or testCommand, with no mode or a mode that is not rigorous or accelerated, with no pieces, a piece without id, title or owns, or two pieces with the same id, bring the workflow down with incomplete args, before spending an agent', async () => (await Promise.all([{ root: '' }, { dashboardUrl: '' }, { testCommand: '' }, { testCommand: ' ' }, { mode: undefined }, { mode: 'turbo' }, { pieces: [] }, ...['id', 'title', 'owns'].map(k => ({ pieces: [{ ...bp[0], [k]: undefined }] })), { pieces: [bp[0], bp[0]] }].map(a => rejects('gauntlet-batch.js', bargs(a))))).every(Boolean))
+  await chk('batch: args without models, or with the tester or the aux missing a model or a valid effort, or with a match that is not a valid regex, bring the workflow down with incomplete args naming the role and pointing to forge.json, before spending an agent', () => rejectsModels('gauntlet-batch.js', bargs(), ['tester', 'aux']))
+  const bok = await bwf(decl()), bTest = only(bok.calls, /^batch:tester$/)
+  const [s1, e2, none, no2e, mute] = await Promise.all([bwf(decl([], { suite: 1, e2e: 3 })), bwf(decl([], { suite: 2, e2e: 2 })), bwf(decl([], { suite: 0, e2e: 0 })), bwf(decl([], { suite: 2, e2e: 0 }), { e2eCommand: undefined }), wf('gauntlet-batch.js', bargs(), () => null)])
+  await chk('batch: one tester with the model and effort of forge.json runs the suite 2x and the E2E 3x with the testCommand and the e2eCommand of the args, and no other agent gets them; the batch is approved only with those executions declared (suite 1x, E2E 2x, none or no answer: not approved, reason "runs"); without e2eCommand the E2E is n/a', () => bTest.length === 1 && rolesOk(bok.calls) && bok.out.batch.verdict === 'pass' && bok.out.runs.suite === 2 && bok.out.runs.e2e === 3 && bTest[0].prompt.includes('SUITE-CMD') && bTest[0].prompt.includes('E2E-CMD') && bok.calls.every(c => c === bTest[0] || !/SUITE-CMD|E2E-CMD/.test(c.prompt))
+    && [s1, e2, none, mute].every(x => x.out.batch.verdict === 'fail' && x.out.batch.reason === 'runs') && no2e.out.batch.verdict === 'pass' && no2e.out.runs.e2e === 'n/a' && !/undefined|null/.test(only(no2e.calls, /^batch:tester$/)[0].prompt))
+  await chk('batch: the class of each failing test comes only from the data declared: a (touches the files of a piece, or out of the diff with no proof that main fails the same), b (out of the diff and every execution on main fails too), c (flaky); only a fails the batch, one regression per piece the test touches; a tester that writes verdict, passed, class, flaky or regressions changes nothing', async () => (await Promise.all(CASES.flatMap(([fs, want]) => [false, true].map(async lie => sum(await bwf(decl(fs), {}, lie)) === want)))).every(Boolean))
+  const portD = decl([{ test: 'x', files: core, suite: [1], alone: true }, { test: 'y', files: core, suite: [2], alone: true }, { test: 'z', files: core, e2e: [1], alone: true }])
+  portD.runs.forEach(r => r.failures.forEach(f => { f.output = 'Error: listen EADDRINUSE: address already in use :::' + (f.test === 'z' ? 4808 : 4807) }))
+  const bPort = await bwf(portD)
+  await chk('batch: the tester is told to look for fixed ports repeated between tests (EADDRINUSE), and two failing tests with EADDRINUSE on the same port come back in fixedPorts with the port (a port that only one test hits does not)', () => /EADDRINUSE/.test(only(bPort.calls, /^batch:tester$/)[0].prompt) && JSON.stringify(bPort.out.fixedPorts) === '[{"port":4807,"tests":["x","y"]}]')
+  const [bFlaky, bNoIssue] = [await bwf(decl([{ test: 'x', files: core, suite: [2], alone: true }])), await wf('gauntlet-batch.js', bargs(), (p, o) => o.label === 'batch:flaky' ? { issues: [], model: declared(T) } : bt(decl([{ test: 'x', files: core, suite: [2], alone: true }]))(p, o))]
+  await chk('batch: a flaky failure (class c) is passed to a tester call that must open an issue with the label flaky for it, and the return has that issue; a batch without flaky failures makes no such call, and a flaky without an issue gets a WARNING in log() and does not fail the batch', () => only(bFlaky.calls, /^batch:flaky$/).length === 1 && only(bFlaky.calls, /^batch:flaky$/)[0].prompt.split('\n').some(l => /\bissues?\b/.test(l) && /\bflaky\b/.test(l)) && rolesOk(bFlaky.calls) && JSON.stringify(bFlaky.out.flaky.map(f => [f.test, f.issue])) === '[["x","#x"]]' && bFlaky.out.batch.verdict === 'pass'
+    && !only(bok.calls, /^batch:flaky$/).length && bNoIssue.out.flaky[0].issue === null && bNoIssue.logs.some(l => l.startsWith('WARNING no issue')) && bNoIssue.out.batch.verdict === 'pass')
+  // the line of the prompt that forbids push, PR and merge without the yes of the user, in every prompt of the tester (the three forms of removing it are in the corpus)
+  const NO_MERGE = /^(?=.*\bpush\b)(?=.*\bPRs?\b)(?=.*\bmerge\b)(?=.*\b(user|utilizador|usu[áa]rio)\b)(?=.*\b(never|no|not|without|nunca|sem|nenhum)\b).*$/im
+  await chk('batch: no merge: every prompt of the tester forbids, in one line, push, PR and merge without the yes of the user', () => bTest.length > 0 && [...bTest, ...only(bFlaky.calls, /^batch:/)].every(c => NO_MERGE.test(c.prompt)))
+  const bpd = await wf('gauntlet-batch.js', bargs({ models: { ...F, tester: { model: 'probe-tester', effort: 'medium', label: 'Probe Tester 4.0' }, aux: { model: 'probe-aux', effort: 'max' } }, language: 'Probe-Language' }), (p, o) => o.label === 'batch:tester' ? { ...decl(), model: 'probe-tester Probe Tester 4.0' } : 'ok')
+  seen['gauntlet-batch.js'].pop() // the probe run is not part of the contract checks below (its aux model differs from the meta phases)
+  await chk('models: with distinct probe models in args.models, every agent() of gauntlet-batch uses them (model and effort), warns about none, and the prompts carry the language, whatever forge.json says', () => bpd.calls.length === 2 && bpd.calls.every(c => (c.opts.label === 'batch:tester' ? 'probe-tester,medium' : 'probe-aux,max') === c.opts.model + ',' + c.opts.effort && c.prompt.includes('Probe-Language')) && !bpd.logs.some(l => l.startsWith('WARNING')) && /Probe Tester 4\.0/.test(bpd.calls[1].prompt))
+
   const units = [{ id: 'u1', title: 'U1', paths: ['src/a.js'] }, { id: 'u2', title: 'U2', paths: ['src/b.js'] }]
   const cut = { cuts: ['CUT-DEV'], kept: ['KEPT-DEV'], linesBefore: 9, linesAfter: 5, testOutput: 'ok', model: declared(D) }
   const pcritic = (p, o, at = o.label.includes(':u1:') ? 8 : 2) => { const cur = /^A: .*\.gauntlet/m.test(p) ? 'B' : 'A', win = rn(o) >= at; return { winner: win ? cur : flip(cur), testsPass: true, behaviourPreserved: true, wronglyCut: [], remainingCuts: win ? [] : ['CUT-LEFT-' + rn(o)], biggestGap: 'GAP-' + rn(o), model: declared(C) } }
@@ -472,7 +530,7 @@ async function chk(name, f) {
   // FRAMEWORK.md section 6: whoever writes painel.json writes its exact copy in painel/estado right after it, in the same step (the panel page reads only that copy)
   const sameData = t => /painel\.json[\s\S]{0,400}painel\/estado/.test(t)
   const panelCalls = f => seen[f].flatMap(x => x.calls).filter(c => c.opts.label.startsWith('panel:'))
-  await chk('panel: same data: FRAMEWORK.md and every panel agent of both workflows say that whoever writes .checkpoints/painel.json writes its exact copy in painel/estado right after it, in the same step', () => (!has('FRAMEWORK.md') || sameData(fs.readFileSync('FRAMEWORK.md', 'utf8'))) && ['gauntlet-attacks.js', 'gauntlet-build.js', 'gauntlet-ponytail.js'].every(f => panelCalls(f).length > 0 && panelCalls(f).every(c => sameData(c.prompt))))
+  await chk('panel: same data: FRAMEWORK.md and every panel agent of both workflows say that whoever writes .checkpoints/painel.json writes its exact copy in painel/estado right after it, in the same step', () => (!has('FRAMEWORK.md') || sameData(fs.readFileSync('FRAMEWORK.md', 'utf8'))) && ['gauntlet-attacks.js', 'gauntlet-batch.js', 'gauntlet-build.js', 'gauntlet-ponytail.js'].every(f => panelCalls(f).length > 0 && panelCalls(f).every(c => sameData(c.prompt))))
   const rec =(role, m) => new RegExp(`"role":"${role}","loop":"\\w+","model":"${esc(label(m))}","effort":"${esc(m.effort)}"`)
   const [dv, ct, pB, pC] = [[...devs, ...pd], [...crit, ...pc], rec('builder', D), rec('critic', C)]
   await chk('panel: the panel records say the model and effort of each role from forge.json (developer, critic), in the seed and in every agent of both workflows', () => dv.length > 0 && ct.length > 0 && dv.every(c => pB.test(c.prompt)) && ct.every(c => pC.test(c.prompt)) && [seedB, r.calls[0].prompt].every(s => pB.test(s) && pC.test(s)))
@@ -525,14 +583,14 @@ async function chk(name, f) {
 
   // Workflow API contract (skill workflow-authoring), proven over the simulations above: three lines per workflow
   const OPTS = ['label', 'phase', 'schema', 'model', 'effort', 'isolation', 'agentType']
-  const RUN = { attacks: ['gauntlet-attacks.js', { ...base, pieces: [piece, q, ...[3, 4, 5].map(n => ({ ...piece, id: 'x' + n, title: 'X' + n, owns: ['src/x' + n + '.js'], issue: 20 + n }))] }, attImpl()], build: ['gauntlet-build.js', { ...base, pieces: [piece] }, build], ponytail: ['gauntlet-ponytail.js', uAll, pony] }
+  const RUN = { attacks: ['gauntlet-attacks.js', { ...base, pieces: [piece, q, ...[3, 4, 5].map(n => ({ ...piece, id: 'x' + n, title: 'X' + n, owns: ['src/x' + n + '.js'], issue: 20 + n }))] }, attImpl()], build: ['gauntlet-build.js', { ...base, pieces: [piece] }, build], batch: ['gauntlet-batch.js', bargs(), bt(decl([{ test: 'x', files: core, suite: [2], alone: true }, { test: 'y', files: ta, suite: [1, 2] }]))], ponytail: ['gauntlet-ponytail.js', uAll, pony] }
   for (const [tag, [file, args, impl]] of Object.entries(RUN)) {
     const raw = () => fs.readFileSync('.claude/workflows/' + file, 'utf8'), lit = () => raw().match(META)[1], meta = () => vm.runInNewContext('(' + lit() + ')')
     const used = new Set(seen[file].flatMap(x => x.phases)), calls = seen[file].flatMap(x => x.calls)
     await chk(`${tag}: the script starts with a pure literal meta (only strings, objects and lists), with name = file name, a non-empty single-line description and meta.phases = the phase() calls`, () => raw().startsWith('export const meta = ') && !/[^\s{}\[\],:]/.test(lit().replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|\w+(?=\s*:)/g, '')) && meta().name === file.replace('.js', '') && /^[^\n]+$/.test(meta().description) && meta().phases.length === used.size && meta().phases.every(p => used.has(p.title) && p.detail))
     await chk(`${tag}: the meta text names the developer and critic model and effort from forge.json, the panel phase runs the aux model and no token is left unrendered (fill them with: node .claude/check.cjs --render)`, () => !raw().includes('{{') && matches(raw()))
     await chk(`${tag}: every agent() uses only API opts (label, phase from meta.phases with the model it declares, effort), and the schema has an object root and required inside properties; only the panel agent runs without a schema`, () => { const ph = meta().phases; return calls.length > 0 && calls.every(c => typeof c.prompt === 'string' && Object.keys(c.opts).every(k => OPTS.includes(k)) && typeof c.opts.label === 'string' && ph.some(p => p.title === c.opts.phase && (!p.model || p.model === c.opts.model)) && (!c.opts.effort || EFF.includes(c.opts.effort)) && (c.opts.schema ? c.opts.schema.type === 'object' && c.opts.schema.required.every(k => k in c.opts.schema.properties) : c.opts.label.startsWith('panel:'))) })
-    await chk(`${tag}: resume: with Date.now, Math.random and new Date() throwing, the same args and answers repeat exactly the agent() calls (prompt and opts)`, async () => { const [a, b] = [await wf(file, args, impl), await wf(file, args, impl)]; return a.calls.length > 5 && JSON.stringify(a.calls) === JSON.stringify(b.calls) })
+    await chk(`${tag}: resume: with Date.now, Math.random and new Date() throwing, the same args and answers repeat exactly the agent() calls (prompt and opts)`, async () => { const [a, b] = [await wf(file, args, impl), await wf(file, args, impl)]; return a.calls.length > (tag === 'batch' ? 1 : 5) && JSON.stringify(a.calls) === JSON.stringify(b.calls) })
   }
 
   // --render round trip, in a copy of this project's .claude in a temp folder (the nested runs skip this block, or it would recurse)
