@@ -43,7 +43,7 @@ As ferramentas de linha de comando do Spec-Kit e do Graphify também precisam do
 
 ## Instalação em 30 segundos
 
-O plugin fica em [github.com/RenatoWernik/forge](https://github.com/RenatoWernik/forge). Os dois comandos abaixo leem o plugin do GitHub, então só funcionam depois que esse repositório for publicado; até lá, use a variante de cópia local abaixo.
+O plugin fica em [github.com/RenatoWernik/forge](https://github.com/RenatoWernik/forge). Instale direto do GitHub com dois comandos:
 
 ```bash
 claude plugin marketplace add RenatoWernik/forge
@@ -57,7 +57,7 @@ O mesmo, de dentro de uma sessão do Claude Code:
 /plugin install forge@forge
 ```
 
-Trabalhando a partir de uma cópia local (funciona antes da publicação e também é o jeito de testar uma mudança antes de publicá-la). Rode na pasta que contém `forge/` (depois da publicação você também pode fazer `git clone https://github.com/RenatoWernik/forge` antes e rodar na pasta onde clonou):
+Para testar uma mudança antes de enviá-la, instale a partir de uma cópia local: `git clone https://github.com/RenatoWernik/forge` e depois rode isto na pasta que contém `forge/`:
 
 ```bash
 claude plugin marketplace add ./forge

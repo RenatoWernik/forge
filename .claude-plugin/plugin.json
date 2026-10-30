@@ -1,6 +1,6 @@
 {
   "name": "forge",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Generates a complete AI-assisted engineering project: gauntlet loop, AI Memory, Ponytail, Spec-Kit, TDD, Matt Pocock's skills and Graphify, with a live panel. Models are chosen by you, tools are checked against their latest public release.",
   "author": {
     "name": "forge contributors"

@@ -43,7 +43,7 @@ The Spec-Kit and Graphify command line tools also need [uv](https://docs.astral.
 
 ## Install in 30 seconds
 
-The plugin lives at [github.com/RenatoWernik/forge](https://github.com/RenatoWernik/forge). The two commands below read it from GitHub, so they work once that repository is published; until then, use the local copy variant below.
+The plugin lives at [github.com/RenatoWernik/forge](https://github.com/RenatoWernik/forge). Install it from GitHub with two commands:
 
 ```bash
 claude plugin marketplace add RenatoWernik/forge
@@ -57,7 +57,7 @@ The same from inside a Claude Code session:
 /plugin install forge@forge
 ```
 
-Working from a local copy instead (works before publication and is also the way to try a change before publishing it). Run it from the folder that holds `forge/` (after publication you can also `git clone https://github.com/RenatoWernik/forge` first and run it from the folder you cloned into):
+To try a change before you push it, install from a local copy instead: `git clone https://github.com/RenatoWernik/forge`, then run this from the folder that holds `forge/`:
 
 ```bash
 claude plugin marketplace add ./forge
