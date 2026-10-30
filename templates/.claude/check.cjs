@@ -261,6 +261,7 @@ async function chk(name, f) {
   const r0 = (id, over = {}) => ({ id, attacks: [{ id: id + '-a1', file: 'tests/critico/' + id + '-r0/a1.test.mjs', passesOnBase: false }, { id: id + '-g1', file: 'tests/critico/' + id + '-r0/g1.test.mjs', guard: true, passesOnBase: true }], failingOnBase: true, gaps: [], ...over })
   const base = { checkpoint: { n: 1, title: 'T' }, root: 'C:\\p', dashboardUrl: 'https://x', context: 'CTX-SPEC-PLAN-TASKS', models: F, language: FJ.language }
   base.attacks = [r0('p'), r0('q')] // the Round -1 results the build workflow needs for pieces p and q
+  Object.assign(base, { mode: 'rigorous', escalation: FJ.escalation }) // the build workflow takes both from forge.json, like the models
   const rn = o => +o.label.match(/:r(\d+)$/)[1]
   const flip = l => (l === 'A' ? 'B' : 'A')
   const only = (calls, re) => calls.filter(c => re.test(c.opts.label))
@@ -276,24 +277,31 @@ async function chk(name, f) {
   const piece = { id: 'p', title: 'P', goal: 'META-P', bar: 'BAR-X', owns: ['src/a.js', 'src/only-owns.js'], tdd: true, ...contract } // only-owns.js reaches the agents through owns alone: the fake developer changes only src/a.js
   const MARKS = [piece.goal, piece.bar, base.context, base.root, 'src/only-owns.js'] // what the piece args hand to the developer and to the critic
   const dev = { summary: 'DEV-REASONING', filesChanged: ['src/a.js'], testCommand: 'TEST-DEV', redEvidence: 'RED-EV', greenEvidence: 'GREEN-EV', model: declared(D) }
-  const critic = (p, o, at = 9) => { const ours = /^A: .*src\/a\.js/m.test(p) ? 'A' : 'B'; return { winner: rn(o) >= at ? ours : flip(ours), testsPass: true, blockingErrors: rn(o) >= at ? [] : ['BLOCK-' + rn(o)], biggestGap: 'GAP-' + rn(o), reasoning: 'CRITIC-REASONING-' + rn(o), model: declared(C) } }
+  const item = (n, c = n, m = 2, cat = 'criterion') => ({ criterion: 'C' + c, materiality: m, category: cat, description: 'DESC-' + n, repro: 'BLOCK-' + n }) // one blocking failure of the critic's verdict (criterion C<c>, materiality m, repro BLOCK-<n>)
+  // The verdict of the critic as the brief shapes it: the winner, blocking (empty when it approves), the other sections and one result per Round -1 attack (all green here).
+  const critic = (p, o, at = 3, over = {}) => { const ours = /^A: .*src\/a\.js/m.test(p) ? 'A' : 'B', win = rn(o) >= at; return { winner: win ? ours : flip(ours), testsPass: true, blocking: win ? [] : [item(rn(o))], minor: [], barQuestions: [], followUp: [], visualBelowReference: false, attacks: JSON.parse(p.match(/as you measured it: (\[.*\])/)[1]).map(a => ({ id: a.id, passesOnDelivery: true })), biggestGap: 'GAP-' + rn(o), reasoning: 'CRITIC-REASONING-' + rn(o), model: declared(C), ...over } }
   const build = (p, o, at) => o.label.startsWith('build:') ? dev : o.label.startsWith('critic:') ? critic(p, o, at) : 'ok'
-  const win = (p, o) => o.label.startsWith('critic:') ? { ...critic(p, o), winner: /^A: .*src\/a\.js/m.test(p) ? 'A' : 'B', blockingErrors: [] } : build(p, o) // wins already in round 1
-  // Invariant 4, no round cap in the workflow: the critic only picks ours in round 300 (1 seed + 3 agents per round = 901 of the 1000 agents) and the workflow must get there; a `round < N` in the while fails here.
+  const win = (p, o) => build(p, o, 1) // wins already in round 1
+  // Invariant 4 for the ponytail workflow, which keeps its loop: no round cap; the critic only picks the current version in round 300 (1 seed + 3 agents per round = 901 of the 1000 agents) and the workflow must get there; a `round < N` in the while fails here.
   // ponytail: only catches caps below 300 rounds (the runtime allows at most 333); raise the 300 and the 901 (1 + 3 per round) if a larger cap ever matters.
   const noCap = async (file, args, impl) => { const x = await wf(file, args, (p, o) => impl(p, o, 300)); return x.out.results[0].won && x.out.results[0].rounds === 300 && x.calls.length === 901 }
 
   let r = await wf('gauntlet-build.js', { ...base, pieces: [piece] }, build)
   const seedB = r.calls[0]?.prompt
   const crit = only(r.calls, /^critic:/), devs = only(r.calls, /^build:/)
-  await chk('build: wins in round 9, after escalateAfter (6), and only at 300 (901 of 1000 agents): no exit by number of rounds', async () => r.out.results[0].won && r.out.results[0].rounds === 9 && await noCap('gauntlet-build.js', { ...base, pieces: [piece] }, build))
-  await chk('build: the results[] return has id, stopped, files, testCommand, models and the last round\'s lastVerdict', () => { const x = r.out.results[0]; return x.id === 'p' && !x.stopped && x.files.join() === 'src/a.js' && x.testCommand === 'TEST-DEV' && x.models.builder === declared(D) && x.models.critic === declared(C) && x.lastVerdict.biggestGap === 'GAP-9' })
-  await chk('panel: build: the verdict records perdeu/building/fail or ganhou/won/ok, plus the round and the gap (rounds 1 and 9 here)', () => verdictOk(ver(r.calls, 'p:r1'), 1, 'GAP-1', LOST, WON) && verdictOk(ver(r.calls, 'p:r9'), 9, 'GAP-9', WON, LOST))
-  await chk('build: each round calls, in separate agent() calls and in this order, the developer, the critic and the panel', () => r.calls.length === 28 && r.calls.slice(0, 4).map(c => c.opts.label).join() === 'panel:seed,build:p:r1,critic:p:r1,panel:verdict:p:r1' && r.calls.slice(-3).map(c => c.opts.label).join() === 'build:p:r9,critic:p:r9,panel:verdict:p:r9')
-  await chk('build: "stuck" question exactly once, in round 6', () => stuck(r.calls).length === 1 && stuck(r.calls)[0].opts.label.endsWith(':r6'))
-  await chk('build: the "stuck" question offers to change the bar, narrow the scope or stop', () => /change the bar.*narrow the scope.*stop/.test(stuck(r.calls)[0].prompt) && stuck(r.calls)[0].prompt.includes('"kind":"pergunta"'))
-  await chk('build: the gap and blocking errors of round N reach the developer of round N+1, and the round 1 developer gets nothing', () => devs.length === 9 && !devs[0].prompt.includes('GAP-') && !devs[0].prompt.includes('BLOCK-') && ['GAP-1', 'BLOCK-1'].every(t => devs[1].prompt.includes(t)) && !devs[1].prompt.includes('BLOCK-2') && devs[8].prompt.includes('BLOCK-8'))
-  await chk('build: the critic gets neither the developer\'s reasoning (summary) nor the reasoning, gap and errors of earlier rounds', () => crit.length === 9 && crit.every(c => !/REASONING-|GAP-|BLOCK-/.test(c.prompt)))
+  const lose = (p, o) => { const x = build(p, o, 0); return o.label.startsWith('critic:') ? { ...x, winner: flip(x.winner) } : x } // the critic picks the other candidate in every round
+  await chk('build: rounds are capped by the mode: a 3rd failed round of the rigorous mode returns contract and a 2nd failed round of the accelerated mode returns maxRounds, with no round beyond the cap and the measures in metrics', async () => {
+    const [x, y] = await Promise.all(['rigorous', 'accelerated'].map(mode => wf('gauntlet-build.js', { ...base, mode, pieces: [piece] }, lose)))
+    const [a, b] = [x.out.results[0], y.out.results[0]]
+    return only(x.calls, /^build:/).length === 3 && only(x.calls, /^critic:/).length === 3 && a.stopped === 'contract' && !a.won && a.metrics.rounds === 3
+      && only(y.calls, /^build:/).length === 2 && only(y.calls, /^critic:/).length === 2 && b.stopped.reason === 'maxRounds' && !b.won && b.metrics.rounds === 2
+  })
+  await chk('build: the results[] return has id, stopped, files, testCommand, models, the measures, followUps and the last round\'s lastVerdict', () => { const x = r.out.results[0]; return x.id === 'p' && x.won && x.rounds === 3 && !x.stopped && x.files.join() === 'src/a.js' && x.testCommand === 'TEST-DEV' && x.models.builder === declared(D) && x.models.critic === declared(C) && x.lastVerdict.biggestGap === 'GAP-3' && Array.isArray(x.followUps) && ['rounds', 'sameCriterionFailures', 'attacksRedOnDelivery', 'minutesWithoutProgress'].every(k => k in x.metrics) })
+  await chk('panel: build: the verdict records perdeu/building/fail or ganhou/won/ok, plus the round and the gap (rounds 1 and 3 here)', () => verdictOk(ver(r.calls, 'p:r1'), 1, 'GAP-1', LOST, WON) && verdictOk(ver(r.calls, 'p:r3'), 3, 'GAP-3', WON, LOST))
+  await chk('build: each round calls, in separate agent() calls and in this order, the developer, the critic and the panel', () => r.calls.length === 10 && r.calls.slice(0, 4).map(c => c.opts.label).join() === 'panel:seed,build:p:r1,critic:p:r1,panel:verdict:p:r1' && r.calls.slice(-3).map(c => c.opts.label).join() === 'build:p:r3,critic:p:r3,panel:verdict:p:r3')
+  await chk('build: the gap and blocking failures of round N reach the developer of round N+1, and the round 1 developer gets nothing', () => devs.length === 3 && !devs[0].prompt.includes('GAP-') && !devs[0].prompt.includes('BLOCK-') && ['GAP-1', 'BLOCK-1'].every(t => devs[1].prompt.includes(t)) && !devs[1].prompt.includes('BLOCK-2') && devs[2].prompt.includes('BLOCK-2'))
+  await chk('build: the critic gets neither the developer\'s reasoning (summary) nor the reasoning and gap of earlier rounds', () => crit.length === 3 && crit.every(c => !/REASONING|GAP-/.test(c.prompt)))
+  await chk('build: from round 2 the critic gets the failures that the critic of the previous round listed (criterion, materiality, repro), and the round 1 critic gets none', () => crit.length === 3 && !crit[0].prompt.includes('BLOCK-') && crit[1].prompt.includes('BLOCK-1') && /\bC1\b/.test(crit[1].prompt) && crit[2].prompt.includes('BLOCK-2') && !crit[2].prompt.includes('BLOCK-1'))
   await chk('build: the critic gets what the developer declared (test command, red and green)', () => crit.length > 0 && crit.every(c => ['TEST-DEV', 'RED-EV', 'GREEN-EV'].every(t => c.prompt.includes(t))))
   await chk('build: the critic is told not to consult memory, not to open FRAMEWORK.md or .claude/workflows/ (unless the context allows it) and not to edit files; the developer, to use memory_query and graphify', () => crit.length > 0 && crit.every(veto) && devs.length > 0 && devs.every(d => ['memory_query', 'graphify query', 'graphify affected'].every(t => d.prompt.includes(t))))
   await chk('build: roles use the models and effort from forge.json (developer, critic, aux); no other model', () => devs.length > 0 && crit.length > 0 && rolesOk(r.calls))
@@ -306,9 +314,73 @@ async function chk(name, f) {
   r = await wf('gauntlet-build.js', { ...base, pieces: [piece] }, (p, o) => { const x = win(p, o); return typeof x === 'object' ? { ...x, model: 'zz-not-configured-zz' } : x })
   await chk('build: a declared model outside the request gives a WARNING and shows in models', () => r.logs.filter(l => l.startsWith('WARNING')).length === 2 && r.out.results[0].models.builder === 'zz-not-configured-zz' && r.out.results[0].models.critic === 'zz-not-configured-zz')
   const fault = f => (p, o) => { const x = win(p, o); return o.label === 'critic:p:r1' ? { ...x, ...(typeof f === 'function' ? f(x) : f) } : x } // a verdict that would win, with one fault in round 1 (fields to swap, or a function of the verdict)
-  await chk('build: winning needs everything together: ours chosen, testsPass and no blockingErrors; with one missing the loop goes on to the next round', async () => (await Promise.all([{ testsPass: false }, { blockingErrors: ['x'] }, x => ({ winner: flip(x.winner) })].map(f => wf('gauntlet-build.js', { ...base, pieces: [piece] }, fault(f))))).every(x => x.out.results[0].won && x.out.results[0].rounds === 2))
-  r = await wf('gauntlet-build.js', { ...base, escalateAfter: 2, pieces: [piece] }, build)
-  await chk('build: escalateAfter changes the round of the "stuck" question (2 here) and the loop goes on until it wins', () => stuck(r.calls).length === 1 && stuck(r.calls)[0].opts.label.endsWith(':r2') && r.out.results[0].rounds === 9)
+  await chk('build: winning needs everything together: ours chosen, testsPass and no blocking failure; with one missing the loop goes on to the next round', async () => (await Promise.all([{ testsPass: false }, { blocking: [item(1)] }, x => ({ winner: flip(x.winner) })].map(f => wf('gauntlet-build.js', { ...base, pieces: [piece] }, fault(f))))).every(x => x.out.results[0].won && x.out.results[0].rounds === 2))
+  // build v2 (F-08, process v3 sections 1, 4 and 8): REDESIGN, CONTRACT, followUps, always-fails and ESCALATION, each with its closed oracle. mode and escalation come from forge.json
+  // through args, like the models; the signals come from the orchestrator (args.vida, piece.redesigns) and from the critic's verdict, never from the developer.
+  const scene = (plans, dv = {}) => (p, o) => { // plans[n - 1] = what the critic of round n adds to an approving verdict ({ lost: true } makes it pick the other candidate); no plan, no failure
+    if (!o.label.startsWith('critic:')) return o.label.startsWith('build:') ? { ...dev, ...dv } : 'ok'
+    const x = critic(p, o, 0), { lost, ...v } = plans[rn(o) - 1] || {}
+    return { ...x, ...v, ...(lost ? { winner: flip(x.winner) } : {}) }
+  }
+  const v2 = async (over, plans, dv) => { const x = await wf('gauntlet-build.js', { ...base, pieces: [piece], ...over }, scene(plans, dv)); return { x, r: x.out.results[0], devs: only(x.calls, /^build:/).length } }
+  const fl = (...bs) => ({ blocking: bs.map(b => item(...b)) }) // fl([n, c, m, category]): failures of criterion C<c>
+  const pcen = (...ks) => ({ ...piece, criteria: piece.criteria.map((c, i) => ({ ...c, ...(ks.includes(i + 1) ? { central: true } : {}) })) }) // marks criteria C<k> as central
+  await chk('build: the same criterion failed in two rounds returns redesign with the criterion and the measures (rounds 2, sameCriterionFailures 2), in both modes, with no round 3 and with sameCriterionFailures 2 in args.escalation', async () => (await Promise.all(['rigorous', 'accelerated'].map(async mode => {
+    const { r, devs } = await v2({ mode, pieces: [pcen(1)] }, [fl([1, 1]), fl([2, 1])])
+    return devs === 2 && r.stopped === 'redesign' && r.criterion === 'C1' && !r.won && !r.condition && r.metrics.rounds === 2 && r.metrics.sameCriterionFailures === 2
+  }))).every(Boolean))
+  await chk('build: in the rigorous mode the 3rd failed round, of any kind (3 different criteria; tests failing, comparison lost and a regression), returns contract with the measures and no round 4 runs', async () => (await Promise.all([[fl([1, 1]), fl([2, 2]), fl([3, 3])], [{ testsPass: false }, { lost: true }, fl([4, 4, 1, 'regression'])]].map(async plans => {
+    const { r, devs } = await v2({}, plans)
+    return devs === 3 && r.stopped === 'contract' && !r.won && r.metrics.rounds === 3 && r.metrics.sameCriterionFailures <= 1
+  }))).every(Boolean))
+  // The literal table of the accelerated mode: [kind of failure, round, does it fail the piece?]. The failure is always on C1; round 1 failing leads to a clean round 2.
+  const KINDS = { always: [[], [7, 1, 1, 'secret']], central: [[1], [7, 1, 2]], 'non-central, materiality 2': [[], [7, 1, 2]], 'non-central, materiality 3': [[], [7, 1, 3]] }
+  const TABLE = [['always', 1, true], ['always', 2, true], ['central', 1, true], ['central', 2, true], ['non-central, materiality 2', 1, true], ['non-central, materiality 2', 2, false], ['non-central, materiality 3', 1, true], ['non-central, materiality 3', 2, false]]
+  await chk('build: in the accelerated mode there is never a round 3, and in round 2 a failure that is neither an always-fail nor a central criterion goes to followUps and does not fail the piece (the table of 8 cases: kind of failure by round)', async () => (await Promise.all(TABLE.map(async ([kind, round, fails]) => {
+    const [central, spec] = KINDS[kind]
+    const { r, devs } = await v2({ mode: 'accelerated', pieces: [pcen(2, ...central)] }, round === 1 ? [fl(spec)] : [fl([1, 2, 2]), fl(spec)])
+    return devs === 2 && (round === 1 ? r.won && !r.stopped : fails ? !r.won && r.stopped.reason === 'maxRounds' : r.won && !r.stopped && JSON.stringify(r.followUps).includes('BLOCK-7'))
+  }))).every(Boolean))
+  const CATS = ['secret', 'security', 'data-loss', 'false-alarm', 'regression', 'no-evidence']
+  await chk('build: an always-fail fails the piece in any round and in any mode (6 categories by round 1 or 2 by mode: 24 cases, as materiality 1 on a criterion that is not central)', async () => (await Promise.all(CATS.flatMap(cat => [1, 2].flatMap(round => ['rigorous', 'accelerated'].map(async mode => {
+    const { r, devs } = await v2({ mode, pieces: [pcen(2)] }, round === 1 ? [fl([7, 1, 1, cat])] : [fl([1, 2, 2]), fl([7, 1, 1, cat])])
+    return round === 1 || mode === 'rigorous' ? devs === round + 1 && r.won && !r.stopped : devs === 2 && !r.won && r.stopped.reason === 'maxRounds'
+  }))))).every(Boolean))
+  const FE = FJ.escalation, escOf = o => Object.fromEntries(Object.entries(FE).map(([k, c]) => [k, { ...c, value: k in o ? o[k] : c.value }])) // forge.json with the values of o
+  const ON = { sameCriterionFailures: 2, attacksRedOnDelivery: true, minutesWithoutProgress: 30, visualBelowReference: true }
+  const RED = [{ id: 'p-a1', passesOnDelivery: false }, { id: 'p-g1', passesOnDelivery: true }]
+  await chk('build: each condition of escalation returns escalate with its condition and the measures (4 cases), and the value in args.escalation turns it off (4 more)', async () => {
+    const ok = async (cond, over, plans, devsWant, key, want) => { const { r, devs } = await v2({ escalation: escOf(ON), ...over }, plans); return r.stopped === 'escalate' && r.condition === cond && !r.won && devs === devsWant && r.metrics[key] === want }
+    const quiet = async (over, plans, pieceWon) => { const { r } = await v2(over, plans); return pieceWon ? r.won && !r.stopped : r.stopped === 'redesign' }
+    return (await Promise.all([
+      ok('sameCriterionFailures', { pieces: [{ ...piece, redesigns: 1 }] }, [fl([1, 1]), fl([2, 1])], 2, 'sameCriterionFailures', 2),
+      ok('attacksRedOnDelivery', {}, [{ attacks: RED }], 1, 'attacksRedOnDelivery', 1),
+      ok('minutesWithoutProgress', { vida: { p: { minutos: 45, vida: 'parado?' } } }, [], 0, 'minutesWithoutProgress', 45),
+      ok('visualBelowReference', {}, [{ visualBelowReference: true }], 1, 'rounds', 1),
+      quiet({ escalation: escOf({ ...ON, attacksRedOnDelivery: false }) }, [{ attacks: RED }], true),
+      quiet({ escalation: escOf({ ...ON, visualBelowReference: false }) }, [{ visualBelowReference: true }], true),
+      quiet({ escalation: escOf({ ...ON, minutesWithoutProgress: 60 }), vida: { p: { minutos: 45, vida: 'parado?' } } }, [], true),
+      quiet({ escalation: escOf(ON), pieces: [{ ...piece, redesigns: 0 }] }, [fl([1, 1]), fl([2, 1])], false),
+    ])).every(Boolean)
+  })
+  await chk('build: the escalation signals never come from the developer: a developer that claims red attacks, 5000 minutes and a visual result below the reference escalates nothing', async () => { const { r, devs } = await v2({ escalation: escOf(ON) }, [], { attacksRedOnDelivery: 1, attacksRed: ['p-a1'], minutesWithoutProgress: 5000, visualBelowReference: true }); return r.won && devs === 1 && !r.stopped })
+  await chk('build: an attack of the piece that the critic does not report with a boolean passesOnDelivery (no list, one missing, a text instead of a boolean) leaves the piece blocked with gaps, in both modes, and the piece never wins', async () => (await Promise.all(['rigorous', 'accelerated'].flatMap(mode => [[], [{ id: 'p-a1', passesOnDelivery: true }], [{ id: 'p-a1', passesOnDelivery: 'true' }, { id: 'p-g1', passesOnDelivery: true }]].map(async attacks => {
+    const { r, devs } = await v2({ mode }, [{ attacks }])
+    return !r.won && r.blocked?.reason === 'gaps' && r.blocked.gaps.length > 0 && devs === 1
+  })))).every(Boolean))
+  await chk('panel: build: the verdict is recorded after the escalation or the block is decided, and never says ganhou/won/ok for a piece that escalated or was blocked', async () => (await Promise.all([v2({ escalation: escOf(ON) }, [{ attacks: RED }]), v2({ escalation: escOf(ON) }, [{ visualBelowReference: true }]), v2({}, [{ attacks: [] }])])).every(({ x }) => verdictOk(ver(x.calls, 'p:r1'), 1, 'GAP-1', LOST, WON)))
+  await chk('build: in the rigorous mode the same criterion failed for the 3rd time returns contract, not redesign (2nd failure: redesign; 3rd: the contract is rewritten)', async () => { const { r, devs } = await v2({}, [fl([1, 1]), fl([2, 2]), fl([3, 1])]); return devs === 3 && r.stopped === 'contract' && !r.criterion && r.metrics.sameCriterionFailures === 2 })
+  await chk('build: a mode other than rigorous or accelerated (or none), an escalation without its 4 conditions or with a wrong type, and a wrong ui, redesigns or central are refused with incomplete args naming the field, before any agent', async () => {
+    const bads = [['mode', { mode: undefined }], ['mode', { mode: 'fast' }], ['escalation', { escalation: undefined }], ...Object.keys(FE).map(k => ['escalation.' + k, { escalation: { ...FE, [k]: undefined } }]), ['escalation.sameCriterionFailures', { escalation: { ...FE, sameCriterionFailures: { value: '2' } } }],
+      ['ui', { pieces: [{ ...piece, ui: 'yes' }] }], ['redesigns', { pieces: [{ ...piece, redesigns: -1 }] }], ['central', { pieces: [{ ...piece, criteria: [{ ...piece.criteria[0], central: 1 }] }] }]]
+    return (await Promise.all(bads.map(async ([f, patch]) => { let n = 0; const x = await wf('gauntlet-build.js', { ...base, pieces: [piece], ...patch }, () => ++n), m = x.err?.message || ''; return n === 0 && /incomplete args/.test(m) && m.includes(f) }))).every(Boolean)
+  })
+  await chk('build: a piece with ui:true runs its developer with models.developerUi and any other piece with models.developer', async () => {
+    const x = await wf('gauntlet-build.js', { ...base, pieces: [{ ...piece, ui: true }, { ...piece, id: 'q', title: 'Q', owns: ['src/b.js'], issue: 8 }] }, win), d = id => only(x.calls, new RegExp('^build:' + id + ':')), U = F.developerUi
+    return d('p').length > 0 && d('q').length > 0 && d('p').every(c => c.opts.model === U.model && c.opts.effort === U.effort) && d('q').every(c => c.opts.model === D.model && c.opts.effort === D.effort)
+  })
+  await chk('build: the prompts point the developer to .claude/briefs/dev.md and the critic to .claude/briefs/critic.md, both to the issue of the piece (#7), and the critic gets the Round -1 attacks to run on the delivery', () => has('.claude/briefs/dev.md') && has('.claude/briefs/critic.md') && devs.length > 0 && devs.every(d => d.prompt.includes('.claude/briefs/dev.md') && d.prompt.includes('#7')) && crit.every(c => c.prompt.includes('.claude/briefs/critic.md') && c.prompt.includes('#7') && c.prompt.includes('p-a1')))
+  await chk('build: the verdict schema has the sections of the critic brief: blocking (criterion, materiality 1, 2 or 3, repro), minor, barQuestions and followUp', () => { const s = crit[0].opts.schema, b = s.properties.blocking; return s.required.includes('blocking') && b.type === 'array' && ['criterion', 'materiality', 'repro'].every(k => b.items.required.includes(k)) && b.items.properties.materiality.enum.join() === '1,2,3' && ['minor', 'barQuestions', 'followUp'].every(k => s.properties[k] && s.properties[k].type === 'array') })
   r = await wf('gauntlet-build.js', { ...base, pieces: [{ ...piece, tdd: false }] }, win)
   await chk('build: tdd:false swaps the red and green requirement for "no testable seam"; with tdd:true the developer gets the behavior-test rule', () => only(r.calls, /^build:/)[0].prompt.includes('no testable seam') && !only(r.calls, /^build:/)[0].prompt.includes('write ONE behavior test') && devs[0].prompt.includes('write ONE behavior test') && !devs[0].prompt.includes('no testable seam'))
   r = await wf('gauntlet-build.js', { ...base, parallel: true, pieces: [piece, { ...piece, id: 'q', title: 'Q', owns: ['src/b.js'] }] }, (p, o) => o.label.startsWith('build:q:') ? Promise.reject(new Error('agent failure')) : win(p, o))
@@ -369,7 +441,7 @@ async function chk(name, f) {
 
   if (has('FRAMEWORK.md')) await chk('manual: the args example in FRAMEWORK.md (section 5, step 2) is accepted by gauntlet-build and by gauntlet-attacks', async () => {
     const ex = JSON.parse(fs.readFileSync('FRAMEWORK.md', 'utf8').match(/```json\r?\n([\s\S]*?)\r?\n```/)[1])
-    const [x, y] = [await wf('gauntlet-build.js', { ...ex, models: F }, win), await wf('gauntlet-attacks.js', { ...ex, models: F }, attImpl())]
+    const [x, y] = [await wf('gauntlet-build.js', { ...ex, models: F, mode: FJ.mode, escalation: FJ.escalation }, win), await wf('gauntlet-attacks.js', { ...ex, models: F }, attImpl())]
     return x.out.results[0].won && x.out.results[0].rounds === 1 && y.out.results.length === ex.pieces.length
   })
 
@@ -386,6 +458,7 @@ async function chk(name, f) {
   const pd = only(r.calls, /^pony:u1:/), pc = only(r.calls, /^pony-critic:/)
   await chk('ponytail: each round calls, in separate agent() calls and in this order, the developer, the critic and the panel', () => r.calls.length === 31 && r.calls.slice(0, 4).map(c => c.opts.label).join() === 'panel:seed,pony:u1:r1,pony-critic:u1:r1,panel:verdict:u1:r1' && r.calls.slice(-3).map(c => c.opts.label).join() === 'pony:u2:r2,pony-critic:u2:r2,panel:verdict:u2:r2')
   await chk('ponytail: roles use the models and effort from forge.json (developer, critic, aux); no other model', () => pd.length > 0 && pc.length > 0 && rolesOk(r.calls))
+  await chk('ponytail: the developer prompt points to .claude/briefs/dev.md and the critic prompt to .claude/briefs/critic.md', () => has('.claude/briefs/dev.md') && has('.claude/briefs/critic.md') && pd.length > 0 && pc.length > 0 && pd.every(c => c.prompt.includes('.claude/briefs/dev.md')) && pc.every(c => c.prompt.includes('.claude/briefs/critic.md')))
   await chk('ponytail: the label of the current version alternates between rounds', () => new Set(pc.map(c => /^A: .*\.gauntlet/m.test(c.prompt))).size === 2)
   await chk('ponytail: the critic is told not to consult memory, not to open FRAMEWORK.md or .claude/workflows/ (unless the context allows it) and not to edit files', () => pc.length > 0 && pc.every(veto))
   await chk('ponytail: the critic gets neither the gap nor the remaining cuts of earlier rounds', () => pc.length === 10 && pc.every(c => !/GAP-|CUT-LEFT-/.test(c.prompt)))
@@ -444,7 +517,7 @@ async function chk(name, f) {
   // CP0 only exists while BOOTSTRAP.md exists; its two json blocks are the args of step 8
   if (has('BOOTSTRAP.md')) await chk('BOOTSTRAP.md: the step 8 args are accepted by both workflows (files exist, owns disjoint, checkpoint 0 as text)', async () => {
     const [b, p] = [...fs.readFileSync('BOOTSTRAP.md', 'utf8').matchAll(/```json\r?\n([\s\S]*?)\r?\n```/g)].map(m => JSON.parse(m[1]))
-    const xb = await wf('gauntlet-build.js', { ...b, models: F }, win), xp = await wf('gauntlet-ponytail.js', { ...p, models: F }, pony), xa = await wf('gauntlet-attacks.js', { ...b, models: F }, attImpl())
+    const xb = await wf('gauntlet-build.js', { ...b, models: F, mode: FJ.mode, escalation: FJ.escalation }, win), xp = await wf('gauntlet-ponytail.js', { ...p, models: F }, pony), xa = await wf('gauntlet-attacks.js', { ...b, models: F }, attImpl())
     const owns = b.pieces.flatMap(x => x.owns)
     return xa.out.results.length === b.pieces.length && [...owns, ...p.units.flatMap(u => u.paths)].every(f => has(f)) && new Set(owns).size === owns.length && p.testCommand === 'node .claude/check.cjs'
       && [xb, xp].every(x => x.out.results.every(y => y.won) && x.calls[0].prompt.includes('"checkpoint":"0"') && !/"checkpoint":[^"]/.test(x.calls[0].prompt))

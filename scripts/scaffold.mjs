@@ -19,7 +19,7 @@ const MODES = ['rigorous', 'accelerated'];
 // The escalation rules measured in the Guild; written as they are into every forge.json (the user may tune the values there).
 const ESCALATION = {
   sameCriterionFailures: { value: 2, description: 'Rounds that may fail the same criterion before the orchestrator redesigns the mechanism instead of asking for another patch' },
-  attacksRedOnDelivery: { value: true, description: 'A delivery with any critic attack still red goes back to the developer before the critic sees it' },
+  attacksRedOnDelivery: { value: true, description: 'A Round -1 attack that is still red when the critic runs it on the delivery makes the build workflow escalate to the orchestrator' },
   minutesWithoutProgress: { value: 30, description: 'Minutes an agent may go without progress before the orchestrator wakes it' },
   visualBelowReference: { value: true, description: 'A visual result below the reference counts as a failed criterion' },
 };

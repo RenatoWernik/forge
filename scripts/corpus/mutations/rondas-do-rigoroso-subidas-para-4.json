@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "rigorous: 3, accelerated: 2",
+  "replace": "rigorous: 4, accelerated: 2",
+  "line": "build: rounds are capped by the mode: a 3rd failed round of the rigorous mode returns contract and a 2nd failed round of the accelerated mode returns maxRounds, with no round beyond the cap and the measures in metrics"
+}

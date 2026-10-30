@@ -127,6 +127,8 @@ export const contract = (id = 'pa', issue = 9101, over = {}) => ({
 export const baseArgs = (pieces, over = {}) => ({
   checkpoint: { n: 1, title: 'T' }, root: '/proj', dashboardUrl: 'https://claude.ai/artifact/x', context: 'CTX-SPEC',
   models: structuredClone(PROBE), language: 'English', memory: { workspace: 'ws', project: 'pj' }, mode: 'rigorous',
+  // F-08 (#9): gauntlet-build also refuses args without the escalation of forge.json (4 conditions, each with a value); the fixture only adds it
+  escalation: Object.fromEntries([['sameCriterionFailures', 2], ['attacksRedOnDelivery', true], ['minutesWithoutProgress', 30], ['visualBelowReference', true]].map(([k, value]) => [k, { value, description: 'probe ' + k }])),
   pieces, ...over,
 });
 
@@ -159,7 +161,9 @@ export const fakeImpl = ({ pieces = [], gapsOf = {}, failingOnBase = true, atksO
   }
   if (role === 'critic') {
     const ours = /^A: .*src\/a\.js/m.test(prompt) ? 'A' : 'B';
-    return fromSchema(opts.schema, { winner: ours, testsPass: true, blockingErrors: [], biggestGap: 'none', reasoning: 'r', model });
+    // F-08 (#9): the build critic also reports every Round -1 attack of the piece as passing on the delivery (a missing one blocks the piece); fixture only
+    const measured = (prompt.match(/as you measured it: (\[.*\])/) ? JSON.parse(prompt.match(/as you measured it: (\[.*\])/)[1]) : []).map((a) => ({ id: a.id, passesOnDelivery: true }));
+    return fromSchema(opts.schema, { winner: ours, testsPass: true, blockingErrors: [], attacks: measured, biggestGap: 'none', reasoning: 'r', model });
   }
   if (role) return fromSchema(opts.schema, { filesChanged: ['src/a.js'], testCommand: 'node --test', redEvidence: 'RED', greenEvidence: 'GREEN', model });
   return 'ok';
