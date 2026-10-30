@@ -11,7 +11,7 @@ Single checklist of CP0 (assembling the framework in {{PROJECT_NAME}}). It exist
 | 4 | `.graphifyignore` and `.gitignore` (the scaffold already wrote them); `git init -b main` (only if there is no repository yet: `graphify hook install` writes to `.git/hooks` and fails without it); `graphify hook install`; `graphify claude install` (it writes absolute paths of this machine into `.claude/settings.json`: tell the user before any commit, who may prefer to keep that file out of git) | orchestrator | `Graphify: post-commit and post-checkout hooks installed` and `git: repository and .gitignore` |
 | 5 | `memory_handoff_begin {workspace:"{{MEM_WORKSPACE}}", project:"{{MEM_PROJECT}}", summary, open_questions, next_steps, files_touched}` and restart the session at the project root (the `/speckit-*` skills only show up in a session started after `specify init`) | orchestrator, then user | the new session lists `/speckit-constitution` and shows the "pending handoff" block |
 | 6 | Type `/mattpocock-skills:setup-matt-pocock-skills`: tracker = GitHub (`{{REPO}}`); labels = default; write to the existing CLAUDE.md | user (the skill is human-only) | `Matt Pocock: /setup done` |
-| 8 | `gauntlet-build` and then `gauntlet-ponytail` (the first real test of the workflows), with the args of "Step 8" below | orchestrator | pieces `won`; Ponytail approved |
+| 8 | `gauntlet-attacks`, `gauntlet-build`, `gauntlet-batch` and then `gauntlet-ponytail` (the first real test of the four workflows), with the args of "Step 8" below | orchestrator | pieces `won`; batch `pass`; Ponytail approved |
 | 9 | Close CP0: FRAMEWORK.md section 5, steps 4 to 7, also recording the decisions below and closing the `cp0-ponytail` piece on the panel, if it exists (Ponytail uses `cp0-pt-*`); move this file to `.gauntlet/cp0/` (`mkdir -p`) before the commit | orchestrator and user | tag `cp-0` and `info  CP0: closed` |
 
 There is no step 7: the numbers 8 and 9 stay because `check.cjs` and the skills cite them.
@@ -25,9 +25,9 @@ memory_write_page {workspace:"{{MEM_WORKSPACE}}", project:"{{MEM_PROJECT}}", pat
   body:"# Project framework\nInvariants: CLAUDE.md. Script: FRAMEWORK.md. Validation: node .claude/check.cjs. Panel: {{DASHBOARD_URL}}. Git tags: cp-N. Scope: {{MEM_WORKSPACE}}/{{MEM_PROJECT}}."}
 ```
 
-## Step 8: args of the two gauntlets
+## Step 8: args of the four gauntlets
 
-Script of FRAMEWORK.md section 5, steps 2 and 3, with the objects below in `args` (JSON, never a string). Put in `root` the absolute path of the project root. CP0 has no `spec.md`, `plan.md` or `tasks.md`: the suite is `node .claude/check.cjs`; without a previous commit, compare `results[].files` with the `owns` instead of `git status`. The pieces run in sequence (the default) and in this order, because they share the suite and each document describes the previous one. The line `BOOTSTRAP.md: the step 8 args are accepted by both workflows` of `check.cjs` validates both blocks.
+Script of FRAMEWORK.md section 5, steps 2 and 3, with the objects below in `args` (JSON, never a string). Put in `root` the absolute path of the project root. CP0 has no `spec.md`, `plan.md` or `tasks.md`: the suite is `node .claude/check.cjs`; without a previous commit, compare `results[].files` with the `owns` instead of `git status`. The pieces run in sequence (the default) and in this order, because they share the suite and each document describes the previous one. The four lines `bootstrap: args: gauntlet-attacks`, `bootstrap: args: gauntlet-build`, `bootstrap: args: gauntlet-batch` and `bootstrap: args: gauntlet-ponytail` of `check.cjs` validate the three blocks below, which must stay in this order: pieces (attacks and build), batch, ponytail.
 
 Before the build, run the Round −1 with `Workflow({name:"gauntlet-attacks", args})` and the args below without `attacks`; give its `results[]` untouched as `attacks` of the build. Replace each `issue` with the number of the issue that holds the contract of the piece and write the contract fields (`objective`, `input`, `criteria`, `fails`, `outOfScope`, `env`, `output`) as the transcript of it; the values below show the format. `Workflow({name:"gauntlet-build", args})`, one piece per CP0 bar:
 
@@ -53,7 +53,22 @@ Before the build, run the Round −1 with `Workflow({name:"gauntlet-attacks", ar
             {"id":"manual","attacks":[{"id":"manual-a1","file":"tests/critico/manual-r0/a1.test.mjs","passesOnBase":false}],"failingOnBase":true,"gaps":[]}]}
 ```
 
-`Workflow({name:"gauntlet-ponytail", args})`, only after the three pieces win. Units: the two workflows (`check.cjs` is the suite, and Markdown is not code). Bar: the copy `.gauntlet/ponytail/cp0/<unit>/before`, which the developer creates in round 1, against the current version, blind; measurable target: `wc -l` of the final version below that of the copy (without a reduction, take the developer's `kept` to the user). The ledger of FRAMEWORK.md section 5, step 3, excludes `.claude/`: in CP0 run the `grep` on `.claude/workflows`.
+`Workflow({name:"gauntlet-batch", args})`, only after the three pieces win: the tester runs the suite of CP0 twice (it has no E2E) and the batch must come back with `batch.verdict` `pass`; a `regressions` entry goes back to the piece that caused it. Copy `pieces` from the build args (`id`, `title`, `owns`); the batch of CP0 has three pieces, which both modes take.
+
+```json
+{"checkpoint":{"n":0,"title":"Step 0: framework"},
+ "root":"<absolute path of the project root>",
+ "dashboardUrl":"{{DASHBOARD_URL}}",
+ "language":"{{LANGUAGE}}",
+ "models":{{MODELS_JSON}},
+ "mode":"<rigorous or accelerated, copied from .claude/forge.json>",
+ "testCommand":"node .claude/check.cjs",
+ "pieces":[{"id":"workflows","title":"Saved workflows and check.cjs","owns":[".claude/workflows/gauntlet-build.js",".claude/workflows/gauntlet-ponytail.js",".claude/check.cjs"]},
+           {"id":"study","title":"FRAMEWORK.md and BOOTSTRAP.md against the sources","owns":["FRAMEWORK.md","BOOTSTRAP.md"]},
+           {"id":"manual","title":"CLAUDE.md against the Matt Pocock model","owns":["CLAUDE.md"]}]}
+```
+
+`Workflow({name:"gauntlet-ponytail", args})`, only after the batch passes. Units: the two workflows (`check.cjs` is the suite, and Markdown is not code). Bar: the copy `.gauntlet/ponytail/cp0/<unit>/before`, which the developer creates in round 1, against the current version, blind; measurable target: `wc -l` of the final version below that of the copy (without a reduction, take the developer's `kept` to the user). The ledger of FRAMEWORK.md section 5, step 3, excludes `.claude/`: in CP0 run the `grep` on `.claude/workflows`.
 
 ```json
 {"checkpoint":{"n":0,"title":"Step 0: framework"},

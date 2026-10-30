@@ -582,14 +582,19 @@ async function chk(name, f) {
   r = await wf('gauntlet-ponytail.js', { ...u2, escalateAfter: 1 }, pony)
   await chk('ponytail: escalateAfter changes the round of the "stuck" question (1 here) and the unit goes on until approved', () => stuck(r.calls).length === 1 && stuck(r.calls)[0].opts.label.endsWith(':r1') && r.out.results[0].won && r.out.results[0].rounds === 2)
   await chk('ponytail: approved only in round 300 (901 of 1000 agents): no exit by number of rounds', () => noCap('gauntlet-ponytail.js', u1, pony))
-  // CP0 only exists while BOOTSTRAP.md exists; its two json blocks are the args of step 8
-  if (has('BOOTSTRAP.md')) await chk('BOOTSTRAP.md: the step 8 args are accepted by both workflows (files exist, owns disjoint, checkpoint 0 as text)', async () => {
-    const [b, p] = [...fs.readFileSync('BOOTSTRAP.md', 'utf8').matchAll(/```json\r?\n([\s\S]*?)\r?\n```/g)].map(m => JSON.parse(m[1]))
-    const xb = await wf('gauntlet-build.js', { ...b, models: F, mode: FJ.mode, escalation: FJ.escalation }, win), xp = await wf('gauntlet-ponytail.js', { ...p, models: F }, pony), xa = await wf('gauntlet-attacks.js', { ...b, models: F }, attImpl())
-    const owns = b.pieces.flatMap(x => x.owns)
-    return xa.out.results.length === b.pieces.length && [...owns, ...p.units.flatMap(u => u.paths)].every(f => has(f)) && new Set(owns).size === owns.length && p.testCommand === 'node .claude/check.cjs'
-      && [xb, xp].every(x => x.out.results.every(y => y.won) && x.calls[0].prompt.includes('"checkpoint":"0"') && !/"checkpoint":[^"]/.test(x.calls[0].prompt))
-  })
+  // CP0 only exists while BOOTSTRAP.md exists; its three json blocks (in this order: pieces for attacks and build, batch, ponytail) are the args of step 8, one line per workflow
+  if (has('BOOTSTRAP.md')) {
+    const blk = i => JSON.parse([...fs.readFileSync('BOOTSTRAP.md', 'utf8').matchAll(/```json\r?\n([\s\S]*?)\r?\n```/g)][i][1])
+    const ownsOk = ps => { const owns = ps.flatMap(x => x.owns); return owns.every(f => has(f)) && new Set(owns).size === owns.length }
+    const cp0 = x => x.calls[0].prompt.includes('"checkpoint":"0"') && !/"checkpoint":[^"]/.test(x.calls[0].prompt)
+    await chk('bootstrap: args: gauntlet-attacks (step 8 block of the pieces: files exist, owns disjoint, one result per piece)', async () => { const b = blk(0), x = await wf('gauntlet-attacks.js', { ...b, models: F }, attImpl()); return x.out.results.length === b.pieces.length && ownsOk(b.pieces) })
+    await chk('bootstrap: args: gauntlet-build (step 8 block of the pieces: files exist, owns disjoint, checkpoint 0 as text)', async () => { const b = blk(0), x = await wf('gauntlet-build.js', { ...b, models: F, mode: FJ.mode, escalation: FJ.escalation }, win); return x.out.results.every(y => y.won) && cp0(x) && ownsOk(b.pieces) })
+    await chk('bootstrap: args: gauntlet-batch (step 8 block of the batch: files exist, owns disjoint, the suite of CP0 twice, checkpoint 0 as text)', async () => {
+      const c = blk(1), x = await wf('gauntlet-batch.js', { ...c, models: F, mode: FJ.mode }, (p, o) => o.label === 'batch:tester' ? { runs: [1, 2].map(n => ({ kind: 'suite', command: c.testCommand, pass: n, failures: [] })), isolated: [], main: [], model: declared(T) } : 'ok')
+      return x.out.batch.verdict === 'pass' && c.testCommand === 'node .claude/check.cjs' && x.calls[0].prompt.includes('Checkpoint 0:') && ownsOk(c.pieces)
+    })
+    await chk('bootstrap: args: gauntlet-ponytail (step 8 block of the units: files exist, checkpoint 0 as text)', async () => { const p = blk(2), x = await wf('gauntlet-ponytail.js', { ...p, models: F }, pony); return x.out.results.every(y => y.won) && cp0(x) && p.units.flatMap(u => u.paths).every(f => has(f)) && p.testCommand === 'node .claude/check.cjs' })
+  }
 
   // Workflow API contract (skill workflow-authoring), proven over the simulations above: three lines per workflow
   const OPTS = ['label', 'phase', 'schema', 'model', 'effort', 'isolation', 'agentType']
