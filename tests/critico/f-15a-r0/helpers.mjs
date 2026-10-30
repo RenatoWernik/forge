@@ -86,8 +86,8 @@ export const strings = (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? 
 export const isUrl = (s) => /^https?:\/\//i.test(s);
 const listOf = (e, k) => (Array.isArray(e?.surface?.[k]) ? e.surface[k].filter((s) => typeof s === 'string' && !isUrl(s)) : []);
 export const surfaceNames = (e, bucket) => (bucket ? listOf(e, bucket) : [...listOf(e, 'skills'), ...listOf(e, 'commands')]);
-// URLs fora do campo `source` (e fora de `notes`): na forma fixada (P7) não pode haver nenhum
-export const strayUrls = (e) => strings(Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k !== 'notes' && k !== 'source'))).filter(isUrl);
+// URLs fora do campo `source` (e fora de `notes` e de `pristine`, resposta P4 da #39): na forma fixada (P7) não pode haver nenhum
+export const strayUrls = (e) => strings(Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k !== 'notes' && k !== 'source' && k !== 'pristine'))).filter(isUrl);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const hasName = (e, n, bucket) => surfaceNames(e, bucket).some((s) => s === n || new RegExp(`[:\\-./ ]${esc(n)}$`).test(s));
 
@@ -225,7 +225,7 @@ export const PERSONAL = [
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /[\w.+-]+@(?!example\.)[\w-]+\.(com|pt|br|org|net|io)\b/i,
 ];
 // Única exceção (emenda): o slug público do fork do gauntlet-loop, decidido pelo responsável. Qualquer outra ocorrência continua a reprovar.
-export const personalHits = (text) => { const t = text.replace(/renatowernik\/gauntlet-loop(?![\w.-])/gi, ''); return PERSONAL.filter((re) => re.test(t)).map(String); };
+export const personalHits = (text) => { const t = text.replace(/(?:github(?:usercontent)?\.com\/(?:repos\/)?|(?<![\w\/.-]))RenatoWernik\/(?:gauntlet-loop|forge)(?![\w.-])/gi, ''); return PERSONAL.filter((re) => re.test(t)).map(String); };
 
 // ---------- ensaio real de um comando de skill (só git local, sem rede) ----------
 export const git = (cwd, ...a) => spawnSync('git', ['-c', 'user.name=critico', '-c', 'user.email=critico@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.autocrlf=false', ...a], { cwd, encoding: 'utf8', env: sandboxEnv() });
