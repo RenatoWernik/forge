@@ -9,11 +9,10 @@
 //   escalation = sameCriterionFailures (integer, 2 or 3) and minutesWithoutProgress (integer, 1 or more), attacksRedOnDelivery and visualBelowReference (true or false), each with a description
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm'), { spawnSync } = require('node:child_process')
 process.chdir(path.join(__dirname, '..'))
-const H = os.homedir(), AIM = 'ai-memory', ENV = process.argv.includes('--env')
+const H = os.homedir(), ENV = process.argv.includes('--env')
 const sh = (exe, args, input) => spawnSync(exe, args, { input, encoding: 'utf8' })
 const out = (...a) => { const r = sh(...a); return r.error ? '' : r.stdout + r.stderr }
 const has = (...p) => fs.existsSync(path.join(...p))
-const get = url => fetch(url, { signal: AbortSignal.timeout(3000) })
 let bad = 0
 async function chk(name, f) {
   let ok = false
@@ -93,11 +92,21 @@ async function chk(name, f) {
   }
 
   if (ENV) {
-    const toml = k => (fs.readFileSync('.ai-memory.toml', 'utf8').match(new RegExp('^' + k + '\\s*=\\s*"([^"]+)"', 'm')) || [])[1]
-    const url = process.env.AI_MEMORY_URL || 'http://127.0.0.1:49374' // ponytail: default port of ai-memory, override with AI_MEMORY_URL; read the port from the ai-memory config if it ever moves
-    await chk('ai-memory: server answers at ' + url, async () => (await get(url + '/')).status > 0)
-    await chk('ai-memory: .ai-memory.toml admits capture in this project', () => out(AIM, ['hook', '--event', 'user-prompt-submit', '--agent', 'claude-code', '--server-url', url, '--check-capture'], JSON.stringify({ cwd: process.cwd().replace(/\\/g, '/') })).includes('"admits_capture":true'))
-    await chk('ai-memory: page _rules/framework.md seeded', () => sh(AIM, ['read-page', '--path', '_rules/framework.md', '--workspace', toml('workspace'), '--project', toml('project')]).status === 0)
+    // ai-memory: the binary where forge installs it, and a server that is proven to be this project's (its data dir), never just "something answers on the port"
+    let aim = null // shortcut: any load error reads as missing; upgrade: tell a broken module from an absent one
+    try { aim = require('./ai-memory.cjs') } catch (e) {}
+    const L_CAP = 'ai-memory: .ai-memory.toml admits capture in this project', L_PAGE = 'ai-memory: page _rules/framework.md seeded'
+    if (!aim) for (const n of ['ai-memory: binary', "ai-memory: server answers and is this project's", L_CAP, L_PAGE]) await chk(n + ' (.claude/ai-memory.cjs missing)', () => false)
+    else {
+      const cfg = aim.readConfig('.'), { bin, version } = aim.resolveBin({ env: process.env, home: H, run: aim.run }), ready = !!(bin && cfg.serverUrl && cfg.dataDir)
+      await chk(bin ? 'ai-memory: binary ' + bin + ' (' + version + ')' : 'ai-memory: binary not found (looked in: AI_MEMORY_BIN, PATH, %LOCALAPPDATA%/ai-memory/ai-memory.exe, ~/Applications/ai-memory/ai-memory, ~/.local/bin/ai-memory)', () => !!bin)
+      let st
+      try { st = !cfg.serverUrl || !cfg.dataDir ? { detail: '(not set up: .ai-memory.toml has no [forge] server_url and data_dir)' } : !bin ? { detail: '(no binary)' } : await aim.serverState({ serverUrl: cfg.serverUrl, dataDir: cfg.dataDir, bin, run: aim.run }) } catch (e) { st = { detail: '(error: ' + e.message + ')' } }
+      await chk("ai-memory: server answers at " + (cfg.serverUrl || '(no server url)') + " and is this project's" + (st.state === 'on' ? '' : ' ' + st.detail), () => st.state === 'on')
+      const base = ['--data-dir', cfg.dataDir]
+      await chk(L_CAP, () => { if (!ready) return false; const r = aim.run(bin, [...base, 'hook', '--event', 'user-prompt-submit', '--agent', 'claude-code', '--server-url', cfg.serverUrl, '--check-capture'], { input: JSON.stringify({ cwd: process.cwd().replace(/\\/g, '/') }) }); return (r.stdout + r.stderr).includes('"admits_capture":true') })
+      await chk(L_PAGE, () => ready && cfg.workspace && cfg.project && aim.run(bin, [...base, 'read-page', '--path', '_rules/framework.md', '--workspace', cfg.workspace, '--project', cfg.project], { env: { ...process.env, AI_MEMORY_SERVER_URL: cfg.serverUrl } }).code === 0)
+    }
     await chk('Spec-Kit: .specify/ and the /speckit-* skills installed', () => has('.specify/memory/constitution.md') && ['constitution', 'specify', 'clarify', 'plan', 'tasks', 'analyze', 'converge'].every(n => has('.claude/skills/speckit-' + n, 'SKILL.md')))
     await chk('Matt Pocock: /setup done (docs/agents/ and an "## Agent skills" block in CLAUDE.md)', () => has('docs/agents/issue-tracker.md') && fs.readFileSync('CLAUDE.md', 'utf8').includes('## Agent skills'))
     await chk('Graphify: post-commit and post-checkout hooks installed', () => { const s = out('graphify', ['hook', 'status']); return s.includes('post-commit: installed') && s.includes('post-checkout: installed') })
