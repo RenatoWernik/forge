@@ -1,7 +1,0 @@
-{
-  "base": "en-plain-published",
-  "file": ".claude/briefs/dev.md",
-  "find": "contested",
-  "replace": "disputed",
-  "line": "briefs"
-}

@@ -1,7 +1,0 @@
-{
-  "base": "en-plain-published",
-  "file": ".claude/briefs/critic.md",
-  "find": "seguimento",
-  "replace": "acompanhamento",
-  "line": "briefs"
-}
