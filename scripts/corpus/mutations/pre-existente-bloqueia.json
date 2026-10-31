@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "const hard = v.blocking.filter(b => !soft(b))",
+  "replace": "const hard = [...v.blocking, ...(v.preExisting || [])].filter(b => !soft(b))",
+  "line": "build: the PRE-EXISTING items and the followUp lines of the verdict of each round reach followUps (kind pre-existing and follow-up, with the round) in both modes, and a PRE-EXISTING item never blocks or counts as a failed criterion"
+}

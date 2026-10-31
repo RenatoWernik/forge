@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/briefs/critic.md",
+  "find": "git blame",
+  "replace": "git log",
+  "line": "briefs"
+}

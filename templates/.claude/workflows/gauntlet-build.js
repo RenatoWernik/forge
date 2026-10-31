@@ -1,7 +1,7 @@
 export const meta = {
   name: 'gauntlet-build',
   description: 'Build gauntlet: per piece, {{developer}} builds (TDD + ponytail) and {{critic}} judges blind against the bar, for the rounds the mode allows',
-  whenToUse: 'Step 2 of every checkpoint, over the pieces assembled from the Spec-Kit tasks.md. args: {checkpoint:{n,title}, root, dashboardUrl, context, mode:"rigorous"|"accelerated" (no default), escalation:{<condition>:{value}} (the 4 conditions of forge.json), vida?:{<agent or piece id>:{minutos,vida}} (computed by the orchestrator), models:{developer,developerUi?,critic,aux}, pieces:[{id,title,goal,bar,owns[],tdd,ui?,redesigns?, issue,objective,input,criteria:[{text,oracle?,command,central?}],fails,outOfScope,env,output}], attacks:[results of gauntlet-attacks], parallel?, language?, memory?}. A piece without a clean Round -1 in attacks returns blocked and never reaches the developer. Per piece it returns {id,won,rounds,stopped,criterion?,condition?,metrics:{rounds,sameCriterionFailures,attacksRedOnDelivery,minutesWithoutProgress},followUps,...}; stopped is "redesign", "contract", "escalate" or {reason:"maxRounds"}',
+  whenToUse: 'Step 2 of every checkpoint, over the pieces assembled from the Spec-Kit tasks.md. args: {checkpoint:{n,title}, root, dashboardUrl, context, mode:"rigorous"|"accelerated" (no default), escalation:{<condition>:{value}} (the 4 conditions of forge.json), vida?:{<agent or piece id>:{minutos,vida}} (computed by the orchestrator), models:{developer,developerUi?,critic,aux}, pieces:[{id,title,goal,bar,owns[],tdd,ui?,redesigns?, issue,objective,input,criteria:[{text,oracle?,command,central?}],fails,outOfScope,env,output}], attacks:[results of gauntlet-attacks], parallel?, language?, memory?}. A piece without a clean Round -1 in attacks returns blocked and never reaches the developer. Per piece it returns {id,won,rounds,stopped,criterion?,condition?,metrics:{rounds,sameCriterionFailures,attacksRedOnDelivery,minutesWithoutProgress},followUps:[{round,kind:"follow-up"|"pre-existing",description,blame?}],contested:[{finding,round,reason,criterion}],head,sha,...}; stopped is "redesign", "contract", "escalate" or {reason:"maxRounds"}',
   phases: [
     { title: 'Panel', detail: 'registers pieces and agents in the queue', model: '{{aux.model}}' },
     { title: 'Build', detail: 'developer builds, critic judges blind, rounds capped by the mode' },
@@ -144,11 +144,26 @@ const BUILD = {
     testCommand: { type: 'string', description: 'exact command that runs this piece\'s tests' },
     redEvidence: { type: 'string', description: 'command and literal output of the failure before the implementation (TDD red)' },
     greenEvidence: { type: 'string', description: 'command and literal output after the implementation (TDD green)' },
+    head: { type: 'string', pattern: '^[0-9a-f]{40}$', description: 'the commit you deliver: the output of git rev-parse HEAD' },
+    diffHash: { type: 'string', pattern: '^[0-9a-f]{64}$', description: 'the sha256 of the output of git diff <base>...HEAD, computed by you' },
+    responses: {
+      type: 'array',
+      description: 'round 1: []. From round 2: one answer to each finding of the previous round, by its id F<round>-<n>',
+      items: {
+        type: 'object',
+        properties: {
+          finding: { type: 'string', description: 'the id of the finding, F<round>-<n>' },
+          answer: { type: 'string', enum: ['fixed', 'contested'] },
+          reason: { type: 'string', description: 'required when the answer is contested: why the finding is wrong or outside the contract' },
+        },
+        required: ['finding', 'answer'],
+      },
+    },
     model: MODEL,
   },
-  required: ['filesChanged', 'testCommand', 'redEvidence', 'greenEvidence', 'model'],
+  required: ['filesChanged', 'testCommand', 'redEvidence', 'greenEvidence', 'head', 'diffHash', 'responses', 'model'],
 }
-// The verdict has the sections of .claude/briefs/critic.md: BLOCKING (each with the materiality criterion 1, 2 or 3 and the repro), MINOR, BAR QUESTIONS, FOLLOW-UP.
+// The verdict has the sections of .claude/briefs/critic.md: BLOCKING (each with the materiality criterion 1, 2 or 3 and the repro), MINOR, BAR QUESTIONS, PRE-EXISTING, FOLLOW-UP.
 const CATEGORIES = ['secret', 'security', 'data-loss', 'false-alarm', 'regression', 'no-evidence', 'criterion'] // the 6 always-fails and the plain criterion failure
 const VERDICT = {
   type: 'object',
@@ -172,7 +187,20 @@ const VERDICT = {
     },
     minor: { type: 'array', items: { type: 'string' }, description: 'MINOR: what does not block' },
     barQuestions: { type: 'array', items: { type: 'string' }, description: 'QUESTIONS TO THE BAR: an ambiguity of the contract; empty if none' },
+    preExisting: {
+      type: 'array',
+      description: 'PRE-EXISTING: a defect that git blame dates from before the base of the piece; it never blocks, unless a criterion of the contract depends on it; empty if none',
+      items: {
+        type: 'object',
+        properties: {
+          description: { type: 'string', description: 'the defect, in one sentence' },
+          blame: { type: 'string', description: 'the git blame line that dates it: <sha> <file>:<line>' },
+        },
+        required: ['description', 'blame'],
+      },
+    },
     followUp: { type: 'array', items: { type: 'string' }, description: 'FOLLOW-UP: findings outside the bar, one line each' },
+    sha: { type: 'string', pattern: '^[0-9a-f]{40}$', description: 'the commit you judged: the output of git rev-parse HEAD in the worktree of the delivery' },
     visualBelowReference: { type: 'boolean', description: 'a visual piece whose result is below the reference you compared it with; false if the piece has no visual result' },
     attacks: {
       type: 'array',
@@ -183,7 +211,7 @@ const VERDICT = {
     reasoning: { type: 'string' },
     model: MODEL,
   },
-  required: ['winner', 'testsPass', 'blocking', 'minor', 'barQuestions', 'followUp', 'visualBelowReference', 'attacks', 'biggestGap', 'reasoning', 'model'],
+  required: ['winner', 'testsPass', 'blocking', 'minor', 'barQuestions', 'preExisting', 'followUp', 'sha', 'visualBelowReference', 'attacks', 'biggestGap', 'reasoning', 'model'],
 }
 
 phase('Panel')
@@ -199,8 +227,8 @@ async function runPiece(p) {
   if (blocked) { log(`${p.id}: blocked before the developer (${blocked.reason}): ${JSON.stringify(blocked.gaps || blocked.attacks).slice(0, 200)}`); return { id: p.id, won: false, rounds: 0, blocked } }
   const pid = `cp${CP.n}-${p.id}`, short = p.title.slice(0, 40), role = devRole(p), DEV = devOf(p), CAP = ROUNDS[MODE]
   const attackIds = attacksOf(p).map(a => a.id)
-  const minutes = minutesOf(p), failed = {}, followUps = [] // failed: criterion -> rounds in which it failed (a failure moved to followUps does not count)
-  let round = 0, won = false, last = null, build = null, stopped = null, more = {}, red = 0
+  const minutes = minutesOf(p), failed = {}, followUps = [], contested = [] // failed: criterion -> rounds in which it failed (a failure moved to followUps, or a PRE-EXISTING one, does not count)
+  let round = 0, won = false, last = null, lastRound = 0, prevDiff = null, build = null, stopped = null, more = {}, red = 0 // lastRound: the round whose findings F<round>-<n> `last` holds
   const metrics = () => ({ rounds: round, sameCriterionFailures: Math.max(0, ...Object.values(failed)), attacksRedOnDelivery: red, minutesWithoutProgress: minutes })
   const stop = (why, extra = {}) => { stopped = why; more = extra; log(`${p.id} r${round}: stopped, ${typeof why === 'string' ? why : why.reason}${extra.condition ? ' (' + extra.condition + ')' : ''}${extra.criterion ? ' (' + extra.criterion + ')' : ''}`) }
   // The signals come from the orchestrator (args.vida, piece.redesigns) and from the critic's verdict, never from the developer.
@@ -211,7 +239,7 @@ async function runPiece(p) {
     const tdd = p.tdd === false
       ? 'Piece without testable logic: write "no testable seam" in redEvidence and in greenEvidence and leave an executable check if there is any logic.'
       : 'TDD (skill mattpocock-skills:tdd), one vertical slice at a time, only at plan.md seams: write ONE behavior test through the public interface; run it and capture the red (behavior failure, never import or syntax); implement the minimum; run and capture the green. The expected value comes from a literal or the spec, never recomputed the way the code does. Mock only at system boundaries (external API, database or disk when needed, time, randomness). Refactor stays outside the loop.'
-    const fb = last ? `\nROUND ${round}. Ours did not win. Biggest gap: ${last.biggestGap}\nBlocking failures of the critic (criterion, materiality, repro): ${JSON.stringify(last.blocking)}\nTests passed for the critic: ${last.testsPass}\nFix all of them, by class of inputs; do not inflate the code.` : ''
+    const fb = last ? `\nROUND ${round}. Ours did not win. Biggest gap: ${last.biggestGap}\nBlocking failures of the critic (id, criterion, materiality, repro): ${JSON.stringify(last.blocking.map((b, i) => ({ id: `F${lastRound}-${i + 1}`, ...b })))}\nTests passed for the critic: ${last.testsPass}\nFix all of them, by class of inputs; do not inflate the code. Answer each one in responses, by its id: "fixed", or "contested" with the reason.` : ''
     build = await agent(`You are the DEVELOPER of a piece in a gauntlet loop, with your own context. Read .claude/briefs/dev.md first and follow it. Project: ${ROOT}. Checkpoint ${CP.n}: ${CP.title}.
 Piece "${p.title}": ${p.goal}
 Bar (the critic compares blind against it): ${p.bar}
@@ -224,21 +252,38 @@ Rules:
 3. Ponytail full (skill ponytail): before writing, climb the ladder: must it exist? does it already exist in the code? stdlib? native? dependency already installed? one line? A deliberate shortcut gets the comment "ponytail: <ceiling>, <upgrade path>".
 4. Never cut: validation at a trust boundary, an error that prevents data loss, security, accessibility, an explicit spec requirement.
 5. Wrong spec or missing seam in plan.md: record the "${PANEL.question}" note on the panel and stop the slice; do not improvise. A test that fails twice: skill mattpocock-skills:diagnosing-bugs.
-6. Evidence is the command plus the literal output, never "the tests pass".${fb}
+6. Evidence is the command plus the literal output, never "the tests pass".
+7. Deliver a commit: head = git rev-parse HEAD; diffHash = the sha256 of git diff <base>...HEAD, with <base> the integration branch your branch was cut from. responses: [] in round 1; from round 2 one answer per finding of the previous round.${fb}
 ${panel(bid, 'Dev · ' + short, 'builder', round === 1 ? p.goal.slice(0, 160) : 'Fix: ' + last.biggestGap.slice(0, 140), pid, round, '{"status":"building"}', DEV)}`,
       { label: `build:${p.id}:r${round}`, phase: 'Build', model: DEV.model, effort: DEV.effort, schema: BUILD })
     if (!build) { stopped = 'developer without an answer (agent skipped or API error)'; log(`${p.id} r${round}: ${stopped}`); break }
     if (!modelOk(role, build)) log(`WARNING ${p.id} r${round}: the developer declared model "${build.model}", expected ${DEV.label}`)
+    // The developer answers each finding of the previous round by its id; a contested one goes to the result for the orchestrator, and the critic never sees the answer.
+    const given = Array.isArray(build.responses) ? build.responses : [] // a missing field counts as empty
+    ;(last ? last.blocking : []).forEach((b, i) => {
+      const id = `F${lastRound}-${i + 1}`, a = given.find(x => x && x.finding === id)
+      if (!a) log(`WARNING ${p.id} r${round}: no answer to ${id}`)
+      else if (a.answer === 'contested') {
+        if (blank(a.reason)) log(`WARNING ${p.id} r${round}: ${id} contested without a reason`) // shortcut: the schema cannot require reason only when contested; upgrade: if/then in the schema if the runtime accepts it
+        contested.push({ finding: id, round: lastRound, reason: String(a.reason ?? ''), criterion: b.criterion })
+      }
+    })
+    // The same diff as the previous round (both hashes valid and equal) means nothing was fixed: the critic is not rerun and the round counts as failed with the previous verdict.
+    const HASH = /^[0-9a-f]{64}$/
+    const unchanged = last !== null && HASH.test(build.diffHash) && HASH.test(prevDiff) && build.diffHash === prevDiff
+    prevDiff = build.diffHash
 
     const ours = oursIsA(pid + ':' + round)
     const OURS = `${JSON.stringify(build.filesChanged)} (declared test command: ${build.testCommand})`
     // From round 2 the critic gets the failures that the critic of the previous round listed (its own verdict), never anything the developer wrote.
     const prior = last && last.blocking.length ? `\nRound ${round}: check only the failures that the critic of the previous round listed (criterion, materiality, repro) and the regressions of the new diff. Verify each one yourself, they are claims: ${JSON.stringify(last.blocking)}` : ''
-    const v = await agent(`You are a HARSH CRITIC in a gauntlet loop, with a fresh context: you do not know how much effort went in or what the developer thought. Read .claude/briefs/critic.md first and follow it. Praise is worthless, there is no numeric grade and you edit no file.
+    if (unchanged) log(`${p.id} r${round}: diff unchanged since r${round - 1}, critic not rerun`)
+    const v = unchanged ? last : await agent(`You are a HARSH CRITIC in a gauntlet loop, with a fresh context: you do not know how much effort went in or what the developer thought. Read .claude/briefs/critic.md first and follow it. Praise is worthless, there is no numeric grade and you edit no file.
 Project: ${ROOT}. Piece "${p.title}": ${p.goal}
 Contract: issue #${p.issue}, read with gh issue view ${p.issue} --json body,comments (the body, the orchestrator's comments and the critics' comments only: the developer's Round 0 comment is never part of the contract)
 Spec, plan, tasks and test command: ${CTX}
 Files the piece may change: ${JSON.stringify(p.owns)}
+Delivery: the commit ${typeof build.head === 'string' ? build.head : '(none declared)'}. Judge that commit: in the worktree of the delivery read it with git rev-parse HEAD and return it in sha.
 Two candidates, labeled blind (judge only by content, not origin):
 A: ${ours ? OURS : p.bar}
 B: ${ours ? p.bar : OURS}
@@ -249,7 +294,7 @@ Method:
 3. Check coverage: every behavior of the goal (T### and FR###, per spec.md and tasks.md) needs a test through the public interface.
 4. Do not consult memory about this piece (ai-memory memory_*; the graph, Read and Grep are allowed), and do not open FRAMEWORK.md or .claude/workflows/ (the label definitions live there), unless the context above allows it: the developer's history would contaminate the judgment.
 5. Run every Round -1 attack on the delivered code, in the foreground, and report each one in attacks with passesOnDelivery as you measured it: ${JSON.stringify(attacksOf(p).map(a => ({ id: a.id, file: a.file })))}
-6. Apply the materiality test of the brief to each failure. List in blocking only what meets it, each with the criterion (C<n>, the position in the contract), the materiality (1, 2 or 3) and the repro; the rest goes to minor, barQuestions or followUp. For a piece with a visual result, set visualBelowReference when it is below the reference.
+6. Apply the materiality test of the brief to each failure. List in blocking only what meets it, each with the criterion (C<n>, the position in the contract), the materiality (1, 2 or 3) and the repro; the rest goes to minor, barQuestions or followUp. A defect that git blame dates from before the base of the piece is PRE-EXISTING: it never blocks, unless a criterion of the contract depends on it; list it in preExisting with its description and the git blame line that dates it (<sha> <file>:<line>). For a piece with a visual result, set visualBelowReference when it is below the reference.
 Blocking failures (the project code loses even if it wins the comparison): a test that fails on your run; a fake red or green, or a test that does not prove behavior through the public interface (tautological, coupled to the implementation, a mock of an own module); a spec behavior without a test; a file changed outside the allowed ones; complexity that Ponytail would cut (speculative abstraction, unnecessary dependency, reinvented stdlib); unreachable bar.${prior}
 Developer evidence: red: ${cap(build.redEvidence, 3000, `${p.id} r${round} red`)} | green: ${cap(build.greenEvidence, 3000, `${p.id} r${round} green`)}
 Return the winner and, in biggestGap, the BIGGEST remaining gap in the project code, actionable, in one sentence.
@@ -258,19 +303,30 @@ ${panel(cid, 'Critic · ' + short, 'critic', `Round ${round}: judge blind agains
     if (!v) { stopped = 'critic without an answer (agent skipped or API error)'; log(`${p.id} r${round}: ${stopped}`); break }
     if (!modelOk('critic', v)) log(`WARNING ${p.id} r${round}: the critic declared model "${v.model}", expected ${R.critic.label}`)
     last = v
+    lastRound = round
 
     // The accelerated mode, in its last round, moves to followUps a failure that is not an always-fail (materiality 1 or a category) and not a criterion marked central; an unknown criterion stays blocking.
+    // A round without a new verdict (unchanged diff) moves nothing: the critic kept the failure and the developer did not change the code.
     const critKey = c => { const s = String(c).trim().toUpperCase(), m = /^C0*(\d+)$/.exec(s); return m ? 'C' + m[1] : s } // C01, c1 and C001 are the criterion C1
     const at = b => { const m = /^C(\d+)$/i.exec(String(b.criterion).trim()); return m ? p.criteria[m[1] - 1] : undefined }
-    const soft = b => MODE === 'accelerated' && round >= CAP && Number(b.materiality) !== 1 && (!b.category || b.category === 'criterion') && at(b) && at(b).central !== true
+    const soft = b => !unchanged && MODE === 'accelerated' && round >= CAP && Number(b.materiality) !== 1 && (!b.category || b.category === 'criterion') && at(b) && at(b).central !== true
     const hard = v.blocking.filter(b => !soft(b))
-    followUps.push(...v.blocking.filter(soft).map(b => ({ round, ...b })))
-    won = v.winner === (ours ? 'A' : 'B') && v.testsPass && hard.length === 0
+    if (!unchanged) {
+      followUps.push(...v.blocking.filter(soft).map(b => ({ round, ...b })))
+      // The lines outside the bar, and the defects that git blame dates from before the piece, go to the orchestrator; neither blocks nor counts as a failed criterion.
+      followUps.push(...(Array.isArray(v.followUp) ? v.followUp : []).map(description => ({ round, kind: 'follow-up', description })))
+      followUps.push(...(Array.isArray(v.preExisting) ? v.preExisting : []).filter(x => x && typeof x === 'object').map(x => ({ round, kind: 'pre-existing', description: x.description, blame: x.blame })))
+    }
+    // The verdict is for one commit: a sha that is not the delivered head never wins (a field missing in either side, as in the fake runtimes of the old attacks, is not compared).
+    const wrongSha = !unchanged && typeof build.head === 'string' && typeof v.sha === 'string' && build.head !== v.sha
+    if (wrongSha) log(`WARNING ${p.id} r${round}: the verdict is for ${v.sha} but the delivery is ${build.head}`)
+    won = !wrongSha && v.winner === (ours ? 'A' : 'B') && v.testsPass && hard.length === 0 && !unchanged
     // Attacks on delivery, measured by the critic one by one (passesOnDelivery, a boolean). Every Round -1 attack of the piece must be reported: a missing or non-boolean result leaves the
     // piece blocked with {reason:"gaps"} (it fails closed, like passesOnBase at the gate); an id that is not one of the piece's is ignored. Red = reported false.
+    // An unchanged round has no new report: it keeps what the earlier verdict reported.
     const reported = id => (Array.isArray(v.attacks) ? v.attacks : []).filter(a => a && a.id === id)
-    const gaps = attackIds.filter(id => !reported(id).some(a => typeof a.passesOnDelivery === 'boolean'))
-    red = attackIds.filter(id => reported(id).some(a => a.passesOnDelivery === false)).length
+    const gaps = unchanged ? [] : attackIds.filter(id => !reported(id).some(a => typeof a.passesOnDelivery === 'boolean'))
+    if (!unchanged) red = attackIds.filter(id => reported(id).some(a => a.passesOnDelivery === false)).length
     if (gaps.length) { won = false; more = { blocked: { reason: 'gaps', gaps: gaps.map(id => `attack ${id}: the critic did not report passesOnDelivery (true or false) on the delivery`) } }; log(`${p.id} r${round}: blocked (gaps): ${gaps.join(', ')}`) }
     else if (ESC.attacksRedOnDelivery.value && red > 0) { won = false; stop('escalate', { condition: 'attacksRedOnDelivery' }) }
     else if (ESC.visualBelowReference.value && v.visualBelowReference === true) { won = false; stop('escalate', { condition: 'visualBelowReference' }) }
@@ -289,7 +345,7 @@ ${panel(cid, 'Critic · ' + short, 'critic', `Round ${round}: judge blind agains
     await aux(verdict(p, pid, cid, round, won, v), `panel:verdict:${p.id}:r${round}`, 'Build')
     if (more.blocked) break
   }
-  return { id: p.id, won, rounds: round, stopped, ...more, metrics: metrics(), followUps, files: build && build.filesChanged, testCommand: build && build.testCommand, models: { builder: build && build.model, critic: last && last.model }, lastVerdict: last }
+  return { id: p.id, won, rounds: round, stopped, ...more, metrics: metrics(), followUps, contested, head: build && build.head, sha: last && last.sha, files: build && build.filesChanged, testCommand: build && build.testCommand, models: { builder: build && build.model, critic: last && last.model }, lastVerdict: last }
 }
 
 phase('Build')

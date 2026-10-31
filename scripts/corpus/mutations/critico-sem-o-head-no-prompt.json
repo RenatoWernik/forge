@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "Delivery: the commit ${typeof build.head === 'string' ? build.head : '(none declared)'}.",
+  "replace": "Delivery: the commit.",
+  "line": "build: the verdict is tied to the commit: a sha other than the delivered head never wins and log() says so, the critic is told the head of its round and to read the sha with git rev-parse HEAD, the result has head and sha, and the schemas require head, diffHash and sha"
+}
