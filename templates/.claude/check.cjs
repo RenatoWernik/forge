@@ -105,6 +105,15 @@ async function chk(name, f) {
       await chk("ai-memory: server answers at " + (cfg.serverUrl || '(no server url)') + " and is this project's" + (st.state === 'on' ? '' : ' ' + st.detail), () => st.state === 'on')
       const base = ['--data-dir', cfg.dataDir]
       await chk(L_CAP, () => { if (!ready) return false; const r = aim.run(bin, [...base, 'hook', '--event', 'user-prompt-submit', '--agent', 'claude-code', '--server-url', cfg.serverUrl, '--check-capture'], { input: JSON.stringify({ cwd: process.cwd().replace(/\\/g, '/') }) }); return (r.stdout + r.stderr).includes('"admits_capture":true') })
+      await chk('ai-memory: the 9 capture hooks and enabledMcpjsonServers in .claude/settings.local.json, the MCP server in .mcp.json, all three files in .gitignore (memoria.mjs --apply)', () => {
+        const rd = f => JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, '')), s = rd('.claude/settings.local.json'), g = fs.readFileSync('.gitignore', 'utf8'), fw = p => String(p).replace(/\\/g, '/').toLowerCase()
+        const after = (a, k) => a[a.indexOf(k) + 1] // the hooks and the MCP server must point at the url and the data dir of the [forge] table, the bind of config.toml at its port
+        const mine = ev => (s.hooks[ev] || []).flatMap(x => x.hooks || []).some(h => { const a = h.args || []; return a.includes('hook') && fw(after(a, '--data-dir')) === fw(cfg.dataDir) && after(a, '--server-url') === cfg.serverUrl })
+        const mcp = (rd('.mcp.json').mcpServers || {})['ai-memory'], bind = fs.readFileSync(path.join(cfg.dataDir, 'config.toml'), 'utf8').split(/\r?\n/).filter(l => /^\s*bind\s*=/.test(l)).map(l => l.replace(/\s/g, ''))
+        return !!cfg.dataDir && !!cfg.serverUrl && ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PreCompact', 'Stop', 'SessionEnd', 'SubagentStart', 'SubagentStop'].every(mine) && s.enabledMcpjsonServers.includes('ai-memory')
+          && !!mcp && after(mcp.args || [], '--server-url') === cfg.serverUrl + '/mcp' && fw(after(mcp.args || [], '--data-dir')) === fw(cfg.dataDir)
+          && bind.length === 1 && bind[0] === 'bind="' + new URL(cfg.serverUrl).host + '"' && ['.claude/settings.local.json', '.mcp.json', '.ai-memory.local.toml'].every(r => aim.isIgnored(g, r))
+      })
       await chk(L_PAGE, () => ready && cfg.workspace && cfg.project && aim.run(bin, [...base, 'read-page', '--path', '_rules/framework.md', '--workspace', cfg.workspace, '--project', cfg.project], { env: { ...process.env, AI_MEMORY_SERVER_URL: cfg.serverUrl } }).code === 0)
     }
     await chk('Spec-Kit: .specify/ and the /speckit-* skills installed', () => has('.specify/memory/constitution.md') && ['constitution', 'specify', 'clarify', 'plan', 'tasks', 'analyze', 'converge'].every(n => has('.claude/skills/speckit-' + n, 'SKILL.md')))
