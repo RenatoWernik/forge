@@ -32,6 +32,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     '.ai-memory.toml',
     '.checkpoints/README.md',
     '.checkpoints/painel.json',
+    '.claude/ai-memory.cjs',
     '.claude/briefs/batch.md',
     '.claude/briefs/critic.md',
     '.claude/briefs/dev.md',
