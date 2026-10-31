@@ -1,6 +1,7 @@
 // Ronda −1 do F-20c (#72), C1: o texto da pergunta do arranque automático (A4) em skills/new-project/SKILL.md.
 // Oráculo: as contagens (o bloco 1×, byte a byte, a frase 1× e o comando 1×) e a ordem (o bloco antes do comando), no passo da memória do F-20b
-// (entre o «## 5.» e o «## 7.»). O comando --autostart é o único «memoria.mjs --apply» do ficheiro, como o C6 do F-20b exige.
+// (entre o «## 5.» e o «## 7.»). Respostas do orquestrador na #72: o bloco não leva os «> » da citação, e o comando é o do F-20b, com o caminho
+// absoluto do projeto (o --dest . não se usa).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
@@ -18,10 +19,11 @@ test('C1 a frase «Ask it in the user\'s language, and wait for the answer: a mi
   assert.equal(conta(ler(), FRASE_C1), 1);
 });
 
-test('C1 o comando «memoria.mjs --apply --dest . --autostart yes|no» aparece uma vez e é o único memoria.mjs --apply', () => {
+test('C1 o comando «node "${CLAUDE_PLUGIN_ROOT}/scripts/memoria.mjs" --apply --dest "<project folder>" --autostart yes|no» aparece uma vez; nenhum --apply com --dest .', () => {
   const t = ler();
   assert.equal(conta(t, COMANDO_C1), 1, 'o comando --autostart');
-  assert.equal(conta(t, 'memoria.mjs --apply'), 1, 'outro memoria.mjs --apply no ficheiro (o C6 do F-20b quer um só)');
+  assert.equal(conta(t, '--autostart yes|no'), 1, 'outro comando --autostart no ficheiro');
+  assert.ok(!/memoria\.mjs"? --apply --dest \.(\s|$)/m.test(t), 'um memoria.mjs --apply --dest . (o orquestrador fixou o caminho absoluto do projeto)');
 });
 
 test('C1 o bloco aparece antes do comando, no passo da memória (entre o ## 5. e o ## 7.)', () => {

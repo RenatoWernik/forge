@@ -6,7 +6,7 @@
 // - o `check.cjs --env` corre com o espião deste pacote (espiao.mjs), que força a plataforma e deixa só o git correr de verdade;
 // - HOME, APPDATA, LOCALAPPDATA, XDG_CONFIG_HOME e XDG_DATA_HOME são pastas temporárias, com espaços nos caminhos, um `%` no linux e um `&` no macOS.
 //
-// LEITURA DO CONTRATO (#72, sem comentários à data, 2026-10-31, mais as respostas do orquestrador na #71: a `[forge]` vive no `.ai-memory.local.toml`):
+// LEITURA DO CONTRATO (#72 com as respostas do orquestrador de 2026-10-31T21:09Z, vinculativas, mais as respostas do orquestrador na #71: a `[forge]` vive no `.ai-memory.local.toml`):
 // - `memoria.mjs --apply --dest <projeto> --autostart yes|no`, pelo seam do F-20b: `main(argv, sys, write)`, com `sys.platform`, `sys.env` e `sys.home`;
 // - o `<uid>` do macOS vem de `sys.run('id', ['-u'])`; os comandos de arranque passam pelo `sys.run`;
 // - os textos entre aspas abaixo são LITERAIS, copiados do corpo da issue.
@@ -26,9 +26,10 @@ export const BASE = 'ce112a2'; // a branch do F-20b (só os ataques dele) de ond
 export const PLATAFORMAS = ['win32', 'linux', 'darwin'];
 
 // C1
-export const BLOCO_C1 = "> **Start this project's memory with the system?** ai-memory is this project's long-term memory. It hands the baton from one session to the next, so a new session starts where the last one stopped; it remembers the decisions and lessons already learned; it lets the work resume after a quota or context cut; and Claude and Codex share it. It captures and answers only while its server is running.\n> - **Yes**: forge adds a startup entry for this project's server only (Windows: a `.vbs` file in your Startup folder, without administrator rights; Linux: a systemd user unit; macOS: a LaunchAgent). The server then starts hidden at every logon and stays in the background, using a little memory.\n> - **No**: nothing starts with the system. You start the server when you need it with `node .claude/start-ai-memory.mjs`, and every session start says whether it is on and how to start it. While it is off, nothing is captured and the baton does not arrive.\n> Either way the memory of this project is set up correctly, and you can change the answer later by running this step again.";
+// o bloco sem os «> » da citação da issue (resposta do orquestrador na #72)
+export const BLOCO_C1 = "**Start this project's memory with the system?** ai-memory is this project's long-term memory. It hands the baton from one session to the next, so a new session starts where the last one stopped; it remembers the decisions and lessons already learned; it lets the work resume after a quota or context cut; and Claude and Codex share it. It captures and answers only while its server is running.\n- **Yes**: forge adds a startup entry for this project's server only (Windows: a `.vbs` file in your Startup folder, without administrator rights; Linux: a systemd user unit; macOS: a LaunchAgent). The server then starts hidden at every logon and stays in the background, using a little memory.\n- **No**: nothing starts with the system. You start the server when you need it with `node .claude/start-ai-memory.mjs`, and every session start says whether it is on and how to start it. While it is off, nothing is captured and the baton does not arrive.\nEither way the memory of this project is set up correctly, and you can change the answer later by running this step again.";
 export const FRASE_C1 = "Ask it in the user's language, and wait for the answer: a missing answer is not a yes.";
-export const COMANDO_C1 = 'memoria.mjs --apply --dest . --autostart yes|no';
+export const COMANDO_C1 = 'node "${CLAUDE_PLUGIN_ROOT}/scripts/memoria.mjs" --apply --dest "<project folder>" --autostart yes|no'; // resposta do orquestrador na #72
 // C2, C3: o nome exato da entrada deste projeto (W = acme, P = billing)
 export const ENTRADA = { win32: `forge-ai-memory-${W}--${P}.vbs`, linux: `forge-ai-memory-${W}--${P}.service`, darwin: `com.forge.ai-memory.${W}.${P}.plist` };
 export const UNIT = ENTRADA.linux, LABEL = `com.forge.ai-memory.${W}.${P}`, UID = '501';
