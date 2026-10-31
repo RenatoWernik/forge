@@ -14,7 +14,7 @@
 - PREVENTION: check
 - PREVENTION-PATH: scripts/port-check.mjs
 - FAILS: closed
-- REGRESSION: C:/Windows/win.ini
+- REGRESSION: \\share\port-regression.test.mjs
 - CLEAN-CASE: tests/learn/port-clean.test.mjs
 - AREA: tests/**, src/net/*.js
 - SCOPE: project

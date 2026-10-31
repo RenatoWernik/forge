@@ -118,6 +118,23 @@ test('history: a line that only grows at its end, a removed entry and a missing 
   assert.equal(validate([], { headTexts: { '2026-10.md': head }, texts: {} }).fails.length, 1);
 });
 
+test('a path with a drive letter is absolute, whatever the letter and the separator', () => {
+  const entry = (path) => parse(`# Learnings 2026-10\n\n## E-001\n- REGRESSION: ${path}\n`, '2026-10.md').entries;
+  for (const p of ['C' + ':/x.md', 'd' + ':\\x.md']) assert.ok(validate(entry(p)).fails.some((f) => f.message.startsWith('E-001 REGRESSION: an absolute path')), p);
+});
+
+test('parse: the first line must be "# Learnings YYYY-MM" of the file name, and an expect comment before it does not count', () => {
+  assert.equal(parse('# Learnings 2026-11\n', '2026-10.md').problems.length, 1);
+  assert.equal(parse('## E-001\n', '2026-10.md').problems.length, 1);
+  assert.equal(parse('<!-- expect: x -->\n\n# Learnings 2026-10\n', '2026-10.md').problems.length, 0);
+});
+
+test('validate fails closed: without an exists function every path of a test/hook/check entry does not exist', () => {
+  const e = parse(`# Learnings 2026-10\n\n## E-001\n- PREVENTION: test\n- PREVENTION-PATH: tests/x.test.mjs\n`, '2026-10.md').entries;
+  assert.ok(validate(e).fails.some((f) => f.message.startsWith('E-001 PREVENTION-PATH: tests/x.test.mjs does not exist')));
+  assert.ok(!validate(e, { exists: () => true }).fails.some((f) => f.message.startsWith('E-001 PREVENTION-PATH')));
+});
+
 test('parse: CRLF, a BOM and a heading that is not an entry', () => {
   const p = parse('﻿<!-- expect: x -->\r\n# Learnings 2026-10\r\n\r\n## Notes\r\n- DATE: ignored\r\n## E-001\r\n- DATE: 2026-10-20\r\n', '2026-10.md');
   assert.deepEqual(p.problems, []);

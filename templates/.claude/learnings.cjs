@@ -2,7 +2,7 @@
 // check.cjs runs it; the learn command of forge reuses it.
 //   parse(text, file)  -> { file, entries, problems }   file = the base name (2026-10.md); entry = { id, n, file, line, fields: [[KEY, value], ...] }; problems = what is wrong with the file itself (name, title)
 //   validate(entries, { today, exists, headTexts, texts }) -> { fails, warns }   entries = the entries of every file
-//     today = 'YYYY-MM-DD' (the clock; without it no warning of a past REVIEW-BY), exists = path => boolean (the repository), headTexts and texts = { 'YYYY-MM.md': text } at git HEAD and now (without headTexts, the history is not checked)
+//     today = 'YYYY-MM-DD' (the clock; without it no warning of a past REVIEW-BY), exists = path => boolean (the repository; without it every path "does not exist"), headTexts and texts = { 'YYYY-MM.md': text } at git HEAD and now (without headTexts, the history is not checked)
 //     an item = { id, field, message, kind }; message starts with '<id> <field>: '; kind = 'form' | 'grow' for a fail, 'review-by' | 'recurred-test' for a warning
 const FIELDS = ['DATE', 'TRIGGER', 'DETECTED-BY', 'SYMPTOM', 'CLASS', 'CAUSE', 'CAUSE-OWNER', 'FAILED-LAYER', 'MISSING-CONTEXT', 'PREVENTION', 'PREVENTION-PATH', 'FAILS', 'REGRESSION', 'CLEAN-CASE', 'AREA', 'SCOPE', 'REVIEW-BY', 'APPROVED', 'STATUS']
 const ENUMS = {
@@ -39,7 +39,7 @@ function parse(text, file) {
 // the lines of a register text with the STATUS lines out and the trailing blank lines cut: the part of a file that may never change
 const frozen = t => { const l = lf(t).split('\n').filter(x => !x.startsWith('- STATUS:')); while (l.length && !l[l.length - 1].trim()) l.pop(); return l }
 
-function validate(entries, { today, exists = () => true, headTexts, texts = {} } = {}) {
+function validate(entries, { today, exists = () => false, headTexts, texts = {} } = {}) {
   const fails = [], warns = []
   const bad = (e, field, why) => fails.push({ id: e.id, field, kind: 'form', message: e.id + ' ' + field + ': ' + why })
   const good = entries.map(e => {
