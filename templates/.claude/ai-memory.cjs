@@ -82,7 +82,7 @@ async function serverState({ serverUrl, dataDir, bin, platform = process.platfor
 // Only this project's file is ever named: forge-ai-memory-<W>--<P>.vbs (Windows Startup folder), forge-ai-memory-<W>--<P>.service (systemd user unit),
 // com.forge.ai-memory.<W>.<P>.plist (LaunchAgent). shortcut: a path outside ASCII is written as it is (wscript reads ANSI); upgrade: UTF-16 for the .vbs
 const XML = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-const ESC = { win32: s => s, linux: s => s.replace(/%/g, '%%'), darwin: XML }
+const ESC = { win32: s => s, linux: s => s.replace(/%/g, '%%').replace(/\$/g, '$$$$'), darwin: XML } // systemd reads % and $ in ExecStart; shortcut: a backslash in a Linux path is not escaped
 // a value as it stands in the entry, between the marks that end it; the check looks for it that way, so /x/ai-memory never matches /x/ai-memory2
 const WRAP = { win32: s => '""' + s + '""', linux: s => '"' + s + '"', darwin: s => '<string>' + s + '</string>' }
 

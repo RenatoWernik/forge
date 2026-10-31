@@ -123,10 +123,10 @@ Run `node .claude/check.cjs`. Its `language` line reads the language from `.clau
 
 ### Set up the ai-memory of the project
 
-The memory of this project gets its own data directory and its own port, so another project (or the user's own ai-memory) can never mix with it. Use the absolute path of the project as `--dest`. First read the plan; it writes nothing:
+The memory of this project gets its own data directory and its own port, so another project (or the user's own ai-memory) can never mix with it. Run the script from the scripts folder of this plugin (`cd "${CLAUDE_PLUGIN_ROOT}/scripts"`), with the absolute path of the project as `--dest`. First read the plan; it writes nothing:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/memoria.mjs" --plan --dest "<project folder>"
+node memoria.mjs --plan --dest "<project folder>"
 ```
 
 It prints JSON. Show the user what `outside` lists (it lands outside the project: the data directory, a line in its `config.toml`, a hidden server) and what `inside` lists (only files git ignores: `.ai-memory.local.toml`, `.claude/settings.local.json`, `.mcp.json`). If the plan fails with `ai-memory not found`, go back to step 1 and install ai-memory first. Otherwise ask the yes of the user to set it up, and ask this question too:
