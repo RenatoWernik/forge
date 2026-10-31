@@ -2,12 +2,12 @@
 // Oráculo: um repositório git temporário real e um graph.json escrito pelo teste, nos 5 casos da tabela, mais o JSON inválido (`(unreadable)`).
 // O que reprova sempre: um `ok` falso. Classes atacadas: built_at_commit que é só um prefixo do HEAD, o sha do HEAD noutro campo, o campo ausente,
 // JSON válido que não é um objeto, graph.json que é uma pasta, um commit novo depois do grafo. O check nunca reconstrói o grafo (só `hook status`).
-// Leitura: o <x> do stale quando built_at_commit é null não está no contrato (PERGUNTA na issue): esse caso só fixa o resto da linha.
+// Resposta do orquestrador na #73: com built_at_commit null, o <x> do stale é «no commit» (o mesmo texto do C1).
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { L_FRESCA, L_HOOKS, D_MISSING, D_NO_COMMIT, D_STALE, D_UNREADABLE, caixa, apaga, checkEnv, linhasCom, repo, git, grafoJson, grafoDe, STACK } from './helpers.mjs';
+import { NO_COMMIT, L_FRESCA, L_HOOKS, D_MISSING, D_NO_COMMIT, D_STALE, D_UNREADABLE, caixa, apaga, checkEnv, linhasCom, repo, git, grafoJson, grafoDe, STACK } from './helpers.mjs';
 
 const lixo = [];
 after(() => lixo.forEach(apaga));
@@ -55,12 +55,10 @@ test('C3 com commit e built_at_commit != HEAD: FAIL com «(stale: built at <x>, 
   assert.equal(frescura(p).l, FAIL(D_STALE(OUTRO, head(p))));
 });
 
-test('C3 com commit e built_at_commit null: FAIL stale, «HEAD is <sha>; run node .claude/graph.mjs update)»', async () => {
+test('C3 com commit e built_at_commit null: FAIL com «(stale: built at no commit, HEAD is <sha>; run node .claude/graph.mjs update)»', async () => {
   const p = await repo(lixo, 1);
   grafoJson(p, grafoDe(null));
-  const { l } = frescura(p);
-  const fim = `, HEAD is ${head(p)}; run node .claude/graph.mjs update)`;
-  assert.ok(l.startsWith('FAIL  ' + L_FRESCA + ' (stale: built at ') && l.endsWith(fim), l);
+  assert.equal(frescura(p).l, FAIL(D_STALE(NO_COMMIT, head(p))));
 });
 
 test('C3 graph.json com JSON inválido: FAIL com «(unreadable)», nunca ok', async () => {
