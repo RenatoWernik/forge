@@ -54,6 +54,32 @@ for (const [valor, rep, estado] of CASOS) {
   });
 }
 
+// 6548062958: o readConfig lê o .ai-memory.toml e o .ai-memory.local.toml, e o local prevalece
+const doisToml = (versionado, local) => {
+  const d = mkdtempSync(join(tmpdir(), 'critico-f20b-toml2-'));
+  limpar.push(() => apaga(d));
+  writeFileSync(join(d, '.ai-memory.toml'), versionado);
+  if (local !== null) writeFileSync(join(d, '.ai-memory.local.toml'), local);
+  return d;
+};
+test('6548062958 readConfig: workspace e project do .ai-memory.toml, a [forge] só no .ai-memory.local.toml', () => {
+  const { readConfig } = carregaModulo();
+  const cfg = readConfig(doisToml('workspace = "w"\nproject = "p"\n\n[capture]\nignore_paths = []\n', '[forge]\nserver_url = "http://127.0.0.1:5"\ndata_dir = "C:/l/data"\n'));
+  assert.deepEqual([cfg.workspace, cfg.project, cfg.serverUrl, cfg.dataDir], ['w', 'p', 'http://127.0.0.1:5', 'C:/l/data']);
+});
+test('6548062958 readConfig: com [forge] nos dois, o local prevalece; sem o local, vale a do versionado', () => {
+  const { readConfig } = carregaModulo();
+  const v = 'workspace = "w"\nproject = "p"\n\n[forge]\nserver_url = "http://127.0.0.1:4"\ndata_dir = "C:/v/data"\n';
+  const a = readConfig(doisToml(v, '[forge]\nserver_url = "http://127.0.0.1:5"\ndata_dir = "C:/l/data"\n'));
+  assert.deepEqual([a.workspace, a.project, a.serverUrl, a.dataDir], ['w', 'p', 'http://127.0.0.1:5', 'C:/l/data']);
+  const b = readConfig(doisToml(v, null));
+  assert.deepEqual([b.serverUrl, b.dataDir], ['http://127.0.0.1:4', 'C:/v/data']);
+});
+test('6548062958 + #83 readConfig: a string literal no .ai-memory.local.toml', () => {
+  const { readConfig } = carregaModulo();
+  const cfg = readConfig(doisToml('workspace = "w"\nproject = "p"\n', "[forge]\nserver_url = 'http://127.0.0.1:5'\ndata_dir = 'C:\\l\\data'\n"));
+  assert.equal(cfg.dataDir, 'C:\\l\\data');
+});
 test('#83 ciclo: o data_dir que o --apply escreve na [forge] volta igual pelo readConfig', async () => {
   const sb = caixa(), proj = await projeto(), f = sysFalso(sb);
   limpar.push(f.fecha, () => apaga(sb.dir), () => apaga(proj));

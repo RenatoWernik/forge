@@ -7,7 +7,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import {
   ROOT, MEMORIA, PROIBIDAS, NOME, VERSAO, CONFIG_INICIAL, caixa, dataDirWin, instantaneo, sysFalso, plano, aplica, projeto, le, escreve, forge, fwd,
-  mesmoCaminho, apaga, servidorFalso, portaLivre,
+  mesmoCaminho, apaga, servidorFalso, portaLivre, TOML_LOCAL, ignorado,
 } from './helpers.mjs';
 
 const limpar = [];
@@ -103,10 +103,10 @@ test('C1 porta: com várias portas ocupadas, a escolhida estava livre no momento
   const s = await servidorFalso(r.json.port); await s.fecha(); // estava livre: dá para a ocupar
 });
 
-test('C1 com a [forge] já existente, o plano reutiliza a porta e o data-dir dela', async () => {
+test('C1 com a [forge] já existente no .ai-memory.local.toml, o plano reutiliza a porta e o data-dir dela', async () => {
   const c = await cenario();
   const port = await portaLivre(), dd = fwd(join(c.sb.dir, 'outro-data-dir'));
-  escreve(c.proj, '.ai-memory.toml', le(c.proj, '.ai-memory.toml').replace(/\s*$/, '\n') + `\n[forge]\nserver_url = "http://127.0.0.1:${port}"\ndata_dir = "${dd}"\n`);
+  escreve(c.proj, TOML_LOCAL, `[forge]\nserver_url = "http://127.0.0.1:${port}"\ndata_dir = "${dd}"\n`);
   const r = await plano(c.proj, c.sys);
   assert.equal(r.code, 0, r.out);
   assert.equal(r.json.port, port);
@@ -114,12 +114,27 @@ test('C1 com a [forge] já existente, o plano reutiliza a porta e o data-dir del
   assert.ok(mesmoCaminho(r.json.dataDir, dd), r.json.dataDir);
 });
 
-test('C1 --apply: init uma só vez (e sem --force) em dois --apply; a [forge] com server_url e data_dir em /; uma só linha bind no config.toml', async () => {
+test('C1 [forge] nos dois ficheiros: o plano usa a do .ai-memory.local.toml (o local prevalece)', async () => {
   const c = await cenario();
+  const pv = await portaLivre(), pl = await portaLivre();
+  const dv = fwd(join(c.sb.dir, 'dd-versionado')), dl = fwd(join(c.sb.dir, 'dd-local'));
+  escreve(c.proj, '.ai-memory.toml', le(c.proj, '.ai-memory.toml').replace(/\s*$/, '\n') + `\n[forge]\nserver_url = "http://127.0.0.1:${pv}"\ndata_dir = "${dv}"\n`);
+  escreve(c.proj, TOML_LOCAL, `[forge]\nserver_url = "http://127.0.0.1:${pl}"\ndata_dir = "${dl}"\n`);
+  const r = await plano(c.proj, c.sys);
+  assert.equal(r.code, 0, r.out);
+  assert.equal(r.json.port, pl);
+  assert.ok(mesmoCaminho(r.json.dataDir, dl), r.json.dataDir);
+});
+
+test('C1 --apply: init uma só vez (e sem --force) em dois --apply; a [forge] no .ai-memory.local.toml com server_url e data_dir em /; o .ai-memory.toml versionado intacto; uma só linha bind no config.toml', async () => {
+  const c = await cenario();
+  const versionado = le(c.proj, '.ai-memory.toml');
   const r1 = await aplica(c.proj, c.sys);
   assert.equal(r1.code, 0, r1.out);
+  assert.equal(le(c.proj, '.ai-memory.toml'), versionado, 'o .ai-memory.toml versionado mudou');
+  assert.ok(ignorado(le(c.proj, '.gitignore'), TOML_LOCAL), 'o .ai-memory.local.toml não está no .gitignore');
   const fg = forge(c.proj);
-  assert.ok(fg, 'sem [forge] no .ai-memory.toml');
+  assert.ok(fg, 'sem [forge] no ' + TOML_LOCAL);
   assert.equal(fg.tabelas, 1);
   assert.ok(!PROIBIDAS.includes(fg.port) && fg.serverUrl === 'http://127.0.0.1:' + fg.port, 'server_url: ' + fg.serverUrl);
   assert.ok(fg.dataDir && !fg.dataDir.includes('\\'), 'data_dir sem barras /: ' + fg.dataDir);
@@ -135,7 +150,7 @@ test('C1 --apply: init uma só vez (e sem --force) em dois --apply; a [forge] co
   assert.ok(!c.regs.run.some((x) => x.args.some((a) => /^--force$|^-f$/.test(a))), 'algum run com --force');
 });
 
-test('C1 segundo --apply: mesma porta e mesmo data-dir; .ai-memory.toml, config.toml, settings.local.json e .gitignore byte a byte iguais', async () => {
+test('C1 segundo --apply: mesma porta e mesmo data-dir; .ai-memory.toml, .ai-memory.local.toml, config.toml, settings.local.json, .mcp.json e .gitignore byte a byte iguais', async () => {
   const c = await cenario();
   assert.equal((await aplica(c.proj, c.sys)).code, 0);
   const fg1 = forge(c.proj);
@@ -147,13 +162,15 @@ test('C1 segundo --apply: mesma porta e mesmo data-dir; .ai-memory.toml, config.
   assert.deepEqual(instantaneo([c.proj, c.sb.local]), antes, 'o segundo --apply mudou ficheiros');
 });
 
-test('C1 a [forge] não se duplica (mesmo se já estiver antes da [capture]) e as linhas workspace, project, [capture] e as do utilizador ficam byte a byte', async () => {
+test('C1 a [forge] não se duplica (mesmo se já estiver antes de outra tabela), as linhas do utilizador no .ai-memory.local.toml ficam, e o .ai-memory.toml versionado (workspace, project, [capture]) fica byte a byte', async () => {
   const c = await cenario();
   const port = await portaLivre();
-  const orig = le(c.proj, '.ai-memory.toml').replace('[capture]', `# nota do utilizador\n[forge]\nserver_url = "http://127.0.0.1:${port}"\ndata_dir = "${dataDirWin(c.sb)}"\n\n[capture]`);
-  escreve(c.proj, '.ai-memory.toml', orig);
+  const versionado = le(c.proj, '.ai-memory.toml');
+  const orig = `# nota do utilizador\n[forge]\nserver_url = "http://127.0.0.1:${port}"\ndata_dir = "${dataDirWin(c.sb)}"\n\n[outra]\nchave = "x"\n`;
+  escreve(c.proj, TOML_LOCAL, orig);
   for (let i = 0; i < 2; i++) assert.equal((await aplica(c.proj, c.sys)).code, 0);
-  const depois = le(c.proj, '.ai-memory.toml');
+  assert.equal(le(c.proj, '.ai-memory.toml'), versionado, 'o .ai-memory.toml versionado mudou');
+  const depois = le(c.proj, TOML_LOCAL);
   assert.equal(depois.split(/\r?\n/).filter((l) => /^\s*\[forge\]\s*$/.test(l)).length, 1, depois);
   const fora = orig.split(/\r?\n/).filter((l) => l.trim() && !/^\s*(server_url|data_dir|autostart)\s*=/.test(l));
   const linhas = depois.split(/\r?\n/);
@@ -190,7 +207,7 @@ test('C1 projeto já configurado (a [forge] e o bind batem certo): o data-dir in
   mkdirSync(join(dd, 'auth-tokens'), { recursive: true });
   writeFileSync(join(dd, 'config.toml'), CONFIG_INICIAL(port));
   writeFileSync(join(dd, 'auth-tokens', 'default'), 'tok\n');
-  escreve(c.proj, '.ai-memory.toml', le(c.proj, '.ai-memory.toml').replace(/\s*$/, '\n') + `\n[forge]\nserver_url = "http://127.0.0.1:${port}"\ndata_dir = "${dd}"\n`);
+  escreve(c.proj, TOML_LOCAL, `[forge]\nserver_url = "http://127.0.0.1:${port}"\ndata_dir = "${dd}"\n`);
   const antes = instantaneo([dd]);
   for (let i = 0; i < 2; i++) assert.equal((await aplica(c.proj, c.sys)).code, 0);
   assert.deepEqual(instantaneo([dd]), antes);

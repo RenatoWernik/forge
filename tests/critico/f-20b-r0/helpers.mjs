@@ -3,8 +3,10 @@
 // pessoais (HOME, CLAUDE_CONFIG_DIR, LOCALAPPDATA, XDG_DATA_HOME) são temporárias, e a rede só vai a 127.0.0.1, a servidores HTTP falsos deste processo
 // em portas escolhidas em runtime (nunca 4790, 49374 nem 49375).
 //
-// LEITURA DO CONTRATO (#71 com o comentário 6546794885 do orquestrador, vinculativo): os hooks e o MCP do ai-memory vão para o
-// `.claude/settings.local.json` do projeto (não versionado, garantido no `.gitignore`), nunca para o `.claude/settings.json` nem para os globais.
+// LEITURA DO CONTRATO (#71 com os comentários 6546794885 e 6548062958 do orquestrador, vinculativos):
+// - o MCP vai para o `.mcp.json` da raiz; os hooks e `enabledMcpjsonServers: ["ai-memory"]` para o `.claude/settings.local.json`;
+// - a `[forge]` (server_url, data_dir) vai para o `.ai-memory.local.toml`; o `.ai-memory.toml` versionado fica só com workspace e project;
+// - os três ficam no `.gitignore`; nada vai para o `.claude/settings.json` versionado nem para os globais; o readConfig lê os dois toml e o local prevalece.
 // Seam (como o de update.mjs): `main(argv, sys, write)` exportado por scripts/memoria.mjs devolve o código de saída e escreve por `write`.
 //   sys.run(cmd, args, opts)   -> { code, stdout, stderr } (o falso também é a própria string do stdout, como no F-20a)
 //   sys.spawn(cmd, args, opts) -> um filho com unref()
@@ -30,6 +32,10 @@ export const W = 'acme', P = 'billing', NOME = 'acme--billing';
 export const CANARIO_1 = 'CANARIO-F20B-FICHEIRO-7f3a9c0d2e'; // em <dataDir>/auth-tokens/default
 export const CANARIO_2 = 'CANARIO-F20B-AMBIENTE-1b8e44a6f1'; // em AI_MEMORY_AUTH_TOKEN
 export const LOCAL = '.claude/settings.local.json';
+export const MCP = '.mcp.json';
+export const TOML_LOCAL = '.ai-memory.local.toml';
+export const IGNORADOS = [LOCAL, MCP, TOML_LOCAL]; // o que o setup garante no .gitignore
+export const ignorado = (gi, rel) => gi.split(/\r?\n/).some((l) => l.trim() === rel || l.trim() === '/' + rel);
 export const VERSAO = '3.3.0';
 // os 9 pares do C2 (saída de `install-hooks --agent claude-code` da 3.3.0, sem o token)
 export const PARES = [['SessionStart', 'session-start'], ['UserPromptSubmit', 'user-prompt-submit'], ['PreToolUse', 'pre-tool-use'], ['PostToolUse', 'post-tool-use'],
@@ -205,9 +211,10 @@ export const projeto = (over = {}) => generate({ hooks: { killByName: true, back
 export const le = (proj, rel) => readFileSync(join(proj, rel), 'utf8');
 export const leJson = (proj, rel) => JSON.parse(le(proj, rel).replace(/^\uFEFF/, ''));
 export const escreve = (proj, rel, t) => { mkdirSync(dirname(join(proj, rel)), { recursive: true }); writeFileSync(join(proj, rel), t); };
-// a tabela [forge] do .ai-memory.toml: { linhas, serverUrl, dataDir, port }
-export const forge = (proj) => {
-  const t = le(proj, '.ai-memory.toml');
+// a tabela [forge] do .ai-memory.local.toml (ou do ficheiro dado): { corpo, serverUrl, dataDir, port, tabelas }
+export const forge = (proj, rel = TOML_LOCAL) => {
+  if (!existsSync(join(proj, rel))) return null;
+  const t = le(proj, rel);
   const linhas = t.split(/\r?\n/);
   const i = linhas.findIndex((l) => /^\s*\[forge\]\s*$/.test(l));
   if (i < 0) return null;

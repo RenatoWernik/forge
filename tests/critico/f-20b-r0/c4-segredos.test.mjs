@@ -1,12 +1,12 @@
 // Ronda −1 do F-20b (#71), C4: nenhum segredo sai (reprova sempre). Dois canários: um token falso em <dataDir>/auth-tokens/default (escrito pelo
 // init falso, ou já lá antes) e AI_MEMORY_AUTH_TOKEN=<canário 2> no ambiente do sys.
-// Oráculos: nenhum canário em nenhum ficheiro do projeto, no stdout ou no stderr do --plan e do --apply, nem nos argumentos de nenhum sys.run ou
+// Oráculos: nenhum canário em nenhum ficheiro do projeto (incluindo o .mcp.json, o settings.local.json e o .ai-memory.local.toml), no stdout ou no stderr do --plan e do --apply, nem nos argumentos de nenhum sys.run ou
 // sys.spawn; os ficheiros do projeto não têm a string --auth-token nem a chave AI_MEMORY_AUTH_TOKEN.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { CANARIO_1, CANARIO_2, CONFIG_INICIAL, caixa, dataDirWin, sysFalso, plano, aplica, projeto, apaga, ficheiros, portaLivre } from './helpers.mjs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { CANARIO_1, CANARIO_2, CONFIG_INICIAL, caixa, dataDirWin, sysFalso, plano, aplica, projeto, apaga, ficheiros, portaLivre, MCP, LOCAL, TOML_LOCAL } from './helpers.mjs';
 
 const limpar = [];
 after(async () => { for (const f of limpar) await f(); });
@@ -33,6 +33,7 @@ test('C4 projeto novo (o init escreve o token): nenhum canário nos ficheiros do
   const a1 = await aplica(proj, f.sys);
   assert.equal(a1.code, 0, a1.out);
   assert.equal(readFileSync(join(dataDirWin(sb), 'auth-tokens', 'default'), 'utf8').trim(), CANARIO_1, 'fixture: o init falso não correu');
+  for (const rel of [MCP, LOCAL, TOML_LOCAL]) assert.ok(existsSync(join(proj, rel)), 'o canário tem de cobrir ' + rel + ', que não foi escrito');
   const a2 = await aplica(proj, f.sys);
   assert.deepEqual(verifica(proj, f.regs, { '--plan': p.out, '--apply 1': a1.out, '--apply 2': a2.out }), []);
 });

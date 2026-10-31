@@ -8,8 +8,8 @@ import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { caixa as caixa20a, ambiente, binFalso, AIM_OK, statusOut, toml, fwd } from '../f-20a-r0/helpers.mjs';
-import { W, P, CANARIO_2, projeto, apaga, servidorFalso, portaLivre, PROIBIDAS } from './helpers.mjs';
+import { caixa as caixa20a, ambiente, binFalso, AIM_OK, statusOut, fwd } from '../f-20a-r0/helpers.mjs';
+import { W, P, CANARIO_2, TOML_LOCAL, projeto, apaga, servidorFalso, portaLivre, PROIBIDAS } from './helpers.mjs';
 
 const ESPIAO = fileURLToPath(new URL('./espiao.mjs', import.meta.url));
 const START = '.claude/start-ai-memory.mjs', HOOK = '.claude/hooks/forge-ai-memory.mjs';
@@ -43,7 +43,7 @@ const cenario = async ({ url, statusDir, semBin = false } = {}) => {
   const sb = caixa20a();
   limpar.push(() => apaga(sb.dir));
   const dataDir = fwd(join(sb.dir, 'aim-data'));
-  toml(proj, { serverUrl: url, dataDir });
+  writeFileSync(join(proj, TOML_LOCAL), `[forge]\nserver_url = "${url}"\ndata_dir = "${dataDir}"\n`); // a [forge] vive no .ai-memory.local.toml (6548062958)
   const extra = { CRITICO_CTL: CTL, CLAUDE_PROJECT_DIR: proj, AI_MEMORY_AUTH_TOKEN: CANARIO_2 };
   if (!semBin) extra.AI_MEMORY_BIN = binFalso(join(sb.dir, 'bin', 'ai-memory.exe'), { ...AIM_OK('3.3.0', dataDir), status: statusOut(statusDir ?? dataDir) });
   return { sb, dataDir, env: ambiente(sb, extra) };
