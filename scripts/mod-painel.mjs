@@ -167,11 +167,7 @@ async function lerQuota($, r, agora) {
 // What each hook of hooks/painel.tsx does with its event (without next). command.run resolves { text }; the others never reject:
 // the panel only observes.
 export async function evento($, r, nome, e, res) {
-  if (nome === 'command.run') {
-    r.fechado = false;
-    armar($, r);
-    return abrir($, () => volta($, r));
-  }
+  if (nome === 'command.run') return comando($, r);
   try {
     if (nome === 'ui.close') {
       r.timer?.cancel();
@@ -202,6 +198,13 @@ export async function evento($, r, nome, e, res) {
   } catch {
     // never breaks the event
   }
+}
+
+// command.run of /forge-painel: always arms the clock, then abrir() (outside a forge project it reads nothing).
+export async function comando($, r) {
+  r.fechado = false;
+  armar($, r);
+  return abrir($, () => volta($, r));
 }
 
 // The text the pane draws now.

@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { COMANDO, criarRelogio, ecra, evento, PANE } from '../scripts/mod-painel.mjs'
+import { COMANDO, comando, criarRelogio, ecra, evento, PANE } from '../scripts/mod-painel.mjs'
 
 // The forge panel: reads <project>/.checkpoints/painel.json through the shared reader, only in forge projects, plus the agents
 // and the quota of Claude Code itself. The hooks only wire events to scripts/mod-painel.mjs; the state is this module's relogio,
@@ -39,7 +39,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: COMANDO }, async ($, e) => evento($, relogio, 'command.run', e))
+  on('command.run', { command: COMANDO }, async $ => comando($, relogio))
 
   on('ui.close', { id: PANE }, async ($, e, next) => {
     await evento($, relogio, 'ui.close', e)
