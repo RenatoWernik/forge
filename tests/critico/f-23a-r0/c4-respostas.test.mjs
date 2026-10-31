@@ -2,7 +2,7 @@
 // a marca aparece em `results[].contested`; a marca não aparece em nenhum prompt de crítico; a resposta em falta dá o WARNING; e a linha
 // `briefs` do check.cjs exige `contested` no dev.md. Também o que o critério fixa por escrito: o id estável F<ronda>-<n> mostrado ao dev
 // da ronda seguinte, o campo `responses` do BUILD, e o crítico sem o `reason` nem o `answer` do dev (a lista `blocking` segue como hoje).
-// Ver a PERGUNTA na #77 sobre o valor de `contested[].round` (a ronda do achado ou a da resposta): até à resposta, só se exige um inteiro.
+// Resposta 1 do orquestrador na #77 (2026-10-31): `contested[].round` é a ronda do achado (a que o criou), não a da resposta.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
@@ -44,7 +44,7 @@ test('C4 [ataque]: o BUILD exige responses, uma lista de {finding, answer: "fixe
   assert.deepEqual([...(rs.items.properties.answer.enum || [])].sort(), ['contested', 'fixed'], 'answer.enum');
 });
 
-test('C4 [ataque]: um achado contestado chega a results[].contested com o finding, o reason (a marca), o criterion e a round; o "fixed" não', async () => {
+test('C4 [ataque]: um achado contestado chega a results[].contested com o finding, o reason (a marca), o criterion e a round do achado; o "fixed" não', async () => {
   const run = await go(ANSWERS.contested);
   const r = resultOf(run);
   assert.ok(r, why(run));
@@ -55,7 +55,7 @@ test('C4 [ataque]: um achado contestado chega a results[].contested com o findin
   assert.equal(c.finding, 'F1-1');
   assert.equal(c.reason, MARK);
   assert.ok(['C1', 'c1'].includes(String(c.criterion)), 'criterion: ' + JSON.stringify(c));
-  assert.ok(Number.isInteger(c.round) && [1, 2].includes(c.round), 'round: ' + JSON.stringify(c));
+  assert.equal(c.round, 1, 'round (a ronda do achado F1-1): ' + JSON.stringify(c));
 });
 
 test('C4 [guarda]: o crítico nunca recebe o reason nem o answer do dev: os prompts do crítico são os mesmos com tudo contestado, tudo corrigido ou sem respostas', async () => {

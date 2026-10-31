@@ -81,7 +81,7 @@ test('C3 [ataque] (rigorous): com o diffHash da R2 igual ao da R1, o crítico n�
   assert.ok(ver[0].prompt.includes('"verdict":"perdeu"'), 'o painel da R2 não regista a ronda como perdida');
 });
 
-test('C3 [ataque] (accelerated): com o diffHash da R2 igual ao da R1, 0 chamadas ao crítico na R2, a ronda contada, sem ganhar, e o log()', async () => {
+test('C3 [ataque] (accelerated): com o diffHash da R2 igual ao da R1, 0 chamadas ao crítico na R2, a ronda contada, sem ganhar, o log(), e o bloqueante material mantido conta como falha (não vai para followUps)', async () => {
   const run = await runWf(srcNow(), baseArgs([p], { mode: 'accelerated' }), scenario(p, {
     dev: (r) => ({ head: H(r), diffHash: D(1), responses: r < 2 ? [] : [{ finding: 'F1-1', answer: 'fixed' }] }),
     critic: (r) => ({ sha: H(r), preExisting: [], blocking: [[1]] }),
@@ -92,6 +92,12 @@ test('C3 [ataque] (accelerated): com o diffHash da R2 igual ao da R1, 0 chamadas
   assert.equal(r.won, false, why(run));
   assert.equal(r.rounds, 2, why(run));
   assert.ok(run.logs.includes(LOG_SAME('pa', 2)), JSON.stringify(run.logs));
+  // Resposta 2 do orquestrador na #77 (2026-10-31): um bloqueante material que o crítico mantém conta como falha em qualquer modo, e só os itens
+  // não materiais vão para followUps; o modo muda só o limite de rondas e a escalada. Por isso a peça para (redesign ou escalate), nunca por maxRounds.
+  assert.equal(r.metrics?.sameCriterionFailures, 2, 'o bloqueante mantido não contou como falha: ' + JSON.stringify(r.metrics));
+  assert.ok(!Array.from(r.followUps || []).some((f) => JSON.stringify(f).includes('REPRO-r1-C1')), 'o bloqueante mantido foi para followUps: ' + JSON.stringify(r.followUps));
+  const why2 = typeof r.stopped === 'object' && r.stopped ? r.stopped.reason : r.stopped;
+  assert.ok(['redesign', 'escalate'].includes(why2), 'a peça não parou por redesign ou escalate: ' + why(run));
 });
 
 const criticRuns = async (dev, rounds = 3) => {
