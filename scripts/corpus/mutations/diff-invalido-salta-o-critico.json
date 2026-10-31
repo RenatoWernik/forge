@@ -1,7 +1,0 @@
-{
-  "base": "en-plain-published",
-  "file": ".claude/workflows/gauntlet-build.js",
-  "find": "HASH.test(build.diffHash) && HASH.test(prevDiff)",
-  "replace": "build.diffHash && prevDiff",
-  "line": "build: a diffHash equal to the one of the previous round does not call the critic: the round counts as failed with the previous verdict (the criterion fails again) and log() says so; an absent or invalid diffHash never skips the critic"
-}
