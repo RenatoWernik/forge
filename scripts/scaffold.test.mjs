@@ -40,6 +40,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     '.claude/check.cjs',
     '.claude/dashboard/panel.html',
     '.claude/forge.json',
+    '.claude/learnings.cjs',
     '.claude/painel-gravar.mjs',
     '.claude/painel-leitor.mjs',
     '.claude/painel-vida.mjs',
@@ -53,6 +54,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     'BOOTSTRAP.md',
     'CLAUDE.md',
     'FRAMEWORK.md',
+    'learnings/README.md',
   ].sort());
   assert.deepEqual(await readdir(dest), []);
 });

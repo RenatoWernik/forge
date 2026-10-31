@@ -651,6 +651,36 @@ async function chk(name, f) {
     }))
   }
 
+  // learnings/: the error register (FRAMEWORK.md section 11), read by .claude/learnings.cjs. The clock is the UTC date, or --today YYYY-MM-DD; a past REVIEW-BY on an open entry is a warning, never a FAIL.
+  // ponytail: a register under 1 MB per file (the default buffer of git show); upgrade: pass maxBuffer to spawnSync if one ever grows past it
+  {
+    const L_FORM = 'learnings: every entry of learnings/ is well formed', L_GROW = 'learnings: learnings/ only grows (only STATUS lines change)'
+    let lib = null
+    try { lib = require('./learnings.cjs') } catch (e) {}
+    const ti = process.argv.indexOf('--today'), today = ti < 0 ? new Date().toISOString().slice(0, 10) : process.argv[ti + 1]
+    let names = []
+    try { names = fs.readdirSync('learnings').filter(n => n !== 'README.md') } catch (e) {}
+    const texts = {}
+    for (const n of names) try { texts[n] = fs.readFileSync(path.join('learnings', n), 'utf8') } catch (e) { texts[n] = '' }
+    const git = (...a) => { const r = sh('git', a); return r.error || r.status ? null : r.stdout }
+    let head = null // the register at git HEAD, or null: no git, no commit
+    const listed = git('ls-tree', '--name-only', 'HEAD', 'learnings/')
+    if (listed !== null) {
+      head = {}
+      for (const f of listed.split(/\r?\n/).filter(f => /^learnings\/[^/]+\.md$/.test(f) && f !== 'learnings/README.md')) { const t = git('show', 'HEAD:./' + f); if (t === null) { head = null; break } head[f.slice(10)] = t }
+    }
+    const parsed = lib ? names.map(n => lib.parse(texts[n], n)) : [], clockOk = !!lib && lib.isDay(today)
+    const r = lib ? lib.validate(parsed.flatMap(p => p.entries), { today: clockOk ? today : undefined, exists: p => has(p), headTexts: head || undefined, texts }) : { fails: [], warns: [] }
+    const form = [...(ti >= 0 && !clockOk && lib ? ['--today ' + today + ' is not a date YYYY-MM-DD'] : []), ...parsed.flatMap(p => p.problems), ...r.fails.filter(f => f.kind === 'form').map(f => f.message)]
+    const grow = r.fails.filter(f => f.kind === 'grow').map(f => f.message)
+    if (!lib && names.length) form.push('.claude/learnings.cjs is missing')
+    await chk(L_FORM + (form.length ? ' (' + form.join('; ') + ')' : parsed.every(p => !p.entries.length) ? ' (no entries)' : ''), () => !form.length)
+    await chk(L_GROW + (grow.length ? ' (' + grow.join('; ') + ')' : head === null ? ' (no history)' : ''), () => !grow.length)
+    const late = r.warns.filter(w => w.kind === 'review-by'), again = r.warns.filter(w => w.kind === 'recurred-test')
+    if (late.length) console.log('warn  learnings: open entries past their REVIEW-BY (today ' + today + '): ' + late.map(w => w.message).join(', '))
+    if (again.length) console.log('warn  learnings: recurrence in the strongest layer, the test was not enough, review it (redesign): ' + again.map(w => w.message).join(', '))
+  }
+
   console.log(bad ? '\nThere is a FAIL above.' : '\nAll ok.')
   process.exit(bad)
 })()

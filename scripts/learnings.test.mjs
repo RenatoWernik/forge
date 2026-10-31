@@ -1,0 +1,125 @@
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { scaffold } from './scaffold.mjs';
+
+// The oracle of the error register (F-22a, issue #75): scripts/corpus/learnings/ run through the check.cjs of a generated project, with the clock fixed.
+const CORPUS = fileURLToPath(new URL('./corpus/learnings/', import.meta.url));
+const { parse, validate } = createRequire(import.meta.url)('../templates/.claude/learnings.cjs');
+const FORM = 'learnings: every entry of learnings/ is well formed';
+const TODAY = '2026-10-31';
+const answers = {
+  projectName: 'Acme Billing', language: 'English', mode: 'rigorous', repo: 'acme/billing',
+  models: {
+    developer: { model: 'sonnet', effort: 'high', reason: 'logic and server code' },
+    developerUi: { model: 'opus', effort: 'high', reason: 'rich UI needs a stronger model' },
+    critic: { model: 'opus', effort: 'high', reason: 'the critic stays on the strongest model' },
+    tester: { model: 'haiku', effort: 'xhigh', reason: 'the batch suite is mechanical work' },
+    aux: { model: 'sonnet', effort: 'medium', reason: 'panel records only' },
+  },
+  memory: { workspace: 'acme', project: 'billing' },
+};
+
+let dest;
+before(async () => {
+  dest = await mkdtemp(join(tmpdir(), 'forge-learnings-'));
+  await scaffold(answers, { dest });
+  for (const rel of (await readFile(join(CORPUS, 'tree.txt'), 'utf8')).split(/\r?\n/).filter(Boolean)) {
+    await mkdir(dirname(join(dest, rel)), { recursive: true });
+    await writeFile(join(dest, rel), '// corpus tree\n');
+  }
+});
+after(() => rm(dest, { recursive: true, force: true }));
+
+// learnings/ holds only the given files ({ name: text }); null removes the folder
+const run = async (files, args = ['--today', TODAY]) => {
+  await rm(join(dest, 'learnings'), { recursive: true, force: true });
+  if (files) {
+    await mkdir(join(dest, 'learnings'), { recursive: true });
+    for (const [n, t] of Object.entries(files)) await writeFile(join(dest, 'learnings', n), t);
+  }
+  const r = spawnSync(process.execPath, ['.claude/check.cjs', ...args], { cwd: dest, encoding: 'utf8', env: { ...process.env, HOME: dest, USERPROFILE: dest, DISABLE_AUTOUPDATER: '1' } });
+  const out = r.stdout + r.stderr;
+  return { code: r.status, out, line: out.split(/\r?\n/).find((l) => l.slice(6).startsWith(FORM)) };
+};
+const mdFiles = async (sub) => (await readdir(join(CORPUS, sub))).filter((n) => n.endsWith('.md')).sort();
+
+for (const n of await mdFiles('valid')) {
+  test(`corpus valid/${n}: the learnings line is ok, no FAIL, exit 0`, async () => {
+    const r = await run({ '2026-10.md': await readFile(join(CORPUS, 'valid', n), 'utf8') });
+    assert.match(r.line, /^ok {4}/, r.out.slice(-1500));
+    assert.equal(r.code, 0, r.out.slice(-1500));
+    assert.match(r.out, /All ok\./);
+  });
+}
+for (const n of await mdFiles('invalid')) {
+  test(`corpus invalid/${n}: FAIL naming the id and the field of its expect line`, async () => {
+    const text = await readFile(join(CORPUS, 'invalid', n), 'utf8');
+    const [, id, field] = text.split(/\r?\n/)[0].match(/^<!-- expect: (E-\d+) ([A-Z][A-Z-]*) -->$/);
+    const r = await run({ '2026-10.md': text });
+    assert.match(r.line, /^FAIL {2}/, r.out.slice(-1500));
+    assert.ok(r.line.includes(`${id} ${field}:`), `the detail does not name "${id} ${field}":\n${r.line}`);
+    assert.equal(r.code, 1);
+  });
+}
+
+test('no learnings/ folder, or only its README.md: the line is ok with (no entries)', async () => {
+  for (const files of [null, { 'README.md': '# Learnings\n' }]) {
+    const r = await run(files);
+    assert.equal(r.line, 'ok    ' + FORM + ' (no entries)');
+    assert.equal(r.code, 0);
+  }
+});
+
+test('ids go on across two files of different months, and the entries of each keep the month of their file', async () => {
+  const a = await readFile(join(CORPUS, 'valid', 'same-day-review.md'), 'utf8');
+  const second = a.replace('# Learnings 2026-10', '# Learnings 2026-11').replace('## E-001', '## E-002').replaceAll('2026-10-20', '2026-11-03').replace('fixed-test-port', 'other-class');
+  const r = await run({ '2026-10.md': a, '2026-11.md': second });
+  assert.match(r.line, /^ok {4}/, r.out.slice(-1500));
+  assert.equal(r.code, 0);
+});
+
+test('a file that is not YYYY-MM.md or README.md is a FAIL, whatever it holds', async () => {
+  for (const n of ['notes.md', '2026-10.txt', '2026-1.md', '2026-13.md']) {
+    const r = await run({ [n]: '# notes\n' });
+    assert.match(r.line, /^FAIL {2}/, n);
+    assert.ok(r.line.includes(n), r.line);
+  }
+});
+
+test('--today: a past REVIEW-BY on an open entry is a warn line (exit 0); a date that is not YYYY-MM-DD is a FAIL', async () => {
+  const open = (await readFile(join(CORPUS, 'valid', 'climb-and-triggers.md'), 'utf8'));
+  const late = await run({ '2026-10.md': open }, ['--today', '2026-11-21']);
+  assert.ok(late.out.includes('warn  learnings: open entries past their REVIEW-BY (today 2026-11-21): E-005 (2026-11-20)'), late.out.slice(-800));
+  assert.equal(late.code, 0);
+  const bad = await run({ '2026-10.md': open }, ['--today', '1-11-2026']);
+  assert.match(bad.line, /^FAIL {2}/);
+  assert.equal(bad.code, 1);
+});
+
+// the history rule (C4) on the module: a line cut in the middle is a changed line, and an appended entry needs no blank line
+const head = '# Learnings 2026-10\n\n## E-001\n- DATE: 2026-10-20\n- REVIEW-BY: 2026-11-03\n- STATUS: open\n';
+const grows = (now, was = head) => validate([], { headTexts: { '2026-10.md': was }, texts: { '2026-10.md': now } }).fails;
+test('history: only STATUS lines change, a new entry is appended, CRLF is the same text', () => {
+  assert.deepEqual(grows(head.replace('open', 'prevented')), []);
+  assert.deepEqual(grows(head + '\n## E-002\n- DATE: 2026-10-21\n'), []);
+  assert.deepEqual(grows(head + '## E-002\n- DATE: 2026-10-21\n'), []);
+  assert.deepEqual(grows(head.replace(/\n/g, '\r\n')), []);
+});
+test('history: a line that only grows at its end, a removed entry and a missing file are changes', () => {
+  assert.equal(grows(head.replace('REVIEW-BY: 2026-11-03', 'REVIEW-BY: 2026-11-03 hacked')).length, 1);
+  assert.equal(grows(head.replace('- DATE: 2026-10-20\n', '')).length, 1);
+  assert.equal(grows('# Learnings 2026-10\n').length, 1);
+  assert.equal(validate([], { headTexts: { '2026-10.md': head }, texts: {} }).fails.length, 1);
+});
+
+test('parse: CRLF, a BOM and a heading that is not an entry', () => {
+  const p = parse('﻿<!-- expect: x -->\r\n# Learnings 2026-10\r\n\r\n## Notes\r\n- DATE: ignored\r\n## E-001\r\n- DATE: 2026-10-20\r\n', '2026-10.md');
+  assert.deepEqual(p.problems, []);
+  assert.deepEqual(p.entries.map((e) => [e.id, e.fields.length]), [['E-001', 1]]);
+});
