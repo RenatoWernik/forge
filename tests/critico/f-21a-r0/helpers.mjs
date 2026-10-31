@@ -3,7 +3,9 @@
 // (caixa e ambiente do F-20a), DISABLE_AUTOUPDATER=1, e o espião (espiao.mjs) responde pelo graphify. O PATH dos processos lançados só tem a pasta
 // do binário falso e a do git (o git corre de verdade, num repositório temporário). Sem rede.
 //
-// LEITURA DO CONTRATO (corpo da #73, sem comentários à data, 2026-10-31): os textos abaixo são LITERAIS, copiados do corpo da issue.
+// LEITURA DO CONTRATO (corpo da #73 e decisões do orquestrador nos comentários, 2026-10-31): os textos abaixo são LITERAIS, copiados da issue.
+// Decisão do selo (comentário de 2026-10-31 21:17): depois de um graphify com código 0, o graph.mjs update grava graphify-out/forge-fresh.json
+// { head, at } de forma atómica, sem tocar no graph.json; a frescura compara o HEAD com o head do selo e só usa o built_at_commit quando o selo falta.
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, delimiter } from 'node:path';
@@ -30,6 +32,7 @@ export const UNCHANGED = 'docs: unchanged';
 export const CHANGED = /^docs: changed (\d+) files, (\d+) words: (.+)$/;
 export const MARKED = (n) => `docs: marked ${n} files`;
 export const CARIMBO = 'graphify-out/forge-docs.json';
+export const SELO = 'graphify-out/forge-fresh.json';
 // C3
 export const L_FRESCA = 'Graphify: graph.json built at HEAD';
 export const L_HOOKS = 'Graphify: post-commit and post-checkout hooks installed';
@@ -54,7 +57,7 @@ const GIT_DIR = (() => {
   throw new Error('critico: git não encontrado no PATH');
 })();
 const envDe = (sb, log, cenario) => {
-  const e = ambiente(sb, { PATH: [sb.pathDir, GIT_DIR].join(delimiter), GIT_CONFIG_NOSYSTEM: '1', CRITICO_LOG: log, NODE_OPTIONS: '--import=' + pathToFileURL(ESPIAO).href });
+  const e = ambiente(sb, { PATH: [sb.pathDir, GIT_DIR].join(delimiter), GIT_CONFIG_NOSYSTEM: '1', GIT_CEILING_DIRECTORIES: tmpdir(), CRITICO_LOG: log, NODE_OPTIONS: '--import=' + pathToFileURL(ESPIAO).href });
   if (cenario) e.CRITICO_GRAPHIFY = JSON.stringify(cenario); else delete e.CRITICO_GRAPHIFY;
   return e;
 };
@@ -105,4 +108,14 @@ export const repo = async (lixo, commits = 1) => {
   return p;
 };
 export const grafoJson = (proj, conteudo) => escreve(proj, 'graphify-out/graph.json', typeof conteudo === 'string' ? conteudo : JSON.stringify(conteudo));
+// o selo do forge escrito pelo teste, e o selo lido do disco (null quando não existe)
+export const selo = (proj, head, at = new Date().toISOString()) => escreve(proj, SELO, JSON.stringify({ head, at }));
+export const leSelo = (proj) => (existsSync(join(proj, SELO)) ? JSON.parse(readFileSync(join(proj, SELO), 'utf8').replace(/^\uFEFF/, '')) : null);
+// uma raiz nova (só .claude/) com repositório git e commits
+export const raizRepo = async (lixo, commits = 1) => {
+  const r = await raizNova(lixo);
+  git(r, 'init', '-q', '-b', 'main');
+  for (let i = 0; i < commits; i++) { writeFileSync(join(r, `critico-${i}.txt`), String(i)); git(r, 'add', '-A'); git(r, 'commit', '-q', '-m', 'critico ' + i); }
+  return r;
+};
 export const grafoDe = (commit) => ({ directed: false, multigraph: false, graph: {}, nodes: [{ id: 'critico', label: 'critico' }], links: [], built_at_commit: commit });
