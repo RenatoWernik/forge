@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { arranca } from '../templates/.claude/start-ai-memory.mjs';
+import { arranca, estado } from '../templates/.claude/start-ai-memory.mjs';
 
 // /forge:new-project, ai-memory step. --plan --dest <project> prints what would be set up and writes nothing; --apply --dest <project> does it:
 // a data dir of its own and a free port for this project, the capture hooks and the MCP server in files git ignores, and the server started hidden.
@@ -192,8 +192,8 @@ async function apply(sys, dest, p, write) {
   put('.gitignore', withIgnored(read(join(dest, '.gitignore'))));
   write(`forge memoria: the ai-memory of this project is set up (data dir ${p.dataDir}, ${p.serverUrl}).`);
   if (p.autostart) {
-    const code = await (p.autostart === 'yes' ? startAtLogon : noStartAtLogon)(sys, back, p, write);
-    if (code) return code;
+    const code = await (p.autostart === 'yes' ? startAtLogon : noStartAtLogon)(sys, back, p, write, dest);
+    if (code || (p.autostart === 'yes' && sys.platform !== 'win32')) return code; // Linux and macOS: only the service manager starts the server, never a second one from here
   }
   return arranca(dest, sys, write);
 }
@@ -208,12 +208,12 @@ async function uidOf(sys) {
   return r.code === 0 && /^[0-9]+$/.test(uid) ? uid : null;
 }
 
-async function startAtLogon(sys, cfg, p, write) {
+async function startAtLogon(sys, cfg, p, write, dest) {
   const fs = sys.fs;
   const e = entryOf(sys, cfg, p);
   const file = join(e.dir, e.name);
-  const old = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
-  if (old !== e.text) { fs.mkdirSync(e.dir, { recursive: true }); fs.writeFileSync(file, e.text); }
+  const old = fs.existsSync(file) ? fs.readFileSync(file) : null;
+  if (old === null || !old.equals(e.bytes)) { fs.mkdirSync(e.dir, { recursive: true }); fs.writeFileSync(file, e.bytes); }
   write(`forge memoria: this project's server starts at logon (${file}).`);
   const run = async (cmd, args) => {
     const r = await ctl(sys, cmd, args);
@@ -221,13 +221,15 @@ async function startAtLogon(sys, cfg, p, write) {
     return r.code;
   };
   if (sys.platform === 'win32') return 0;
+  const on = (await estado(dest, sys)).state === 'on'; // a server of this project already answers: the manager only enables the entry, it does not start a second one
   if (sys.platform === 'darwin') {
     const uid = await uidOf(sys);
     if (!uid) { write('id -u did not give a user id; the LaunchAgent is written but not loaded. Run the memory step again.'); return 1; }
+    if (on) return run('launchctl', ['enable', `gui/${uid}/${e.label}`]);
     if (old !== null) await ctl(sys, 'launchctl', ['bootout', `gui/${uid}/${e.label}`]); // loaded already: reload it; a failure here only means it was not loaded
     return run('launchctl', ['bootstrap', `gui/${uid}`, file]);
   }
-  return (await run('systemctl', ['--user', 'daemon-reload'])) || run('systemctl', ['--user', 'enable', '--now', e.name]);
+  return (await run('systemctl', ['--user', 'daemon-reload'])) || run('systemctl', ['--user', 'enable', ...(on ? [] : ['--now']), e.name]);
 }
 
 async function noStartAtLogon(sys, cfg, p, write) {

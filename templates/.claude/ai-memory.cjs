@@ -80,13 +80,13 @@ async function serverState({ serverUrl, dataDir, bin, platform = process.platfor
 
 // The startup entry of this project's server, one file per platform (forge's memoria.mjs --autostart yes writes it, check.cjs --env reads it).
 // Only this project's file is ever named: forge-ai-memory-<W>--<P>.vbs (Windows Startup folder), forge-ai-memory-<W>--<P>.service (systemd user unit),
-// com.forge.ai-memory.<W>.<P>.plist (LaunchAgent). shortcut: a path outside ASCII is written as it is (wscript reads ANSI); upgrade: UTF-16 for the .vbs
+// com.forge.ai-memory.<W>.<P>.plist (LaunchAgent).
 const XML = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const ESC = { win32: s => s, linux: s => s.replace(/%/g, '%%').replace(/\$/g, '$$$$'), darwin: XML } // systemd reads % and $ in ExecStart; shortcut: a backslash in a Linux path is not escaped
 // a value as it stands in the entry, between the marks that end it; the check looks for it that way, so /x/ai-memory never matches /x/ai-memory2
 const WRAP = { win32: s => '""' + s + '""', linux: s => '"' + s + '"', darwin: s => '<string>' + s + '</string>' }
 
-function startupEntry({ platform = process.platform, env = process.env, home = os.homedir(), workspace: w, project: p, bin, dataDir, port }) {
+function entryText({ platform = process.platform, env = process.env, home = os.homedir(), workspace: w, project: p, bin, dataDir, port }) {
   const E = ESC[platform] || ESC.linux
   const argv = ['serve', '--transport', 'http', '--bind', '127.0.0.1:' + port, '--workspace', w, '--project', p]
   if (platform === 'win32') {
@@ -104,19 +104,26 @@ function startupEntry({ platform = process.platform, env = process.env, home = o
     + `[Service]\nType=simple\nExecStart="${E(bin)}" --data-dir "${E(dataDir)}" ${argv.join(' ')}\nRestart=on-failure\nRestartSec=5s\n\n[Install]\nWantedBy=default.target\n` }
 }
 
+// the bytes of the entry: the .vbs is read by wscript in the ANSI code page, so a path outside ASCII (a profile like C:\Users\João) is only right in UTF-16 LE with a BOM; everything else is UTF-8
+function startupEntry(a) {
+  const e = entryText(a), wide = (a.platform || process.platform) === 'win32' && /[^\x00-\x7f]/.test(e.text)
+  return { ...e, bytes: wide ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(e.text, 'utf16le')]) : Buffer.from(e.text) }
+}
+
 // the `ai-memory: autostart` line of check.cjs --env: { ok, detail } from the answer in the [forge] table and this project's entry (the one file named above)
 function autostartState({ cfg, bin, platform = process.platform, env = process.env, home = os.homedir() }) {
   const again = 'run the memory step again'
   if (cfg.autostart !== 'yes' && cfg.autostart !== 'no') return { ok: false, detail: '(not chosen: run the memory step of /forge:new-project)' }
   const port = Number((/^http:\/\/127\.0\.0\.1:([0-9]{1,5})$/.exec(cfg.serverUrl || '') || [])[1])
   const e = startupEntry({ platform, env, home, workspace: cfg.workspace, project: cfg.project, bin, dataDir: cfg.dataDir, port })
-  let text = null
-  try { text = fs.readFileSync(path.join(e.dir, e.name), 'utf8') } catch (x) {}
+  let text = null, bom = false
+  try { const b = fs.readFileSync(path.join(e.dir, e.name)); bom = b[0] === 0xff && b[1] === 0xfe; text = bom ? b.subarray(2).toString('utf16le') : b.toString('utf8') } catch (x) {}
   if (cfg.autostart === 'no') {
     if (text !== null) return { ok: false, detail: `(no, but a startup entry exists: ${again})` }
     return fs.existsSync(path.join(__dirname, 'start-ai-memory.mjs')) ? { ok: true, detail: '' } : { ok: false, detail: '(no, but .claude/start-ai-memory.mjs is missing)' }
   }
   if (text === null) return { ok: false, detail: `(yes, but the startup entry is missing: ${again})` }
+  if (e.bytes[0] === 0xff && !bom) return { ok: false, detail: `(yes, but the startup entry does not match .ai-memory.toml: ${again})` } // a path outside ASCII needs the UTF-16 file
   const W = WRAP[platform] || WRAP.linux, E = ESC[platform] || ESC.linux, bind = new RegExp('127\\.0\\.0\\.1:' + port + '(?![0-9])')
   const same = !!bin && !!cfg.dataDir && Number.isInteger(port) && text.includes(W(E(bin))) && text.includes(W(E(cfg.dataDir))) && bind.test(text)
   return same ? { ok: true, detail: '' } : { ok: false, detail: `(yes, but the startup entry does not match .ai-memory.toml: ${again})` }
