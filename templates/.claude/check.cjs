@@ -105,6 +105,11 @@ async function chk(name, f) {
       await chk("ai-memory: server answers at " + (cfg.serverUrl || '(no server url)') + " and is this project's" + (st.state === 'on' ? '' : ' ' + st.detail), () => st.state === 'on')
       const base = ['--data-dir', cfg.dataDir]
       await chk(L_CAP, () => { if (!ready) return false; const r = aim.run(bin, [...base, 'hook', '--event', 'user-prompt-submit', '--agent', 'claude-code', '--server-url', cfg.serverUrl, '--check-capture'], { input: JSON.stringify({ cwd: process.cwd().replace(/\\/g, '/') }) }); return (r.stdout + r.stderr).includes('"admits_capture":true') })
+      await chk('ai-memory: the 9 capture hooks and enabledMcpjsonServers in .claude/settings.local.json, the MCP server in .mcp.json, all three files in .gitignore (memoria.mjs --apply)', () => {
+        const rd = f => JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, '')), s = rd('.claude/settings.local.json'), g = fs.readFileSync('.gitignore', 'utf8').split(/\r?\n/).map(l => l.trim())
+        const mine = ev => (s.hooks[ev] || []).flatMap(x => x.hooks || []).some(h => (h.args || []).map(a => String(a).replace(/\\/g, '/').toLowerCase()).includes(String(cfg.dataDir).replace(/\\/g, '/').toLowerCase()) && (h.args || []).includes('hook'))
+        return !!cfg.dataDir && ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PreCompact', 'Stop', 'SessionEnd', 'SubagentStart', 'SubagentStop'].every(mine) && s.enabledMcpjsonServers.includes('ai-memory') && !!rd('.mcp.json').mcpServers['ai-memory'] && ['.claude/settings.local.json', '.mcp.json', '.ai-memory.local.toml'].every(r => g.includes(r))
+      })
       await chk(L_PAGE, () => ready && cfg.workspace && cfg.project && aim.run(bin, [...base, 'read-page', '--path', '_rules/framework.md', '--workspace', cfg.workspace, '--project', cfg.project], { env: { ...process.env, AI_MEMORY_SERVER_URL: cfg.serverUrl } }).code === 0)
     }
     await chk('Spec-Kit: .specify/ and the /speckit-* skills installed', () => has('.specify/memory/constitution.md') && ['constitution', 'specify', 'clarify', 'plan', 'tasks', 'analyze', 'converge'].every(n => has('.claude/skills/speckit-' + n, 'SKILL.md')))
