@@ -39,6 +39,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     '.claude/check.cjs',
     '.claude/dashboard/panel.html',
     '.claude/forge.json',
+    '.claude/painel-gravar.mjs',
     '.claude/painel-leitor.mjs',
     '.claude/painel-vida.mjs',
     '.claude/workflows/gauntlet-attacks.js',

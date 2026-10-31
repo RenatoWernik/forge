@@ -11,6 +11,8 @@ const LEITOR = fileURLToPath(new URL('./painel-leitor.mjs', import.meta.url));
 export const LEITOR_NO_PROJETO = '.claude/painel-leitor.mjs';
 const VIDA = fileURLToPath(new URL('./painel-vida.mjs', import.meta.url));
 export const VIDA_NO_PROJETO = '.claude/painel-vida.mjs'; // the command that prints painel/vida (FRAMEWORK.md section 6), next to the reader it imports
+const GRAVAR = fileURLToPath(new URL('./painel-gravar.mjs', import.meta.url));
+export const GRAVAR_NO_PROJETO = '.claude/painel-gravar.mjs'; // the only writer of painel.json (FRAMEWORK.md section 6), next to the reader it imports
 const PAINEL = '.checkpoints/painel.json';
 const SETTINGS = '.claude/settings.json'; // the settings of the PROJECT; the hooks the user said yes to are joined to it, never to a global file
 const MODO_DO_PAINEL = { rigorous: 'rigoroso', accelerated: 'acelerado' }; // the mode of forge.json, in the words of painel.json
@@ -191,6 +193,7 @@ export async function scaffold(answers, { dest, dryRun = false, force = false } 
   tree[PAINEL] = JSON.stringify({ versao: 1, projeto: answers.projectName, modo: MODO_DO_PAINEL[answers.mode], tickets: [], agentes: [] }, null, 2) + '\n';
   tree[LEITOR_NO_PROJETO] = leitor;
   tree[VIDA_NO_PROJETO] = await readFile(VIDA, 'utf8');
+  tree[GRAVAR_NO_PROJETO] = await readFile(GRAVAR, 'utf8');
   for (const [rel, from] of ficheirosDosHooks(answers.hooks)) tree[rel] = await readFile(from, 'utf8'); // only the hooks answered true; copied as is, like the reader
   const conflicts = [];
   for (const rel of Object.keys(tree)) if (await exists(join(dest, rel))) conflicts.push(rel);
