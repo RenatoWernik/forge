@@ -68,7 +68,9 @@ test('C6 o scaffold (dry run) lista .claude/start-ai-memory.mjs e .claude/hooks/
   } finally { apaga(dest); }
 });
 
-test('C6 assert autorizado: scripts/scaffold.test.mjs só ganha as duas entradas na lista do dry run, e nada mais muda', () => {
+// o âmbito do F-20b só vale no ramo dele: depois de fundido, o merge-base já tem as duas entradas e o diff vem vazio (como o teste de âmbito do f-06)
+const ramo = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout.trim();
+test('C6 assert autorizado: scripts/scaffold.test.mjs só ganha as duas entradas na lista do dry run, e nada mais muda', { skip: ramo !== 'f-20b-ai-memory-projeto' && 'só no ramo f-20b-ai-memory-projeto' }, () => {
   // compara com a main atual (o merge-base), para que as entradas de outros tickets que a main já tem não contem; sem origin/main, com a base fixa
   const mb = spawnSync('git', ['merge-base', 'HEAD', 'origin/main'], { cwd: ROOT, encoding: 'utf8' });
   const desde = mb.status === 0 ? mb.stdout.trim() : BASE;
