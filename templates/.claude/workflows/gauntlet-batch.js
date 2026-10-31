@@ -34,7 +34,7 @@ if (!DASH || !ROOT || !PIECES.length || !TEST || !Object.hasOwn(LIMIT, MODE) || 
 if (PIECES.length > LIMIT[MODE]) throw new Error(`batch too large: ${PIECES.length} pieces, the ${MODE} mode takes at most ${LIMIT[MODE]}; split the batch, no agent was launched`)
 
 const NO_MERGE = 'Never push, open a PR or merge into the main branch: each one needs the yes of the user, which only the orchestrator can ask for.'
-const SAME_DATA = 'Same data: if you write .checkpoints/painel.json, then in the same step, right after it, "set" painel/estado with exactly the object of that file (nothing added, removed or changed) and then painel/vida, as FRAMEWORK.md section 6 says.'
+const SAME_DATA = 'Same data: if you write .checkpoints/painel.json, then in the same step, right after it, "set" painel/estado with exactly the object of that file (nothing added, removed or changed) and then painel/vida, as FRAMEWORK.md section 6 says. Write .checkpoints/painel.json only with node .claude/painel-gravar.mjs (the JSON on its standard input), never with a file edit.'
 
 const TESTER = {
   type: 'object',

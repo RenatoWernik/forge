@@ -64,9 +64,19 @@ project = "{{MEM_PROJECT}}"
 ignore_paths = [".gauntlet/**", "graphify-out/**", "**/.env*"]
 ```
 
-`.graphifyignore`, one per line: `.gauntlet/`, `.claude/`, `.specify/scripts/`, `.specify/templates/`, `.specify/workflows/`, `graphify-out/`. `.gitignore` ignores `.gauntlet/`, `graphify-out/` and `.claude/settings.local.json`; the `.specify/.gitignore` of Spec-Kit ignores `feature.json` (the pointer to the active feature, state of this machine only) and `extensions/*/local-config.yml`; everything else is versioned, including the `.gitattributes` (`graphify-out/graph.json merge=graphify`) that `graphify hook install` writes.
+`.ai-memory.local.toml` (git ignores it: it holds this machine's port and data directory; `memoria.mjs --apply` writes it and `.claude/ai-memory.cjs` reads it after `.ai-memory.toml`, the local file prevailing):
 
-Do not run: `ai-memory init`, `install-hooks`, `install-mcp` (machine-level steps done once by forge's setup; running them again can duplicate wiring); `ai-memory install-instructions` and `install-skills` (not installed on purpose: the `<!-- ai-memory:start -->` block repeats the MCP server instructions that every agent already receives, and tells the agent to write permanent rules into CLAUDE.md instead of `_rules/`, which contradicts section 7); `npx skills@latest add mattpocock/skills` (it duplicates every skill); `specify init --extension git` (branch hooks fight the commit control); `specify workflow run`; `graphify extract` without `--code-only` (there is no API key).
+```toml
+[forge]
+server_url = "http://127.0.0.1:49500"
+data_dir = "<data directory of this machine>/forge/ai-memory/{{MEM_WORKSPACE}}--{{MEM_PROJECT}}"
+```
+
+The capture hooks and the SessionStart notice are in `.claude/settings.local.json` (with `enabledMcpjsonServers`), the MCP server is in `.mcp.json`; git ignores both. `node .claude/start-ai-memory.mjs` starts the server hidden when the notice says it is off.
+
+`.graphifyignore`, one per line: `.gauntlet/`, `.claude/`, `.specify/scripts/`, `.specify/templates/`, `.specify/workflows/`, `graphify-out/`. `.gitignore` ignores `.gauntlet/`, `graphify-out/`, `.claude/settings.local.json`, `.mcp.json` and `.ai-memory.local.toml`; the `.specify/.gitignore` of Spec-Kit ignores `feature.json` (the pointer to the active feature, state of this machine only) and `extensions/*/local-config.yml`; everything else is versioned, including the `.gitattributes` (`graphify-out/graph.json merge=graphify`) that `graphify hook install` writes.
+
+Do not run: `ai-memory init`, `install-hooks`, `install-mcp` by hand (the data directory, the hooks and the MCP server of this project are `memoria.mjs --apply` of forge's setup; `install-hooks` and `install-mcp` embed the token of ai-memory in the file they write, and running any of them again can duplicate wiring); `ai-memory install-instructions` and `install-skills` (not installed on purpose: the `<!-- ai-memory:start -->` block repeats the MCP server instructions that every agent already receives, and tells the agent to write permanent rules into CLAUDE.md instead of `_rules/`, which contradicts section 7); `npx skills@latest add mattpocock/skills` (it duplicates every skill); `specify init --extension git` (branch hooks fight the commit control); `specify workflow run`; `graphify extract` without `--code-only` (there is no API key).
 
 ## 4. Per feature: SDD with Spec-Kit
 
@@ -239,6 +249,8 @@ URL: {{DASHBOARD_URL}}. Tool `ArtifactData` (ToolSearch `select:ArtifactData`). 
 
 Whoever writes `.checkpoints/painel.json` writes, in the same step and right after it, its exact copy in `painel/estado` (`set` with the object of the file: nothing added, removed or changed), and then `painel/vida`: run `node .claude/painel-vida.mjs`, which prints `{"painel/vida":{t,agentes}}` as JSON (`t` = now and, for each agent, the `minutos` and `vida` that `ler()` of `.claude/painel-leitor.mjs` gives for the mtime of its `.checkpoints/<checkpoint>`), and `set` that object. The page draws the tickets and agents from these two documents with that same reader and never writes them.
 
+Write `.checkpoints/painel.json` only with `node .claude/painel-gravar.mjs`, the JSON on its standard input, never with a file edit: it checks the object with `validar()` of `.claude/painel-leitor.mjs` and replaces the file in one step (a temporary file and a rename), so the live panel never reads it half written. With invalid JSON or a field error it exits with 1, shows the errors and leaves the file as it was.
+
 The orchestrator writes `meta/*`, `checkpoints/cp{N}` (creates `{n, title, status:"planejado", ponytail:"pendente"}` and closes it), `notes/nNNNN`, `events/o-...`, `pieces` only as `failed`, and marks the `inbox` as `lido`. The workflows and their agents write the rest according to the seed and `panel()`, including the switch of `checkpoints/cp{N}.status` to `ativo` (build) and of `ponytail` to `rodando` (Ponytail); `verdict`, `gap` and `events/-v` come from the workflow's panel agent, never from the critic. Exception: a standalone loop you conduct, without a workflow (ids `m-...`): the critic writes `verdict` and `gap` on its own agent and on `pieces/<id>`.
 
 1. Time always from `date -u +%Y-%m-%dT%H:%M:%SZ` (UTC). All free text in {{LANGUAGE}}, one line, useful for someone looking live.
@@ -279,6 +291,8 @@ The orchestrator writes `meta/*`, `checkpoints/cp{N}` (creates `{n, title, statu
 | `graphify query` says "No matching nodes" | the search is literal by label, no synonyms | identifiers of 3 or more letters; `explain`, `path`, `affected` with the exact label |
 | subscription quota exhausted | every agent of the project spends the same quota | tell the user and wait; stopped workflow: resume as in section 5 (Preconditions) |
 | `agent()` throws on the 1001st call of a run | runtime limit of 1000 calls per run, all pieces together; each round spends 3 (developer, critic and panel), so a run fits about 330 rounds | resume as in section 5 (Preconditions) or call again with only what the panel does not show as `won` |
+| the SessionStart notice says `ai-memory: OFF at <url>` | the ai-memory server of this project is not running (after a reboot, or it was stopped); nothing is captured meanwhile | `node .claude/start-ai-memory.mjs`, then confirm with `node .claude/check.cjs --env` |
+| the SessionStart notice says `ai-memory: CONFLICT at <url>` | another server answers on the port of this project, with another data directory | do not start anything; `node .claude/check.cjs --env` names the data directory it reports; free the port, or delete the `[forge]` table of `.ai-memory.local.toml` and run `memoria.mjs --apply` again: it picks another free port and keeps the data directory |
 | git or the runner is slow, a file is locked | a cloud-sync folder is syncing | one-pass tests, no watch; quote paths; retry |
 
 ## 10. The process v3: the ticket is the contract
