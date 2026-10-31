@@ -69,7 +69,10 @@ test('C6 o scaffold (dry run) lista .claude/start-ai-memory.mjs e .claude/hooks/
 });
 
 test('C6 assert autorizado: scripts/scaffold.test.mjs só ganha as duas entradas na lista do dry run, e nada mais muda', () => {
-  const d = spawnSync('git', ['diff', '-U0', BASE, '--', 'scripts/scaffold.test.mjs'], { cwd: ROOT, encoding: 'utf8' }).stdout.replace(/\r\n/g, '\n');
+  // compara com a main atual (o merge-base), para que as entradas de outros tickets que a main já tem não contem; sem origin/main, com a base fixa
+  const mb = spawnSync('git', ['merge-base', 'HEAD', 'origin/main'], { cwd: ROOT, encoding: 'utf8' });
+  const desde = mb.status === 0 ? mb.stdout.trim() : BASE;
+  const d = spawnSync('git', ['diff', '-U0', desde, '--', 'scripts/scaffold.test.mjs'], { cwd: ROOT, encoding: 'utf8' }).stdout.replace(/\r\n/g, '\n');
   const mais = d.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++')).map((l) => l.slice(1).trim());
   const menos = d.split('\n').filter((l) => l.startsWith('-') && !l.startsWith('---'));
   assert.deepEqual(menos, [], 'linhas removidas ou mudadas');
