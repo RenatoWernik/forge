@@ -1,4 +1,5 @@
-// The panel mod's state contract (F-11): the model the pane draws and the orchestrator's pulse.
+// The panel mod's types. Since F-25 the mod keeps its state in the hooks module (scripts/mod-painel.mjs, criarRelogio) and asks
+// for a redraw with $.ui.invalidate, so it declares no $.state values. Modelo is what texto() draws from painel.json.
 export type Agente = {
   nome: string
   papel: string
@@ -18,11 +19,4 @@ export type Modelo = {
   contagens: [string, number][] | null
   percentagem?: number
   agentes: Agente[]
-}
-export type Orq = { acoes: number[]; ultimaMensagem?: number }
-
-declare module 'claude-code' {
-  interface PluginState {
-    forge: { painel: Shaped<Modelo>; orq: Shaped<Orq> }
-  }
 }
