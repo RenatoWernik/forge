@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `/forge:discovery` (experimental): a conversational study that takes a new project (software, process, consulting, data or BI) from an idea to a go / adjust / stop decision. Problem before solution, criteria before options, decisions graded by reversibility, a single register of decisions and assumptions, sources on every claim, a devil's advocate on costly decisions, a fresh-context review and a document menu sized to the project. Built from research on how product and engineering teams run the early phases, with and without AI.
+
 ## 1.0.0 (2026-10-30)
 
 First release. forge turns an empty folder into a project run by the gauntlet loop, with the lessons of a real project built that way.

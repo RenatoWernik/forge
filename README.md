@@ -6,8 +6,9 @@ A Claude Code plugin that turns an empty folder into a complete, verified engine
 
 ## What it is
 
-forge packages one framework as three skills:
+forge packages one framework as four skills:
 
+- `/forge:discovery` (experimental) studies a new project with you before anything is built, for software, process, consulting, data or BI projects: you bring the idea and the context, the AI researches the facts and proposes options with trade-offs, you decide, and it ends with only the documents the project needs and a go / adjust / stop decision. Software projects then continue in `/forge:new-project`.
 - `/forge:new-project` checks your machine, interviews you about the project, proposes a mode and a model for each role, generates the whole project (manual, invariants, bootstrap checklist, four workflows, four briefs, a checker, a live panel page, optional protection hooks) and runs the bootstrap.
 - `/forge:update` checks the components and the plugin against their latest public release and updates them one at a time, each with your yes.
 - `/forge:sync` brings the improvements you made in a generated project back into this package, as a patch you review.

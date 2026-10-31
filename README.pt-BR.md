@@ -6,8 +6,9 @@ Um plugin do Claude Code que transforma uma pasta vazia num projeto de engenhari
 
 ## O que é
 
-O forge empacota uma framework em três skills:
+O forge empacota uma framework em quatro skills:
 
+- `/forge:discovery` (experimental) estuda um projeto novo com você antes de construir qualquer coisa, seja software, processo, consultoria, dados ou BI: você traz a ideia e o contexto, a IA pesquisa os fatos e propõe opções com trade-offs, você decide, e no fim saem só os documentos de que o projeto precisa e uma decisão de avançar, ajustar ou parar. Projetos de software seguem depois para o `/forge:new-project`.
 - `/forge:new-project` confere a sua máquina, entrevista você sobre o projeto, propõe um modo e um modelo para cada papel, gera o projeto inteiro (manual, invariantes, checklist de bootstrap, quatro workflows, quatro briefs, um verificador, uma página de painel ao vivo e hooks de proteção opcionais) e executa o bootstrap.
 - `/forge:update` compara os componentes e o plugin com a última versão lançada publicamente e atualiza um de cada vez, cada um com o seu sim.
 - `/forge:sync` leva de volta para este pacote as melhorias que você fez num projeto gerado, como um patch que você revisa.
