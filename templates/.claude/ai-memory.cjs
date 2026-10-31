@@ -1,7 +1,7 @@
 // ai-memory of this project, shared by .claude/check.cjs (--env), .claude/start-ai-memory.mjs and the SessionStart hook. Standard library only.
 //   CANDIDATES: where forge looks for the binary (same list, same order as components.json > ai-memory)
 //   resolveBin({ env, home, run }): { bin, version } of the first candidate whose `--version` says "ai-memory X.Y.Z", else { bin: null, tried }
-//   readConfig(root): { workspace, project, serverUrl, dataDir, autostart } from .ai-memory.toml and .ai-memory.local.toml (the [forge] table, written by forge; the local file prevails), null where missing
+//   readConfig(root): { workspace, project, serverUrl, dataDir, autostart: 'yes' | 'no' | null } from .ai-memory.toml and .ai-memory.local.toml (the [forge] table, written by forge; the local file prevails), null where missing
 //   isIgnored(gitignoreText, rel): true when the .gitignore lines ignore rel (rel, /rel or **/rel; a ! line undoes it)
 //   serverState({ serverUrl, dataDir, bin, platform, fetch, run }): { state: 'on' | 'off' | 'conflict', detail }, 'on' only when the server on the port is this project's
 // run(cmd, args, { env, input, timeout }) -> { code, stdout, stderr }: never a shell, so a hostile AI_MEMORY_BIN is only ever a file name; a code other than 0 is a failure
@@ -53,7 +53,7 @@ function readConfig(root = process.cwd()) {
       const kv = line.match(/^\s*([A-Za-z_]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|(true|false))\s*(#.*)?$/)
       if (!kv) continue
       const key = table === '' ? { workspace: 'workspace', project: 'project' }[kv[1]] : table === 'forge' ? { server_url: 'serverUrl', data_dir: 'dataDir', autostart: 'autostart' }[kv[1]] : undefined
-      if (key) cfg[key] = key === 'autostart' ? kv[4] === 'true' : kv[2] !== undefined ? untoml(kv[2]) : kv[3] ?? null
+      if (key) cfg[key] = key === 'autostart' ? (['yes', 'no'].includes(kv[2] ?? kv[3]) ? kv[2] ?? kv[3] : null) : kv[2] !== undefined ? untoml(kv[2]) : kv[3] ?? null
     }
   }
   return cfg
@@ -78,4 +78,48 @@ async function serverState({ serverUrl, dataDir, bin, platform = process.platfor
   return { state: 'on', detail: '' }
 }
 
-module.exports = { CANDIDATES, resolveBin, readConfig, serverState, isIgnored, run: defaultRun }
+// The startup entry of this project's server, one file per platform (forge's memoria.mjs --autostart yes writes it, check.cjs --env reads it).
+// Only this project's file is ever named: forge-ai-memory-<W>--<P>.vbs (Windows Startup folder), forge-ai-memory-<W>--<P>.service (systemd user unit),
+// com.forge.ai-memory.<W>.<P>.plist (LaunchAgent). shortcut: a path outside ASCII is written as it is (wscript reads ANSI); upgrade: UTF-16 for the .vbs
+const XML = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const ESC = { win32: s => s, linux: s => s.replace(/%/g, '%%'), darwin: XML }
+// a value as it stands in the entry, between the marks that end it; the check looks for it that way, so /x/ai-memory never matches /x/ai-memory2
+const WRAP = { win32: s => '""' + s + '""', linux: s => '"' + s + '"', darwin: s => '<string>' + s + '</string>' }
+
+function startupEntry({ platform = process.platform, env = process.env, home = os.homedir(), workspace: w, project: p, bin, dataDir, port }) {
+  const E = ESC[platform] || ESC.linux
+  const argv = ['serve', '--transport', 'http', '--bind', '127.0.0.1:' + port, '--workspace', w, '--project', p]
+  if (platform === 'win32') {
+    const dir = path.join(envVar(env, 'APPDATA') || path.join(home, 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+    return { dir, name: `forge-ai-memory-${w}--${p}.vbs`, text: `' forge: starts the ai-memory server of ${w}/${p} at logon, hidden. Delete this file to stop it.\r\n`
+      + `CreateObject("WScript.Shell").Run """${bin}"" --data-dir ""${dataDir}"" ${argv.join(' ')}", 0, False\r\n` }
+  }
+  if (platform === 'darwin') {
+    const label = `com.forge.ai-memory.${w}.${p}`, args = [bin, '--data-dir', dataDir, ...argv].map(a => `    <string>${XML(a)}</string>`).join('\n')
+    return { dir: path.join(home, 'Library', 'LaunchAgents'), name: label + '.plist', label, text: '<?xml version="1.0" encoding="UTF-8"?>\n'
+      + '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n'
+      + `  <key>Label</key>\n  <string>${label}</string>\n  <key>ProgramArguments</key>\n  <array>\n${args}\n  </array>\n  <key>RunAtLoad</key>\n  <true/>\n  <key>KeepAlive</key>\n  <true/>\n</dict>\n</plist>\n` }
+  }
+  return { dir: path.join(envVar(env, 'XDG_CONFIG_HOME') || path.join(home, '.config'), 'systemd', 'user'), name: `forge-ai-memory-${w}--${p}.service`, text: `[Unit]\nDescription=ai-memory server of the forge project ${w}/${p}\n\n`
+    + `[Service]\nType=simple\nExecStart="${E(bin)}" --data-dir "${E(dataDir)}" ${argv.join(' ')}\nRestart=on-failure\nRestartSec=5s\n\n[Install]\nWantedBy=default.target\n` }
+}
+
+// the `ai-memory: autostart` line of check.cjs --env: { ok, detail } from the answer in the [forge] table and this project's entry (the one file named above)
+function autostartState({ cfg, bin, platform = process.platform, env = process.env, home = os.homedir() }) {
+  const again = 'run the memory step again'
+  if (cfg.autostart !== 'yes' && cfg.autostart !== 'no') return { ok: false, detail: '(not chosen: run the memory step of /forge:new-project)' }
+  const port = Number((/^http:\/\/127\.0\.0\.1:([0-9]{1,5})$/.exec(cfg.serverUrl || '') || [])[1])
+  const e = startupEntry({ platform, env, home, workspace: cfg.workspace, project: cfg.project, bin, dataDir: cfg.dataDir, port })
+  let text = null
+  try { text = fs.readFileSync(path.join(e.dir, e.name), 'utf8') } catch (x) {}
+  if (cfg.autostart === 'no') {
+    if (text !== null) return { ok: false, detail: `(no, but a startup entry exists: ${again})` }
+    return fs.existsSync(path.join(__dirname, 'start-ai-memory.mjs')) ? { ok: true, detail: '' } : { ok: false, detail: '(no, but .claude/start-ai-memory.mjs is missing)' }
+  }
+  if (text === null) return { ok: false, detail: `(yes, but the startup entry is missing: ${again})` }
+  const W = WRAP[platform] || WRAP.linux, E = ESC[platform] || ESC.linux, bind = new RegExp('127\\.0\\.0\\.1:' + port + '(?![0-9])')
+  const same = !!bin && !!cfg.dataDir && Number.isInteger(port) && text.includes(W(E(bin))) && text.includes(W(E(cfg.dataDir))) && bind.test(text)
+  return same ? { ok: true, detail: '' } : { ok: false, detail: `(yes, but the startup entry does not match .ai-memory.toml: ${again})` }
+}
+
+module.exports = { CANDIDATES, resolveBin, readConfig, serverState, isIgnored, startupEntry, autostartState, run: defaultRun }

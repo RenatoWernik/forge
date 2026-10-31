@@ -123,19 +123,26 @@ Run `node .claude/check.cjs`. Its `language` line reads the language from `.clau
 
 ### Set up the ai-memory of the project
 
-The memory of this project gets its own data directory and its own port, so another project (or the user's own ai-memory) can never mix with it. Run the script from the scripts folder of this plugin (`cd "${CLAUDE_PLUGIN_ROOT}/scripts"`), with the absolute path of the project as `--dest`. First read the plan; it writes nothing:
+The memory of this project gets its own data directory and its own port, so another project (or the user's own ai-memory) can never mix with it. Use the absolute path of the project as `--dest`. First read the plan; it writes nothing:
 
 ```bash
-node memoria.mjs --plan --dest "<project folder>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/memoria.mjs" --plan --dest "<project folder>"
 ```
 
-It prints JSON. Show the user what `outside` lists (it lands outside the project: the data directory, a line in its `config.toml`, a hidden server) and what `inside` lists (only files git ignores: `.ai-memory.local.toml`, `.claude/settings.local.json`, `.mcp.json`). If the plan fails with `ai-memory not found`, go back to step 1 and install ai-memory first. Otherwise ask the yes of the user, and only after it:
+It prints JSON. Show the user what `outside` lists (it lands outside the project: the data directory, a line in its `config.toml`, a hidden server) and what `inside` lists (only files git ignores: `.ai-memory.local.toml`, `.claude/settings.local.json`, `.mcp.json`). If the plan fails with `ai-memory not found`, go back to step 1 and install ai-memory first. Otherwise ask the yes of the user to set it up, and ask this question too:
+
+**Start this project's memory with the system?** ai-memory is this project's long-term memory. It hands the baton from one session to the next, so a new session starts where the last one stopped; it remembers the decisions and lessons already learned; it lets the work resume after a quota or context cut; and Claude and Codex share it. It captures and answers only while its server is running.
+- **Yes**: forge adds a startup entry for this project's server only (Windows: a `.vbs` file in your Startup folder, without administrator rights; Linux: a systemd user unit; macOS: a LaunchAgent). The server then starts hidden at every logon and stays in the background, using a little memory.
+- **No**: nothing starts with the system. You start the server when you need it with `node .claude/start-ai-memory.mjs`, and every session start says whether it is on and how to start it. While it is off, nothing is captured and the baton does not arrive.
+Either way the memory of this project is set up correctly, and you can change the answer later by running this step again.
+
+Ask it in the user's language, and wait for the answer: a missing answer is not a yes. Then, with the answer as `yes` or `no`:
 
 ```bash
-node memoria.mjs --apply --dest "<project folder>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/memoria.mjs" --apply --dest "<project folder>" --autostart yes|no
 ```
 
-It creates the data directory with `ai-memory init` (only when it does not exist, never with `--force`), joins the hooks and the MCP server to the files above keeping everything the user already has there, adds the three files to `.gitignore`, and starts the server hidden. It never reads or prints the token of ai-memory. Exit `1` is an error to show (a refused path, a file that is not valid JSON: nothing was written); exit `2` is another server on the port: tell the user and run `node .claude/check.cjs --env`. Running it again changes nothing.
+Running `memoria.mjs --apply` again with the same answers changes nothing. It creates the data directory with `ai-memory init` (only when it does not exist, never with `--force`), joins the hooks and the MCP server to the files above keeping everything the user already has there, adds the three files to `.gitignore`, records the answer in the `[forge]` table and, for `yes`, writes the startup entry of this project only (for `no`, it removes this project's entry if there is one and nothing else), and starts the server hidden. It never reads or prints the token of ai-memory. Exit `1` is an error to show (a refused path, a file that is not valid JSON: nothing was written); exit `2` is another server on the port: tell the user and run `node .claude/check.cjs --env`.
 
 ## 6. Publish and seed the panel
 

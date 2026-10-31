@@ -96,7 +96,8 @@ async function chk(name, f) {
     let aim = null // shortcut: any load error reads as missing; upgrade: tell a broken module from an absent one
     try { aim = require('./ai-memory.cjs') } catch (e) {}
     const L_CAP = 'ai-memory: .ai-memory.toml admits capture in this project', L_PAGE = 'ai-memory: page _rules/framework.md seeded'
-    if (!aim) for (const n of ['ai-memory: binary', "ai-memory: server answers and is this project's", L_CAP, L_PAGE]) await chk(n + ' (.claude/ai-memory.cjs missing)', () => false)
+    const L_AUTO = 'ai-memory: autostart', L_CP = 'ai-memory: one page checkpoints/cp-N.md per cp-N tag'
+    if (!aim) for (const n of ['ai-memory: binary', "ai-memory: server answers and is this project's", L_CAP, L_PAGE, L_AUTO, L_CP]) await chk(n + ' (.claude/ai-memory.cjs missing)', () => false)
     else {
       const cfg = aim.readConfig('.'), { bin, version } = aim.resolveBin({ env: process.env, home: H, run: aim.run }), ready = !!(bin && cfg.serverUrl && cfg.dataDir)
       await chk(bin ? 'ai-memory: binary ' + bin + ' (' + version + ')' : 'ai-memory: binary not found (looked in: AI_MEMORY_BIN, PATH, %LOCALAPPDATA%/ai-memory/ai-memory.exe, ~/Applications/ai-memory/ai-memory, ~/.local/bin/ai-memory)', () => !!bin)
@@ -115,6 +116,12 @@ async function chk(name, f) {
           && bind.length === 1 && bind[0] === 'bind="' + new URL(cfg.serverUrl).host + '"' && ['.claude/settings.local.json', '.mcp.json', '.ai-memory.local.toml'].every(r => aim.isIgnored(g, r))
       })
       await chk(L_PAGE, () => ready && cfg.workspace && cfg.project && aim.run(bin, [...base, 'read-page', '--path', '_rules/framework.md', '--workspace', cfg.workspace, '--project', cfg.project], { env: { ...process.env, AI_MEMORY_SERVER_URL: cfg.serverUrl } }).code === 0)
+      const au = aim.autostartState({ cfg, bin, platform: process.platform, env: process.env, home: H })
+      await chk(L_AUTO + (au.detail ? ' ' + au.detail : ''), () => au.ok)
+      // A5: every cp-N tag has its page checkpoints/cp-N.md in this project's memory (the tags are git's own, never the files of .git/refs/tags)
+      const tags = (aim.run('git', ['tag', '--list', 'cp-*']).stdout || '').split(/\r?\n/).map(t => t.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+      const noPage = ready && cfg.workspace && cfg.project ? tags.filter(t => aim.run(bin, [...base, 'read-page', '--path', 'checkpoints/' + t + '.md', '--workspace', cfg.workspace, '--project', cfg.project], { env: { ...process.env, AI_MEMORY_SERVER_URL: cfg.serverUrl } }).code !== 0) : tags
+      await chk(L_CP + (!tags.length ? ' (no cp-* tags)' : noPage.length ? ' (missing: ' + noPage.join(', ') + ')' : ''), () => !noPage.length)
     }
     await chk('Spec-Kit: .specify/ and the /speckit-* skills installed', () => has('.specify/memory/constitution.md') && ['constitution', 'specify', 'clarify', 'plan', 'tasks', 'analyze', 'converge'].every(n => has('.claude/skills/speckit-' + n, 'SKILL.md')))
     await chk('Matt Pocock: /setup done (docs/agents/ and an "## Agent skills" block in CLAUDE.md)', () => has('docs/agents/issue-tracker.md') && fs.readFileSync('CLAUDE.md', 'utf8').includes('## Agent skills'))
@@ -178,7 +185,8 @@ async function chk(name, f) {
     }
     return got
   }
-  const itemOk = (b, i) => en ? b.includes('Verifies:') && b.replace(/^\d+\. \*\*/, '').startsWith(TITLES[i]) : pt ? /(?<!\p{L})Verifica:/u.test(b) : /`[^`\n]+`/.test(b)
+  const SPAN_9 = '`ai-memory: one page checkpoints/cp-N.md per cp-N tag`' // item 9 names the --env line that verifies the pages; the span is not translated
+  const itemOk = (b, i) => (i !== 8 || b.includes(SPAN_9)) && (en ? b.includes('Verifies:') && b.replace(/^\d+\. \*\*/, '').startsWith(TITLES[i]) : pt ? /(?<!\p{L})Verifica:/u.test(b) : /`[^`\n]+`/.test(b))
   if (has('CLAUDE.md')) { // the documents are only absent in the nested --render copy, which holds just .claude
     const noInv = ['CLAUDE.md', 'AGENTS.md'].filter(f => { const it = items(f); return it.length !== TITLES.length || !it.every(itemOk) })
     await chk('invariants: CLAUDE.md and AGENTS.md have the 12 numbered invariants, each with its Verifies: line' + (noInv.length ? ' (not ok: ' + noInv.join(', ') + ')' : ''), () => !noInv.length)
