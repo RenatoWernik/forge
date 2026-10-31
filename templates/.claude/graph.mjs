@@ -1,5 +1,5 @@
 // node .claude/graph.mjs update | docs [--mark]   (always runs at the project root, the parent folder of .claude/)
-//   update: `graphify update .` (no LLM: code by AST, Markdown by headings); it handles the empty folder of CP0
+//   update: `graphify update .` (no LLM: code by AST, Markdown by headings); it handles the empty folder of CP0. After a graphify that exits 0 it writes the seal graphify-out/forge-fresh.json { head, at }
 //   docs:   compares the sha256 of the docs graphify would read with an LLM against graphify-out/forge-docs.json and prints the cost (words) of reading the changed ones;
 //           --mark records the current state. It never starts a process; the LLM pass itself (/graphify . --update) is a skill the orchestrator runs.
 // The only graphify command started from here is the one above, which needs no LLM.
@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const GRAPH = path.join(ROOT, 'graphify-out', 'graph.json')
 const STAMP = path.join(ROOT, 'graphify-out', 'forge-docs.json')
+const SEAL = path.join(ROOT, 'graphify-out', 'forge-fresh.json')
 const cmd = process.argv[2], mark = process.argv.includes('--mark')
 
 const update = () => {
@@ -21,7 +22,14 @@ const update = () => {
   if (r.status === 0) {
     let built
     try { built = JSON.parse(fs.readFileSync(GRAPH, 'utf8').replace(/^﻿/, '')).built_at_commit } catch (e) { console.log('graph: updated, but graphify-out/graph.json is missing or unreadable'); return 1 }
-    console.log('graph: updated at ' + (built ?? 'no commit'))
+    // graphify leaves graph.json untouched when the code did not change, so built_at_commit does not move; the seal records that this update ran at HEAD
+    const g = spawnSync('git', ['rev-parse', '--verify', '-q', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }), head = g.status === 0 ? g.stdout.trim() : ''
+    if (head) {
+      const tmp = SEAL + '.' + process.pid + '.tmp'
+      fs.writeFileSync(tmp, JSON.stringify({ head, at: new Date().toISOString() }) + '\n')
+      fs.renameSync(tmp, SEAL)
+    }
+    console.log('graph: updated at ' + (head || built || 'no commit'))
     return 0
   }
   if (text.includes('No code files found')) { console.log('graph: nothing to index yet'); return 0 }
