@@ -1,0 +1,11 @@
+[Unit]
+Description=ai-memory server of the forge project {{W}}/{{P}}
+
+[Service]
+Type=simple
+ExecStart="{{BIN}}" --data-dir "{{DATADIR}}" serve --transport http --bind 127.0.0.1:{{PORT}} --workspace {{W}} --project {{P}}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
