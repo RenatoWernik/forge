@@ -75,3 +75,34 @@ test('C4 mudar o STATUS de uma entrada commitada e acrescentar uma entrada: ok',
 test('C4 GUARDA: a linha do C1 continua a correr com git (o histórico não troca a validação)', () => {
   esperaOk(em({ '2026-10.md': OUT }), L_FORMA);
 });
+
+// Resposta do orquestrador na #75 (2026-10-31): antes de comparar, os fins de linha normalizam-se dos dois lados (CRLF → LF), para que o
+// core.autocrlf nunca dê um alarme falso. Cada cenário é um repositório próprio.
+const CRLF = (t) => t.replace(/\r?\n/g, '\r\n');
+// só a linha do C4: se a linha do C1 aceita CRLF não é deste critério
+const cresceOk = (r) => { const l = linha(r, L_CRESCE); assert.ok(l && l.startsWith('ok    '), 'a linha do C4 devia ser ok (alarme falso por CRLF):\n' + (l || r.out.slice(-1500))); };
+const repo = async (texto, autocrlf) => {
+  const R = await projeto();
+  caso(R, { '2026-10.md': texto });
+  git(R, 'init', '-q');
+  if (autocrlf) git(R, 'config', 'core.autocrlf', 'true');
+  git(R, 'add', '-A');
+  git(R, 'commit', '-q', '-m', 'base');
+  return R;
+};
+test('C4 core.autocrlf=true, ficheiro de trabalho em CRLF e o blob do HEAD em LF, sem edição: ok (sem alarme falso)', async () => {
+  const R = await repo(CRLF(OUT), true);
+  try { cresceOk(check(R)); } finally { apaga(R); }
+});
+test('C4 core.autocrlf=true, CRLF: acrescentar uma entrada em CRLF dá ok', async () => {
+  const R = await repo(CRLF(OUT), true);
+  try { cresceOk(caso(R, { '2026-10.md': CRLF(ficheiro('2026-10', [E1, E2, E3])) })); } finally { apaga(R); }
+});
+test('C4 core.autocrlf=true, CRLF: editar o SYMPTOM de uma entrada commitada continua a dar FAIL', async () => {
+  const R = await repo(CRLF(OUT), true);
+  try { const r = caso(R, { '2026-10.md': CRLF(OUT.replace('- SYMPTOM: the test port', '- SYMPTOM: a test port')) }); const l = linha(r, L_CRESCE); assert.ok(l && l.startsWith('FAIL  '), 'a edição em CRLF passou no C4:\n' + (l || r.out.slice(-1500))); assert.equal(r.status, 1); } finally { apaga(R); }
+});
+test('C4 o blob do HEAD em CRLF (sem autocrlf) e o ficheiro de trabalho em LF, sem edição: ok (normaliza dos dois lados)', async () => {
+  const R = await repo(CRLF(OUT), false);
+  try { cresceOk(caso(R, { '2026-10.md': OUT })); } finally { apaga(R); }
+});

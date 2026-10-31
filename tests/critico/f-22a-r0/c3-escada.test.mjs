@@ -9,6 +9,7 @@
 // LACUNA DA BARRA: o C3 não diz a linha; aceita-se FAIL em qualquer linha `learnings:` (sem git a do C4 fica ok). O campo nomeado só se exige
 // onde a regra o fixa (a mensagem da subida, e cada caminho pelo seu campo).
 import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
 import { join, dirname, basename } from 'node:path';
 import { L_FORMA, SUBIDA, ARVORE, entrada, ficheiro, projeto, caso, escreve, esperaFailLearnings, esperaOk, apaga } from './helpers.mjs';
 
@@ -25,8 +26,32 @@ test('C3 GUARDA DO ORÁCULO: a classe sobe memory → text → check → test e 
 test('C3 GUARDA: classes diferentes não se comparam (memory e memory em classes distintas dão ok)', () => {
   esperaOk(caso(P, um(entrada(1, 'memory', { CLASS: 'a-a' }), entrada(2, 'memory', { CLASS: 'b-b' }))), L_FORMA);
 });
-test('C3 GUARDA: test depois de test na mesma classe dá ok (a mais forte já é test)', () => {
-  esperaOk(caso(P, um(entrada(1, 'test'), entrada(2, 'test'))), L_FORMA);
+// Resposta do orquestrador na #75 (2026-10-31): com a mais forte anterior já em `test`, a entrada nova TEM de ser `test`, e o check acrescenta
+// um WARN (não FAIL), «recorrência na camada mais forte: o teste não chega, rever (redesenho)». O texto do aviso não está fixo em inglês: exige-se
+// uma linha `warn  learnings:` além da do REVIEW-BY (todas as entradas destes cenários estão `prevented`, por isso essa nunca sai).
+const avisos = (r) => r.linhas.filter((l) => l.startsWith('warn  learnings:') && !l.includes('open entries past their REVIEW-BY'));
+test('C3 test depois de test na mesma classe: sem FAIL, exit 0, e um WARN learnings de recorrência na camada mais forte', () => {
+  const r = caso(P, um(entrada(1, 'test'), entrada(2, 'test')));
+  esperaOk(r, L_FORMA);
+  assert.equal(avisos(r).length, 1, 'esperava 1 aviso «warn  learnings:» de recorrência na camada mais forte:\n' + r.out.slice(-1500));
+});
+test('C3 GUARDA: test em classes diferentes não dá o aviso de recorrência', () => {
+  const r = caso(P, um(entrada(1, 'test', { CLASS: 'a-a' }), entrada(2, 'test', { CLASS: 'b-b' })));
+  esperaOk(r, L_FORMA);
+  assert.deepEqual(avisos(r), []);
+});
+test('C3 GUARDA: a subida normal (memory → check) não dá o aviso de recorrência na camada mais forte', () => {
+  const r = caso(P, um(entrada(1, 'memory'), entrada(2, 'check')));
+  esperaOk(r, L_FORMA);
+  assert.deepEqual(avisos(r), []);
+});
+for (const c of ['hook', 'check', 'contract', 'text', 'memory']) {
+  test(`C3 com a mais forte anterior em test, a entrada nova não pode descer (test e depois ${c}): FAIL que nomeia E-002`, () => {
+    esperaFailLearnings(caso(P, um(entrada(1, 'test'), entrada(2, c))), 'E-002 ');
+  });
+}
+test('C3 descer depois de chegar a test, com a mais forte longe (memory, test, hook): FAIL que nomeia E-003', () => {
+  esperaFailLearnings(caso(P, um(entrada(1, 'memory'), entrada(2, 'test'), entrada(3, 'hook'))), 'E-003 ');
 });
 test('C3 a mesma camada outra vez (memory, memory): FAIL com a mensagem literal da subida', () => {
   esperaFailLearnings(caso(P, um(entrada(1, 'memory'), entrada(2, 'memory'))), SUBIDA('E-002', 'fixed-test-port', 'E-001', 'memory'));
