@@ -181,7 +181,7 @@ Done when every unit wins, the suite passes in your run and the ledger has no li
 
 ### Step 4. Graphify
 
-`graphify update .` (no LLM: code by AST and Markdown by headings only; run it synchronously, because the post-commit hook only rebuilds in the background; the orchestrator is the only writer). If spec, plan, `CONTEXT.md` or an ADR changed in content: `/graphify . --update` (`[X]` marks in `tasks.md` do not count). Then `graphify reflect --if-stale` (the option comes from `references/query.md` of the graphify skill; `graphify --help` may not list it); after a useful graph answer, `graphify save-result --question ... --answer ... --nodes ... --outcome useful`. Without production code (CP0: `.claude/` is in `.graphifyignore`), skip the step: only the Markdown headings would be left (in an empty directory the command writes nothing and exits with code 1, `No code files found`). The first graph is born in section 4 (First graph).
+`node .claude/graph.mjs update` (it runs `graphify update .`: no LLM, code by AST and Markdown by headings only; it also works in the empty directory of CP0, where it prints `graph: nothing to index yet`; run it synchronously, because the post-commit hook only rebuilds in the background; the orchestrator is the only writer). Then `node .claude/graph.mjs docs` compares spec, plan, `CONTEXT.md`, `GLOSSARY.md` and the ADRs with the last mark (`[X]` marks in `tasks.md` do not count). With `docs: unchanged`, skip the rest of this paragraph up to `graphify reflect`. With `docs: changed <n> files, <w> words: ...`, first record on the panel a note of kind `info` with that line (it is the declared cost: the pass below spends the session quota, because subagents read those words), then run `/graphify . --update` and, at the end, `node .claude/graph.mjs docs --mark`. Then `graphify reflect --if-stale` (the option comes from `references/query.md` of the graphify skill; `graphify --help` may not list it); after a useful graph answer, `graphify save-result --question ... --answer ... --nodes ... --outcome useful`. The first graph with the docs is born in section 4 (First graph).
 
 Done when `graphify explain "<new symbol of the checkpoint>"` finds the node.
 
@@ -208,7 +208,7 @@ Done when the panel shows the CP as concluded, every piece under "Won" and the c
 
 Present in chat: pieces and rounds, Ponytail cuts (lines before and after), suite result, open questions. Ask: "Do you approve checkpoint N?". Record the question first as a `pergunta` note and the yes on it (section 6, step 5).
 
-- Yes: `git status`, `git add <paths>` (never `-A`; never `.gauntlet/`, `graphify-out/`, secrets), `git commit -m "cp-N: <title>"`, `git tag cp-N`. The graphify hook rebuilds the graph in the background.
+- Yes: `git status`, `git add <paths>` (never `-A`; never `.gauntlet/`, `graphify-out/`, secrets), `git commit -m "cp-N: <title>"`, `git tag cp-N`, then `node .claude/graph.mjs update`, so that the graph is built at the new HEAD (the graphify hook also rebuilds it in the background).
 - No: record the note; create fix pieces with the reason in their `goal`; go back to step 2 for them only and repeat 3 to 7.
 
 Done when `git tag --list "cp-*"` shows `cp-N`.
@@ -263,6 +263,7 @@ The orchestrator writes `meta/*`, `checkpoints/cp{N}` (creates `{n, title, statu
 **Graphify**
 
 - Never ask for an API key: code is AST; docs go through the `/graphify` skill (the agent itself extracts), whose blocks use `$(cat graphify-out/.graphify_python)`: run it in a POSIX shell.
+- The pass over the docs (`/graphify . --update`) spends the session quota: subagents read the docs that changed. `node .claude/graph.mjs docs` measures it before (files and words) and says `unchanged` when there is nothing to pay for.
 - A graph that would shrink is refused (shrink guard): after a deliberate removal, `graphify update . --force`.
 
 ## 8. Permissions and security
