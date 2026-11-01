@@ -135,8 +135,36 @@ test('validate fails closed: without an exists function every path of a test/hoo
   assert.ok(!validate(e, { exists: () => true }).fails.some((f) => f.message.startsWith('E-001 PREVENTION-PATH')));
 });
 
-test('parse: CRLF, a BOM and a heading that is not an entry', () => {
-  const p = parse('﻿<!-- expect: x -->\r\n# Learnings 2026-10\r\n\r\n## Notes\r\n- DATE: ignored\r\n## E-001\r\n- DATE: 2026-10-20\r\n', '2026-10.md');
+test('parse: CRLF and a BOM are not a problem', () => {
+  const p = parse('﻿<!-- expect: x -->\r\n# Learnings 2026-10\r\n\r\n## E-001\r\n- DATE: 2026-10-20\r\n\r\n', '2026-10.md');
   assert.deepEqual(p.problems, []);
   assert.deepEqual(p.entries.map((e) => [e.id, e.fields.length]), [['E-001', 1]]);
+});
+
+// class: anything in a YYYY-MM.md that is not the title, a blank line or a valid entry is a problem (an almost-entry would escape every rule)
+for (const bad of ['## e-001', '### E-001', '##  E-001', '## E-001 extra', '## E-', '## Notes', '# Learnings 2026-10', '- DATE: 2026-10-20', 'free text', '-  DATE: 2026-10-20']) {
+  test(`parse: «${bad}» in a register file is a problem, with its line`, () => {
+    const p = parse(`# Learnings 2026-10\n\n## E-001\n- DATE: 2026-10-20\n${bad}\n- SYMPTOM: s\n`, '2026-10.md');
+    assert.ok(p.problems.some((m) => m.startsWith('2026-10.md line 5: ')), JSON.stringify(p.problems));
+  });
+}
+test('parse: the fields below a bad heading belong to no entry, and a comment after the title is a problem', () => {
+  const p = parse('# Learnings 2026-10\n\n## E-001\n- DATE: 2026-10-20\n## Notes\n- TRIGGER: bogus\n<!-- x -->\n', '2026-10.md');
+  assert.deepEqual(p.entries[0].fields, [['DATE', '2026-10-20']]);
+  assert.equal(p.problems.length, 3);
+});
+test('check: a mistitled entry is a FAIL on the learnings line, not (no entries)', async () => {
+  const text = (await readFile(join(CORPUS, 'valid', 'same-day-review.md'), 'utf8')).replace('## E-001', '## e-001');
+  const r = await run({ '2026-10.md': text });
+  assert.match(r.line, /^FAIL {2}/);
+  assert.ok(r.line.includes('2026-10.md line '), r.line);
+});
+test('check: --today=X is the same as --today X, a bad one is a FAIL', async () => {
+  const open = await readFile(join(CORPUS, 'valid', 'climb-and-triggers.md'), 'utf8');
+  assert.ok((await run({ '2026-10.md': open }, ['--today=2026-11-21'])).out.includes('(today 2026-11-21): E-005 (2026-11-20)'));
+  assert.match((await run({ '2026-10.md': open }, ['--today=1-11-2026'])).line, /^FAIL {2}/);
+});
+test('history: a BOM is not a change', () => {
+  assert.deepEqual(grows('﻿' + head), []);
+  assert.deepEqual(grows(head, '﻿' + head), []);
 });

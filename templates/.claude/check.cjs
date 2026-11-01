@@ -657,7 +657,8 @@ async function chk(name, f) {
     const L_FORM = 'learnings: every entry of learnings/ is well formed', L_GROW = 'learnings: learnings/ only grows (only STATUS lines change)'
     let lib = null
     try { lib = require('./learnings.cjs') } catch (e) {}
-    const ti = process.argv.indexOf('--today'), today = ti < 0 ? new Date().toISOString().slice(0, 10) : process.argv[ti + 1]
+    const eq = process.argv.find(a => a.startsWith('--today=')), ti = process.argv.indexOf('--today'), given = eq !== undefined || ti >= 0 // --today X or --today=X
+    const today = eq !== undefined ? eq.slice(8) : ti >= 0 ? process.argv[ti + 1] : new Date().toISOString().slice(0, 10)
     let names = []
     try { names = fs.readdirSync('learnings').filter(n => n !== 'README.md') } catch (e) {}
     const texts = {}
@@ -671,7 +672,7 @@ async function chk(name, f) {
     }
     const parsed = lib ? names.map(n => lib.parse(texts[n], n)) : [], clockOk = !!lib && lib.isDay(today)
     const r = lib ? lib.validate(parsed.flatMap(p => p.entries), { today: clockOk ? today : undefined, exists: p => has(p), headTexts: head || undefined, texts }) : { fails: [], warns: [] }
-    const form = [...(ti >= 0 && !clockOk && lib ? ['--today ' + today + ' is not a date YYYY-MM-DD'] : []), ...parsed.flatMap(p => p.problems), ...r.fails.filter(f => f.kind === 'form').map(f => f.message)]
+    const form = [...(given && !clockOk && lib ? ['--today ' + today + ' is not a date YYYY-MM-DD'] : []), ...parsed.flatMap(p => p.problems), ...r.fails.filter(f => f.kind === 'form').map(f => f.message)]
     const grow = r.fails.filter(f => f.kind === 'grow').map(f => f.message)
     if (!lib && names.length) form.push('.claude/learnings.cjs is missing')
     await chk(L_FORM + (form.length ? ' (' + form.join('; ') + ')' : parsed.every(p => !p.entries.length) ? ' (no entries)' : ''), () => !form.length)

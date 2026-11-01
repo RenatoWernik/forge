@@ -24,20 +24,29 @@ const lf = s => s.replace(/\r\n/g, '\n')
 function parse(text, file) {
   const entries = [], problems = [], month = (file.match(/^(\d{4}-(?:0[1-9]|1[0-2]))\.md$/) || [])[1]
   if (!month) problems.push(file + ': the name must be YYYY-MM.md (or README.md)')
-  const lines = lf(text.replace(/^﻿/, '')).split('\n'), first = lines.find(l => l.trim() && !/^<!--.*-->\s*$/.test(l))
-  if (month && first !== '# Learnings ' + month) problems.push(file + ': the first line must be "# Learnings ' + month + '"')
-  let cur = null
-  lines.forEach((l, i) => {
-    const h = l.match(/^## (E-.*?)\s*$/), f = l.match(/^- ([A-Z][A-Z-]*):[ \t]*(.*?)\s*$/)
+  // a file holds the title, blank lines and entries (## E-NNN with its "- KEY: value" lines), and nothing else: a heading that is almost an entry would escape every rule below
+  let cur = null, titled = false
+  lf(text.replace(/^﻿/, '')).split('\n').forEach((l, i) => {
+    if (!l.trim() || (!titled && /^<!--.*-->\s*$/.test(l))) return // the comments before the title are the corpus's expect lines
+    const at = file + ' line ' + (i + 1) + ': '
+    if (!titled) {
+      titled = true
+      if (month ? l.trimEnd() === '# Learnings ' + month : /^# Learnings /.test(l)) return
+      problems.push(at + 'the first line must be "# Learnings ' + (month || 'YYYY-MM') + '"')
+    }
+    const h = l.match(/^## (E-\d+)\s*$/), f = l.match(/^- ([A-Z][A-Z-]*):[ \t]*(.*?)\s*$/)
     if (h) entries.push(cur = { id: h[1], n: parseInt(h[1].slice(2), 10), file, line: i + 1, fields: [] })
-    else if (/^## /.test(l)) cur = null
     else if (f && cur) cur.fields.push([f[1], f[2]])
+    else {
+      problems.push(at + 'this is not a title, a blank line, an entry heading "## E-NNN" or a field "- KEY: value": ' + JSON.stringify(l.slice(0, 60)))
+      if (l.startsWith('#')) cur = null // the fields below a bad heading belong to no entry
+    }
   })
   return { file, entries, problems }
 }
 
 // the lines of a register text with the STATUS lines out and the trailing blank lines cut: the part of a file that may never change
-const frozen = t => { const l = lf(t).split('\n').filter(x => !x.startsWith('- STATUS:')); while (l.length && !l[l.length - 1].trim()) l.pop(); return l }
+const frozen = t => { const l = lf(t.replace(/^﻿/, '')).split('\n').filter(x => !x.startsWith('- STATUS:')); while (l.length && !l[l.length - 1].trim()) l.pop(); return l }
 
 function validate(entries, { today, exists = () => false, headTexts, texts = {} } = {}) {
   const fails = [], warns = []
