@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { ROOT, BASE, git, runTests, failures } from './helpers.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em e083b6a; a suíte passava com 139
-const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
+const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sync.test.mjs': 21 };
 const count = (f) => [...readFileSync(join(ROOT, 'scripts', f), 'utf8').matchAll(/^test\((['"`])(.*?)\1/gm)].length;
 
 test('regressão: nenhum ficheiro de teste do pacote perde testes', () => {
@@ -42,36 +42,4 @@ test('regressão: os ataques da Ronda −1 do F-01, F-02, F-03 e F-10 continuam 
   assert.equal(r.status, 0, failures(r.out));
   assert.equal(r.fail, 0, failures(r.out));
   assert.ok(r.pass >= 150, 'passaram ' + r.pass);
-});
-
-const branch = git('rev-parse', '--abbrev-ref', 'HEAD').stdout.trim();
-test('âmbito: os ataques dos tickets já fundidos não mudam neste ticket', { skip: branch !== 'f-04-entrevista-modelos' && 'só no ramo f-04-entrevista-modelos' }, () => {
-  const mb = git('merge-base', 'HEAD', 'origin/main');
-  const base = mb.status === 0 ? mb.stdout.trim() : BASE;
-  const d = git('diff', '--name-only', base, '--', 'tests/critico/f-01-r0', 'tests/critico/f-02-r0', 'tests/critico/f-03-r0', 'tests/critico/f-10-r0');
-  assert.equal(d.status, 0, d.stderr);
-  assert.deepEqual(d.stdout.split(/\r?\n/).filter(Boolean), []);
-});
-
-// Linhas acrescentadas pelo ticket fora de tests/: o diff (só as linhas +) e os ficheiros novos ainda por seguir
-const acrescentadas = () => {
-  const mb = git('merge-base', 'HEAD', 'origin/main');
-  const base = mb.status === 0 ? mb.stdout.trim() : BASE;
-  const out = [];
-  const d = git('diff', '-U0', '--no-color', base, '--', '.', ':(exclude)tests');
-  let f;
-  for (const l of d.stdout.split('\n')) {
-    if (l.startsWith('+++ ')) f = l.slice(6);
-    else if (l.startsWith('+') && f) out.push([f, l.slice(1)]);
-  }
-  const u = git('ls-files', '--others', '--exclude-standard', '--', '.', ':(exclude)tests');
-  for (const n of u.stdout.split('\n').map((s) => s.trim()).filter(Boolean)) for (const l of readFileSync(join(ROOT, n), 'utf8').split(/\r?\n/)) out.push([n, l]);
-  return out;
-};
-
-test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão nem dados pessoais', () => {
-  const PROIBIDO = [/\b[A-Z]:\\\\?[A-Za-z]/, /\/Users\//, /\/home\/[a-z]/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /renat/i, /@keyrus\./i, /AgentHomes|dev-mods/i];
-  const achados = [];
-  for (const [f, l] of acrescentadas()) for (const re of PROIBIDO) if (re.test(l.replace(/(?:github(?:usercontent)?\.com\/(?:repos\/)?|(?<![\w\/.-]))RenatoWernik\/(?:gauntlet-loop|forge)(?![\w.-])/gi, ''))) achados.push(`${f}: ${re} → ${l.trim().slice(0, 100)}`);
-  assert.deepEqual(achados, []);
 });

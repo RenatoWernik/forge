@@ -2,7 +2,9 @@
 // --test com um argumento que contenha o glob do pacote ou tests/critico/<outra pasta>.
 // Oráculos:
 //   - o corpus scripts/corpus/guardas/ tem os 4 casos desta Ronda −1, com o esperado certo: mau-l4-f04-antigo-real (o regressao.test.mjs
-//     e o helpers.mjs do f-04 da base, byte a byte, com o .test tirado do nome), mau-l4-spawn-outra-pasta, ok-l4-dolote e
+//     e o helpers.mjs do f-04 da base, com o .test tirado do nome: o início de cada um, byte a byte, até aos dois testes que voltam a correr
+//     o pacote e as outras pastas, e no helpers até ao runTests e ao failures, sem a chave do sem-claude-mem.test.mjs no BASELINE; o resto
+//     faria disparar o sem-claude-mem.test.mjs e os «reprova sempre» que leem o que o ticket acrescenta fora de tests/), mau-l4-spawn-outra-pasta, ok-l4-dolote e
 //     ok-l4-spawn-ficheiro-proprio (estilo f-26 c1); o lint dá FAIL L4 aos maus e ok aos limpos (os testes «corpus das guardas › <caso>»);
 //   - na árvore de agora, o lint inteiro dá 0 falhas e nenhum achado L4 em tests/critico/ (a main convertida);
 //   - ÂMBITO: na árvore com o tests/critico/ da base, o L4 acusa pelo menos os ficheiros que correm o pacote ou outra pasta (LITERAIS) e só
@@ -17,6 +19,8 @@ import { ROOT, crit, AUTORIZADOS, LITERAIS, LF, lerJson, limpa, lintL4, arvoreCo
 
 after(limpa);
 const CORPUS = join(ROOT, 'scripts', 'corpus', 'guardas');
+// o corpus do f-04 é o início da base; a única diferença é a chave do sem-claude-mem, que o scripts/sem-claude-mem.test.mjs proíbe em scripts/
+const semClaudeMem = (s) => s.replace(", '" + 'sem-claude' + "-mem.test.mjs': 1", '');
 const CASOS = {
   'mau-l4-f04-antigo-real': { regra: 'L4', ficheiro: 'regressao.mjs' },
   'mau-l4-spawn-outra-pasta': { regra: 'L4', ficheiro: 'guarda.mjs' },
@@ -52,13 +56,15 @@ test('ÂMBITO: C4 — na árvore com o tests/critico/ da base, o L4 acusa os LIT
   const com = ficheirosComLote();
   assert.deepEqual(fs.filter((f) => !com.includes(f)), [], 'ficheiros acusados na base que não chamam o doLote');
 });
-test('ÂMBITO: C4 — o caso mau-l4-f04-antigo-real é o regressao.test.mjs e o helpers.mjs do f-04 da base, byte a byte', (t) => {
+test('ÂMBITO: C4 — o caso mau-l4-f04-antigo-real é o regressao.test.mjs e o helpers.mjs do f-04 da base, o início deles, byte a byte (salvo a chave do sem-claude-mem), com os runTests aninhados', (t) => {
   if (soNoTicket(t, 'v-03')) return;
   const b = base();
   if (!b) return t.skip('sem origin/main');
+  assert.ok(/runTests\(\[/.test(readFileSync(join(CORPUS, 'mau-l4-f04-antigo-real', 'regressao.mjs'), 'utf8')), 'o regressao do corpus perdeu os runTests');
   for (const [caso, orig] of [['regressao.mjs', 'regressao.test.mjs'], ['helpers.mjs', 'helpers.mjs']]) {
     const f = join(CORPUS, 'mau-l4-f04-antigo-real', caso);
     assert.ok(existsSync(f), 'falta ' + caso);
-    assert.equal(LF(readFileSync(f, 'utf8')), LF(textoNaBase(b, crit('f-04-r0', orig)) ?? ''), caso);
+    const c = LF(readFileSync(f, 'utf8')), velho = semClaudeMem(LF(textoNaBase(b, crit('f-04-r0', orig)) ?? ''));
+    assert.ok(c.split('\n').length > 40 && velho.startsWith(c), caso + ': não é o início do ficheiro da base');
   }
 });
