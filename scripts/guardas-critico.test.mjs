@@ -91,6 +91,10 @@ const AMBITO = /^\s*[ÂA]MBITO:/i;
 const HEX = /(?<![0-9A-Za-z_])(?=[0-9a-f]*[0-9])(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}(?![0-9A-Za-z_])/i; // a sha has digits and letters; «defaced» is not one
 const DIFF_DE_NOMES = /\bgit\s+diff\b[\s\S]*--name-(?:only|status)/;
 
+// The first argument of the call whose «(» is toks[idx]: the token right after it, or, when that is the marker of an interpolation,
+// the template that owns it (a template pushes the tokens of its interpolations first). One reader for every title and argument.
+const primeiroArg = (toks, idx) => { const t = toks[idx + 1]; return t?.tpl ?? t; };
+
 function grupos(toks) {
   const raiz = { strs: [], parent: null, from: 0, to: toks.length - 1 };
   const todos = [];
@@ -98,7 +102,7 @@ function grupos(toks) {
   toks.forEach((tk, idx) => {
     if (tk.t === 'p' && '([{'.includes(tk.v)) {
       const callee = toks[idx - 1]?.t === 'id' ? toks[idx - 1].v : null;
-      const g = { strs: [], parent: topo, from: idx, to: toks.length - 1, open: tk.v, tpl: tk.tpl, git: /^git/i.test(callee), ambito: tk.v === '(' && TESTS.has(callee) && toks[idx + 1]?.t === 's' && AMBITO.test(toks[idx + 1].v) };
+      const g = { strs: [], parent: topo, from: idx, to: toks.length - 1, open: tk.v, tpl: tk.tpl, git: /^git/i.test(callee), ambito: tk.v === '(' && TESTS.has(callee) && primeiroArg(toks, idx)?.t === 's' && AMBITO.test(primeiroArg(toks, idx).v) };
       todos.push(g); topo = g;
     } else if (tk.t === 'p' && ')]}'.includes(tk.v) && topo.parent) { topo.to = idx; topo = topo.parent; }
     else if (tk.t === 's') { topo.strs.push(tk.v); tk.group = topo; }
@@ -123,7 +127,7 @@ function fimDaExpressao(toks, k) {
   return toks.length;
 }
 // «a git call»: a `(` whose first argument is 'git' or whose callee is called git*(...) (a helper like gitR)
-const chamadaGit = (toks, g) => g.open === '(' && (g.git || (toks[g.from + 1]?.t === 's' && toks[g.from + 1].v === 'git' && toks[g.from + 2]?.v === ','));
+const chamadaGit = (toks, g) => g.open === '(' && (g.git || (primeiroArg(toks, g.from)?.t === 's' && primeiroArg(toks, g.from).v === 'git' && toks[g.from + 2]?.v === ','));
 const COMANDO_GIT = /^\s*git\s/;
 // Is a literal at group `g` an argument of git: in the argument list of a git call (through arrays and nested calls, never through a `{`
 // block or object), or in the interpolation of a template that is a «git ...» command
@@ -142,7 +146,7 @@ export function lint(src) {
   const { raiz, todos } = grupos(toks);
   const v = [];
   for (const g of todos) {
-    if (g.ambito && !chama(toks, g.from, g.to, 'soNoTicket')) v.push({ regra: 'L2', linha: toks[g.from].line, msg: `teste «${toks[g.from + 1].v.slice(0, 50)}» sem soNoTicket(t, id)` });
+    if (g.ambito && !chama(toks, g.from, g.to, 'soNoTicket')) v.push({ regra: 'L2', linha: toks[g.from].line, msg: `teste «${primeiroArg(toks, g.from).v.slice(0, 50)}» sem soNoTicket(t, id)` });
   }
   const usaBase = chama(toks, 0, toks.length - 1, 'base');
   const diff = (g, linha) => { if (!usaBase && !dentroDeAmbito(g)) v.push({ regra: 'L3', linha, msg: 'git diff de nomes de ficheiros fora de um teste «ÂMBITO:» e sem base()' }); };
