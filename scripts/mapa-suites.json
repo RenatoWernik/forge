@@ -31,7 +31,7 @@
   { "caminhos": ["scripts/painel.mjs"], "suites": ["scripts","f-01-r0","f-14-r0"] },
   { "caminhos": ["scripts/painel.test.mjs","tests/ponte/f-10.mjs"], "suites": ["f-10-r0"] },
   { "caminhos": ["scripts/scaffold.test.mjs"], "suites": ["f-12-r0","f-20a-r0","f-20b-r0","f-21a-r0","f-22a-r0","f-22b-r0","f-24-r0"] },
-  { "caminhos": ["scripts/sem-claude-mem.test.mjs"], "suites": ["f-20a-r0","f-20b-r0","f-20b-r1","f-20c-r0","f-20c-r1","f-21a-r0","f-22a-r0","f-22a-r1","f-22b-r0","f-22c-r0","f-24-r0","f-24-r1"] },
+  { "caminhos": ["scripts/sem-claude-m*.test.mjs"], "suites": ["f-20a-r0","f-20b-r0","f-20b-r1","f-20c-r0","f-20c-r1","f-21a-r0","f-22a-r0","f-22a-r1","f-22b-r0","f-22c-r0","f-24-r0","f-24-r1"] },
   { "caminhos": ["scripts/sync.mjs"], "suites": ["scripts","f-01-r0","f-02-r0","f-14-r0","f-22c-r0"] },
   { "caminhos": ["scripts/fixtures/versions-2026-10-29.json","scripts/update.mjs"], "suites": ["scripts","f-01-r0","f-14-r0","f-15b-r0","f-17-r0","f-18-r0"] },
   { "caminhos": ["scripts/corpus/afetadas/**"], "suites": ["scripts","v-02-r0"] },
