@@ -1,6 +1,7 @@
 // F-26 (#101): rules 8 and 9 of the briefs as a lint over tests/critico/<folder>/, so they stop costing critic rounds.
-//   L1 (rule 8): no hex literal of 7 to 40 chars reaches git as a revision: one assigned to an identifier containing «base»,
-//      or one in the same call or array of arguments as 'git' (or inside a «git ...» command string). Comments and data are not git.
+//   L1 (rule 8): no hex literal of 7 to 40 chars reaches git as a revision: one anywhere in the initializer of an identifier containing
+//      «base», or one in the argument list of a call whose first argument is 'git' (or of a gitX(...) helper), or in a string or template
+//      that starts with «git ». Comments, titles, messages and fixture data (`{ ref: '...' }`) are not git.
 //   L2 (rule 9): every test titled «ÂMBITO:» calls soNoTicket (tests/critico/_comum/ambito.mjs).
 //   L3 (rule 9, the other way): every file that runs `git diff --name-only` (the «only these files changed» pattern) has that diff inside
 //      a «ÂMBITO:» test, or uses base() (tests/critico/_comum/base.mjs).
@@ -19,10 +20,11 @@ const LISTA = join(ROOT, 'scripts/guardas-legado.json');
 
 // --- a scanner, not a parser: strings, template literals, regexes and comments are told apart; the rest is single punctuation ---
 const KEYWORDS_BEFORE_REGEX = new Set(['return', 'typeof', 'case', 'in', 'of', 'void', 'delete']);
-// shortcut: the `${...}` of a template is skipped, not tokenized, so a sha written inside one is not seen
-export function tokenize(src) {
+// A template literal is a string token (its text, with each `${...}` blanked to a space) pushed AFTER the tokens of its interpolations,
+// which are real code: «{ ... }» marker groups tagged with `tpl`, the template token.
+export function tokenize(src, line = 1) {
   const out = [];
-  let i = 0, line = 1;
+  let i = 0;
   const strEnd = (j, q) => { // j is just after the opening quote; returns the index of the closing quote
     for (; j < src.length; j++) {
       const c = src[j];
@@ -52,7 +54,20 @@ export function tokenize(src) {
     if (/\s/.test(c)) { adv(i + 1); continue; }
     if (c === '/' && n === '/') { const e = src.indexOf('\n', i); adv(e < 0 ? src.length : e); continue; }
     if (c === '/' && n === '*') { const e = src.indexOf('*/', i + 2); adv(e < 0 ? src.length : e + 2); continue; }
-    if (c === '"' || c === "'" || c === '`') { const e = strEnd(i + 1, c); out.push({ t: 's', v: src.slice(i + 1, e), line: at }); adv(e + 1); continue; }
+    if (c === '"' || c === "'") { const e = strEnd(i + 1, c); out.push({ t: 's', v: src.slice(i + 1, e), line: at }); adv(e + 1); out[out.length - 1].eline = line; continue; }
+    if (c === '`') {
+      const tpl = { t: 's', v: '', line: at }, inner = [];
+      let j = i + 1;
+      for (; j < src.length && src[j] !== '`'; j++) {
+        if (src[j] === '\\') { tpl.v += src.slice(j, j + 2); j++; }
+        else if (src[j] === '$' && src[j + 1] === '{') {
+          const e = exprEnd(j + 2), ln = at + (src.slice(i, j).match(/\n/g) || []).length;
+          inner.push({ t: 'p', v: '{', tpl, line: ln }, ...tokenize(src.slice(j + 2, e), ln), { t: 'p', v: '}', line: ln });
+          tpl.v += ' '; j = e;
+        } else tpl.v += src[j];
+      }
+      out.push(...inner, tpl); adv(j + 1); tpl.eline = line; continue;
+    }
     if (c === '/' && regexAllowed()) {
       let j = i + 1, classe = false;
       for (; j < src.length && src[j] !== '\n'; j++) {
@@ -83,7 +98,7 @@ function grupos(toks) {
   toks.forEach((tk, idx) => {
     if (tk.t === 'p' && '([{'.includes(tk.v)) {
       const callee = toks[idx - 1]?.t === 'id' ? toks[idx - 1].v : null;
-      const g = { strs: [], parent: topo, from: idx, to: toks.length - 1, git: /^git/i.test(callee), ambito: tk.v === '(' && TESTS.has(callee) && toks[idx + 1]?.t === 's' && AMBITO.test(toks[idx + 1].v) };
+      const g = { strs: [], parent: topo, from: idx, to: toks.length - 1, open: tk.v, tpl: tk.tpl, git: /^git/i.test(callee), ambito: tk.v === '(' && TESTS.has(callee) && toks[idx + 1]?.t === 's' && AMBITO.test(toks[idx + 1].v) };
       todos.push(g); topo = g;
     } else if (tk.t === 'p' && ')]}'.includes(tk.v) && topo.parent) { topo.to = idx; topo = topo.parent; }
     else if (tk.t === 's') { topo.strs.push(tk.v); tk.group = topo; }
@@ -92,12 +107,31 @@ function grupos(toks) {
 }
 const dentroDeAmbito = (g) => { for (; g; g = g.parent) if (g.ambito) return true; return false; };
 const chama = (toks, de, ate, nome) => toks.slice(de, ate + 1).some((tk, k, a) => tk.t === 'id' && tk.v === nome && a[k + 1]?.v === '(');
-// `NAME = 'sha'`, `NAME: 'sha'`, `NAME = env || 'sha'`: an «=» or «:» just before, up to the start of the statement or property
-function atribuidoABase(toks, idx) {
-  for (let k = idx - 1; k >= 0 && k >= idx - 6; k--) {
-    const tk = toks[k];
-    if (tk.t === 'p' && ';,{}'.includes(tk.v)) return false;
-    if (tk.t === 'p' && (tk.v === '=' || tk.v === ':') && toks[k - 1]?.t === 'id' && /base/i.test(toks[k - 1].v)) return true;
+// The index after the expression that starts at `k`: a `;` or `,` at its own depth, a closing bracket of the outer group, or (no semicolon)
+// a line break after a token that can end an expression, before one that starts a statement.
+const NAO_COMECA = new Set(['in', 'of', 'instanceof']);
+function fimDaExpressao(toks, k) {
+  let d = 0;
+  for (let m = k; m < toks.length; m++) {
+    const tk = toks[m], n = toks[m + 1];
+    if (tk.t === 'p' && '([{'.includes(tk.v)) d++;
+    else if (tk.t === 'p' && ')]}'.includes(tk.v) && --d < 0) return m;
+    else if (d === 0 && tk.t === 'p' && ';,'.includes(tk.v)) return m;
+    const acaba = tk.t !== 'p' || ')]}'.includes(tk.v), comeca = n && (n.t === 'n' || n.t === 's' || (n.t === 'id' && !NAO_COMECA.has(n.v)));
+    if (d === 0 && acaba && comeca && n.line > (tk.eline ?? tk.line)) return m + 1;
+  }
+  return toks.length;
+}
+// «a git call»: a `(` whose first argument is 'git' or whose callee is called git*(...) (a helper like gitR)
+const chamadaGit = (toks, g) => g.open === '(' && (g.git || (toks[g.from + 1]?.t === 's' && toks[g.from + 1].v === 'git' && toks[g.from + 2]?.v === ','));
+const COMANDO_GIT = /^\s*git\s/;
+// Is a literal at group `g` an argument of git: in the argument list of a git call (through arrays and nested calls, never through a `{`
+// block or object), or in the interpolation of a template that is a «git ...» command
+function emGit(toks, g) {
+  for (; g?.parent; g = g.parent) {
+    if (g.tpl) { if (COMANDO_GIT.test(g.tpl.v)) return true; }
+    else if (g.open === '{') return false;
+    else if (chamadaGit(toks, g)) return true;
   }
   return false;
 }
@@ -112,17 +146,16 @@ export function lint(src) {
   }
   const usaBase = chama(toks, 0, toks.length - 1, 'base');
   const diff = (g, linha) => { if (!usaBase && !dentroDeAmbito(g)) v.push({ regra: 'L3', linha, msg: 'git diff de nomes de ficheiros fora de um teste «ÂMBITO:» e sem base()' }); };
-  toks.forEach((tk, idx) => {
-    if (tk.t !== 's') return;
-    if (HEX.test(tk.v)) {
-      const g1 = tk.group, g2 = g1.parent;
-      const comGit = (g) => g?.git || g?.strs.includes('git'); // spawnSync('git', [...]) or a helper called gitR(...)
-      if (/\bgit\s/.test(tk.v) || atribuidoABase(toks, idx) || comGit(g1) || comGit(g2)) {
-        v.push({ regra: 'L1', linha: tk.line, msg: `sha «${HEX.exec(tk.v)[0]}» fixo em vez de base() (git merge-base HEAD origin/main)` });
-      }
+  // L1 case 1: a sha that is an argument of git. Case 2: any sha in the initializer of a base-named identifier (`BASE = env || 'sha'`, `base: 'sha'`)
+  const sha = new Set();
+  toks.forEach((tk, k) => {
+    if (tk.t === 's' && HEX.test(tk.v) && (COMANDO_GIT.test(tk.v) || emGit(toks, tk.group))) sha.add(tk);
+    if (tk.t === 'p' && (tk.v === '=' || tk.v === ':') && toks[k - 1]?.t === 'id' && /base/i.test(toks[k - 1].v) && !'=>'.includes(toks[k + 1]?.v ?? ' ')) {
+      for (let m = k + 1, fim = fimDaExpressao(toks, k + 1); m < fim; m++) if (toks[m].t === 's' && HEX.test(toks[m].v)) sha.add(toks[m]);
     }
-    if (DIFF_DE_NOMES.test(tk.v)) diff(tk.group, tk.line);
+    if (tk.t === 's' && DIFF_DE_NOMES.test(tk.v)) diff(tk.group, tk.line);
   });
+  for (const tk of sha) v.push({ regra: 'L1', linha: tk.line, msg: `sha «${HEX.exec(tk.v)[0]}» fixo em vez de base() (git merge-base HEAD origin/main)` });
   for (const g of [raiz, ...todos]) if (g.strs.includes('diff') && g.strs.some((s) => /^--name-(?:only|status)$/.test(s))) diff(g, toks.find((tk) => tk.group === g && tk.v === 'diff')?.line ?? 1);
   return v;
 }
