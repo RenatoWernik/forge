@@ -44,6 +44,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     '.claude/graph.mjs',
     '.claude/hooks/forge-ai-memory.mjs',
     '.claude/learnings.cjs',
+    '.claude/learn.mjs',
     '.claude/hooks/forge-contexto.mjs',
     '.claude/hooks/forge-retoma.mjs',
     '.claude/painel-gravar.mjs',

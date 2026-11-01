@@ -176,7 +176,8 @@ async function chk(name, f) {
   // ponytail: two built-in word lists (English, Portuguese); the Portuguese list leaves out the words Spanish shares (que, para, por, ...); another language is only checked for "not English any more", upgrade: add its list here when a third one ships
   const WORDS = { en: 'the and of is are to in that it for with be this by on or not from each when an at if which before after only every any all was were has have its their your our does can must may', pt: 'não uma com das são ao pelo pela também mais quando sem os um é da em seu sua nas há ou isso ele ela pode deve já o seus suas nem só ainda depois apenas sempre' }
   const share = (ws, list) => ws.filter(w => list.includes(w)).length / (ws.length || 1)
-  const clean = f => fs.readFileSync(f, 'utf8').replace(/^\s*```[\s\S]*?^\s*```/gm, ' ').replace(/`[^`\n]*`/g, ' ').replace(/\]\([^)]*\)/g, ']').replace(/https?:\/\/\S+/g, ' ')
+  // The Learned rules block (between its two marker lines) is written by .claude/learn.mjs from the register, in the language the register was written in, and is skipped; the text around the markers is scored.
+  const clean = f => fs.readFileSync(f, 'utf8').replace(/^[ \t]*<!-- forge:learnings:start -->[^\n]*\n[\s\S]*?^[ \t]*<!-- forge:learnings:end -->/gm, ' ').replace(/^\s*```[\s\S]*?^\s*```/gm, ' ').replace(/`[^`\n]*`/g, ' ').replace(/\]\([^)]*\)/g, ']').replace(/https?:\/\/\S+/g, ' ')
   // The language is read from the BCP 47 "langTag" (forge writes it next to the English name, whatever spelling the user typed).
   // ponytail: a forge.json from before langTag falls back to the name (English, Portuguese or "und"); upgrade: drop the fallback once no such project is left
   const tag = FJ.langTag === undefined ? (/^en/i.test(FJ.language) ? 'en' : /portugu|^pt\b/i.test(FJ.language) ? 'pt-BR' : 'und') : FJ.langTag
@@ -796,6 +797,25 @@ async function chk(name, f) {
     if (!lib && names.length) form.push('.claude/learnings.cjs is missing')
     await chk(L_FORM + (form.length ? ' (' + form.join('; ') + ')' : parsed.every(p => !p.entries.length) ? ' (no entries)' : ''), () => !form.length)
     await chk(L_GROW + (grow.length ? ' (' + grow.join('; ') + ')' : head === null ? ' (no history)' : ''), () => !grow.length)
+    // the Learned rules block (F-22b): what `node .claude/learn.mjs readout` would write from the register, in CLAUDE.md and AGENTS.md alike. A project without .claude/learn.mjs has no such block (n/a);
+    // without the block and without an active rule there is nothing to say (ok); an active rule needs the block, and the block never passes 12 lines.
+    const L_BLOCK = 'learnings: the Learned rules block matches the register'
+    const blockBad = []
+    if (lib && has('.claude', 'learn.mjs')) {
+      const reg = parsed.filter(p => lib.isMonthFile(p.file)).flatMap(p => p.entries), want = lib.block(reg), rules = lib.active(reg).length
+      const got = ['CLAUDE.md', 'AGENTS.md'].map(f => {
+        const lines = has(f) ? fs.readFileSync(f, 'utf8').split('\n') : [], at = lib.locate(lines)
+        if (!at) return rules ? (blockBad.push(f + ': no Learned rules block, run node .claude/learn.mjs readout'), null) : null
+        if (at.end < 0) return (blockBad.push(f + ': the Learned rules block has no end marker'), null)
+        const b = lines.slice(at.start + 1, at.end).map(l => l.replace(/\r$/, ''))
+        if (b.length > lib.MAX) blockBad.push(f + ': the block has ' + b.length + ' lines, at most ' + lib.MAX)
+        else if (b.join('\n') !== want.join('\n')) blockBad.push(f + ': the block is not what node .claude/learn.mjs readout writes')
+        return b
+      })
+      if (!blockBad.length && (got[0] === null) !== (got[1] === null)) blockBad.push('only one of CLAUDE.md and AGENTS.md has the block')
+      else if (!blockBad.length && got[0] && got[0].join('\n') !== got[1].join('\n')) blockBad.push('CLAUDE.md and AGENTS.md have different blocks')
+    }
+    await chk(L_BLOCK + (blockBad.length ? ' (' + blockBad.join('; ') + ')' : !lib || !has('.claude', 'learn.mjs') ? ' (n/a: no .claude/learn.mjs)' : ''), () => !blockBad.length)
     const late = r.warns.filter(w => w.kind === 'review-by'), again = r.warns.filter(w => w.kind === 'recurred-test')
     if (late.length) console.log('warn  learnings: open entries past their REVIEW-BY (today ' + today + '): ' + late.map(w => w.message).join(', '))
     if (again.length) console.log('warn  learnings: recurrence in the strongest layer, the test was not enough, review it (redesign): ' + again.map(w => w.message).join(', '))
