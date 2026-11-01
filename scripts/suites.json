@@ -40,5 +40,5 @@
     { "nome": "f-25-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-25-r0/*.test.mjs"], "limite_s": 120 },
     { "nome": "f-26-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-26-r0/*.test.mjs"], "limite_s": 120 },
     { "nome": "f-27-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-27-r0/*.test.mjs"], "limite_s": 60 },
-    { "nome": "v-01-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-01-r0/*.test.mjs"], "limite_s": 480, "env": {"USERPROFILE": "@real"} }
+    { "nome": "v-01-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-01-r0/*.test.mjs"], "limite_s": 480, "sensivel_ao_tempo": true, "env": {"USERPROFILE": "@real"} }
   ] }
