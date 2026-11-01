@@ -12,7 +12,7 @@ The file starts with these fields, one per line, written as `field: value`:
 
 | Field | What it holds |
 |---|---|
-| `role` | the role of the agent: developer, critic, tester or batch |
+| `role` | the role of the agent: developer, critic, tester, batch, research or orchestrator |
 | `ticket` | the number of the issue |
 | `phase` | where the ticket is: round -1, development, critic or batch |
 | `round` | the number of the round of the critic |
@@ -20,7 +20,7 @@ The file starts with these fields, one per line, written as `field: value`:
 | `next step` | the exact next action, so that anyone can resume from it |
 | `pending` | what is still open: questions, failures and unfinished tests |
 
-After the fields come three short sections: what is done, with the evidence (the command and its output); what is missing; and the reasoning in progress.
+After the fields come three short sections: what is done, with the evidence (the command and its output); what is missing; and the reasoning in progress. A research agent writes its report incrementally, with a STATE block at the top that says what is done and what comes next.
 
 ## Resuming
 

@@ -148,6 +148,18 @@ async function chk(name, f) {
     try { wired = JSON.stringify(JSON.parse(fs.readFileSync('.claude/settings.json', 'utf8').replace(/^﻿/, '')).hooks || {}).replace(/\\\\/g, '/') } catch (e) {}
     const hooksOn = Object.keys(HOOKS).filter(k => wired.includes('.claude/hooks/' + HOOKS[k]))
     await chk('hooks installed in .claude/settings.json: ' + (hooksOn.join(', ') || 'none') + ' (each script must exist in .claude/hooks/)', () => hooksOn.every(k => has('.claude/hooks', HOOKS[k])))
+    // checkpoints (FRAMEWORK.md section 12): every agent of painel.json on an open ticket saved its checkpoint less than 10 min ago, and the orchestrator has its own; the clock is FORGE_VIGIA_NOW_MS, as in .claude/retoma.mjs
+    let ck = { ok: false, note: ' (.claude/retoma.mjs missing)' }
+    try {
+      const inj = Number(process.env.FORGE_VIGIA_NOW_MS), r = (await import(require('node:url').pathToFileURL(path.resolve('.claude/retoma.mjs')).href)).ativos(process.cwd(), inj > 0 ? inj : Date.now())
+      if (r.erro) ck = { ok: false, note: ' (painel.json: ' + r.erro + ')' }
+      else {
+        const stale = r.ativos.filter(a => a.vida !== 'ativo'), noOrch = r.ativos.length > 0 && !has('.checkpoints/orchestrator.md')
+        const why = [stale.length ? 'stale: ' + stale.map(a => a.nome + (a.minutos === null ? ' no checkpoint' : ' ' + a.minutos + ' min')).join(', ') : '', noOrch ? '.checkpoints/orchestrator.md missing' : ''].filter(Boolean)
+        ck = { ok: !why.length, note: why.length ? ' (' + why.join('; ') + ')' : r.ativos.length ? '' : ' (no active agents)' }
+      }
+    } catch (e) {}
+    await chk('checkpoints: every active agent of painel.json saved its checkpoint less than 10 min ago' + ck.note, () => ck.ok)
     await chk('global skills (ponytail*, graphify, tdd) and the mattpocock-skills plugin', () => ['ponytail', 'ponytail-review', 'ponytail-audit', 'ponytail-debt', 'graphify', 'tdd'].every(s => has(H, '.claude/skills', s, 'SKILL.md')) && Object.keys(JSON.parse(fs.readFileSync(path.join(H, '.claude/plugins/installed_plugins.json'), 'utf8')).plugins).some(k => k.startsWith('mattpocock-skills@')))
     const cst = has('.specify/memory/constitution.md') ? fs.readFileSync('.specify/memory/constitution.md', 'utf8') : ''
     console.log('info  constitution: ' + (!cst ? 'missing' : cst.includes('[PROJECT_NAME]') ? 'still the template (run /speckit-constitution)' : 'filled in'))
