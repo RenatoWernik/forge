@@ -1,0 +1,12 @@
+// caso limpo: a guarda compara com base() (o merge-base com a main) e faz skip sem origin/main
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { base } from '../_comum/base.mjs';
+
+test('C9 GUARDA: os ataques antigos ficam como estavam no merge-base', (t) => {
+  const b = base();
+  if (!b) return t.skip('sem origin/main');
+  const r = spawnSync('git', ['diff', '@@NOME_SO@@', b, '--', 'tests/critico/f-01-r0'], { encoding: 'utf8' });
+  assert.equal(r.stdout.trim(), '');
+});

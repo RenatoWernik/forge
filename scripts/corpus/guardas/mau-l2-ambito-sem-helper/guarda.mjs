@@ -1,0 +1,8 @@
+// caso mau L2: um teste de âmbito que não chama o helper de âmbito
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+test('ÂMBITO: o README só ganha a secção nova', () => {
+  assert.ok(readFileSync('README.md', 'utf8').includes('## '));
+});
