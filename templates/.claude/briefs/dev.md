@@ -13,6 +13,12 @@ Before the code, a critic with a fresh context wrote attacks as tests in `tests/
 ## Work by class of inputs
 Follow the `tdd` skill: red before the code, green after, one seam and one test at a time. When the critic lists failures, fix all of them at once. Fix by class of inputs: find the class of inputs that causes each failure, fix the class, and add a test of the class besides the case the critic gave. The bar of the ticket is fixed and does not change between rounds.
 
+## Answer each finding
+The workflow gives each finding of the critic an id `F<round>-<n>`. From round 2, answer every finding of the previous round in `responses`, by its id: `fixed`, or `contested` with the reason (why the finding is wrong or outside the contract). Never leave one unanswered. A `contested` finding goes to the orchestrator, who decides; the critic never sees your answer.
+
+## Deliver a commit
+Deliver `head` (`git rev-parse HEAD`) and `diffHash` (the sha256 of `git diff <base>...HEAD`, with `<base>` the integration branch). The verdict is for that commit, and a delivery whose diff did not change since the previous round does not go back to the critic.
+
 ## Round 0, before you deliver
 Do what the critic will do, so that the ticket passes the first time:
 1. Walk through every criterion and record the evidence: the command and its output.

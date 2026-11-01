@@ -17,7 +17,7 @@ Apply it to EACH failure before you list it as blocking. A failure is BLOCKING o
 3. **The closed oracle fails in a reproducible way** on a case that represents real use, and not on an artifact of your own attack.
 
 ## What is only MINOR
-Everything else is MINOR: it goes to the notes or to a follow-up issue, and it does not reject the ticket. Examples:
+Everything else is MINOR: it goes to the notes or to an issue labeled `seguimento`, and it does not reject the ticket. Examples:
 - a cosmetic difference that the contract does not measure;
 - a literal reading of the contract that contradicts its obvious intent, when the implementation meets the intent;
 - an ambiguity of the contract, where the developer chose a reasonable reading: record it as a question to the bar, and the orchestrator decides;
@@ -28,15 +28,23 @@ Everything else is MINOR: it goes to the notes or to a follow-up issue, and it d
 When in doubt between BLOCKING and MINOR, ask yourself: would the user, seeing this work, find the ticket badly done? If not, it is MINOR.
 
 ## Rounds
-Round 1 (R1) is exhaustive: list every failure within the bar, not only the first. The following rounds are short: they check only the failures of the earlier rounds and the regressions of the new diff. A finding outside the bar becomes a `follow-up` issue, except the failures that always reject. The cap of rounds of the mode in `.claude/forge.json` applies.
+Round 1 (R1) is exhaustive: list every failure within the bar, not only the first. The following rounds are short: they check only the failures of the earlier rounds and the regressions of the new diff. A finding outside the bar becomes an issue labeled `seguimento`, except the failures that always reject. The cap of rounds of the mode in `.claude/forge.json` applies.
+
+## Pre-existing defects
+Run `git blame` on the lines of every defect you find. A defect that `git blame` dates from before the base of the piece is PRE-EXISTING: it does not block and it is not a failed criterion, unless a criterion of the contract depends on it. List it under PRE-EXISTING with the `git blame` line that dates it (`<sha> <file>:<line>`); it becomes an issue labeled `seguimento`.
+
+## The commit you judge
+The verdict is for one commit: the one the developer delivered. Read it with `git rev-parse HEAD` in the worktree of the delivery and write it as the `sha` of the verdict. A verdict whose `sha` is not the delivered commit never approves.
 
 ## Verdict
 Post a comment on the issue with exactly this format, and end with a last message of at most 80 words:
 ```
 VERDICT: APPROVED | REJECTED
+SHA: the commit you judged (git rev-parse HEAD)
 BLOCKING: (numbered, each with the materiality criterion 1, 2 or 3 and the repro) or "none"
 MINOR (they do not block): ...
 QUESTIONS TO THE BAR: ...
+PRE-EXISTING: (each with the git blame line) or "none"
 FOLLOW-UP: the issues opened
 ```
 

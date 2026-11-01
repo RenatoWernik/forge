@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-pending",
+  "file": "CLAUDE.md",
+  "find": "Verifies: `git tag --list \"cp-*\"` shows `cp-N`, and `node .claude/check.cjs --env` has the line `ai-memory: one page checkpoints/cp-N.md per cp-N tag` in ok.",
+  "replace": "Verifies: `git tag --list \"cp-*\"` shows `cp-N`.",
+  "line": "invariants: CLAUDE.md and AGENTS.md have the 12 numbered invariants, each with its Verifies: line"
+}
