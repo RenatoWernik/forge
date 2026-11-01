@@ -40,6 +40,12 @@ export function mataArvore(pid) {
   else { try { process.kill(-pid, 'SIGKILL'); } catch { try { process.kill(pid, 'SIGKILL'); } catch {} } }
 }
 export async function limpa() {
+  // os motores destacados (REDESENHO do V-01) não morrem com a chamada: só os dos repos temporários deste teste, pelo PID gravado em .forge/motor/*.json
+  for (const d of PASTAS) {
+    const m = join(d, '.forge', 'motor');
+    if (!existsSync(m)) continue;
+    for (const n of readdirSync(m).filter((x) => x.endsWith('.json'))) { try { PIDS.add(lerJson(join(m, n)).pid); } catch {} }
+  }
   for (const pid of PIDS) mataArvore(pid);
   await espera(300);
   for (const d of PASTAS) { try { rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch {} }
