@@ -20,7 +20,7 @@ const esperaClasses = (ex) => {
   assert.ok(ex.knownClasses.length >= 1, 'o exemplo de args tem "knownClasses":[] vazio');
   for (const k of ex.knownClasses) {
     assert.match(String(k?.class), /^[a-z0-9]+(-[a-z0-9]+)*$/, 'class fora de kebab-case: ' + JSON.stringify(k));
-    assert.ok(Array.isArray(k.entries), 'entries não é uma lista: ' + JSON.stringify(k));
+    assert.ok(Number.isInteger(k.entries) && k.entries >= 1, 'entries não é um inteiro >= 1: ' + JSON.stringify(k));
     assert.ok(CAMADAS.includes(k.strongest), 'strongest não é uma camada: ' + JSON.stringify(k));
   }
 };
