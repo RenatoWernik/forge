@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afetadas, casa, diretas, ficheirosDaSuite, lerMapa } from './afetadas.mjs';
 
@@ -98,7 +98,9 @@ for (const c of casos) {
 // --- executor --afetadas, num repo temporário com duas suítes: só a que o diff afeta corre ---
 test('executor --afetadas: corre só as suítes do diff contra a base; um diff vazio é erro de uso', () => {
   const d = mkdtempSync(join(tmpdir(), 'mapa-suites-exec-'));
-  const env = { ...process.env };
+  const tmp = join(d, '..', `${basename(d)}-tmp`); // as vagas globais vivem em os.tmpdir(): um tmp só deste teste não espera por outros executores
+  mkdirSync(tmp);
+  const env = { ...process.env, TEMP: tmp, TMP: tmp, TMPDIR: tmp };
   delete env.NODE_TEST_CONTEXT;
   const sh = (cmd, ...a) => spawnSync(cmd, a, { cwd: d, encoding: 'utf8', env });
   const git = (...a) => { const r = sh('git', '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...a); assert.equal(r.status, 0, r.stderr); };
@@ -120,7 +122,7 @@ test('executor --afetadas: corre só as suítes do diff contra a base; um diff v
     assert.match(r.stdout, /afetadas: 1 suítes .*: a\n/);
     const res = JSON.parse(readFileSync(join(d, '.forge/resultados', readdirSync(join(d, '.forge/resultados')).find((n) => n.endsWith('.json'))), 'utf8'));
     assert.deepEqual(Object.keys(res.suites), ['a']);
-  } finally { rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+  } finally { for (const x of [d, tmp]) rmSync(x, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
 
 // --- afetadas() numa pasta temporária (o 2.º argumento é a raiz) ---
