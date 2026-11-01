@@ -2,10 +2,11 @@
 // Esta pasta é nova, por isso o lint do F-26 também a lê. Aqui não há literais hexadecimais, nem a opção de nomes do git diff escrita por extenso,
 // nem títulos de âmbito. Os casos em casos/*.txt trazem marcadores (@@...@@) que só se trocam pelo texto real dentro da cópia temporária.
 //
-// LEITURA DO CONTRATO (#101; PERGUNTAS no comentário 6552732340, por responder):
+// LEITURA DO CONTRATO (#101 com a RESPOSTA do orquestrador às PERGUNTAS do comentário 6552732340, vinculativa):
 // - o lint é caixa preta: corre-se `node --test scripts/guardas-critico.test.mjs` numa cópia do repo (um repo git novo) e lê-se a saída tap;
 // - um caso mau é uma pasta nova tests/critico/<pasta>/ plantada na cópia: o lint tem de falhar com a regra (L1, L2 ou L3) e o ficheiro nos blocos «not ok»;
-// - na base faltam f-21b-r0, f-23b-r0 e f-24-r0 (ramos abertos): a cópia ganha uma pasta-marcador só para essas três, e só se faltarem (PERGUNTA 1).
+// - a lista é {legado, emCurso}: uma entrada de legado sem pasta dá FAIL; uma pasta de emCurso fica isenta se existir e é ignorada se não existir;
+// - o corpus do dev: scripts/corpus/guardas/<caso>/ com os .mjs e um esperado.json, {regra, ficheiro} ou {ok: true}.
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, copyFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -18,13 +19,11 @@ export const LINT = 'scripts/guardas-critico.test.mjs';
 export const LISTA = 'scripts/guardas-legado.json';
 export const CORPUS = 'scripts/corpus/guardas';
 export const COMUM = 'tests/critico/_comum';
-// a lista congelada da #101: as 27 pastas de tests/critico/ na base, mais as 3 dos ramos abertos
-export const NA_BASE = ['f-01-r0', 'f-02-r0', 'f-03-r0', 'f-04-r0', 'f-05-r0', 'f-06-r0', 'f-07-r0', 'f-08-r0', 'f-09-r0', 'f-10-r0', 'f-11-r0', 'f-12-r0',
+// a lista congelada da #101: legado = as 27 pastas de tests/critico/ na base; emCurso = as 5 dos ramos abertos
+export const LEGADO = ['f-01-r0', 'f-02-r0', 'f-03-r0', 'f-04-r0', 'f-05-r0', 'f-06-r0', 'f-07-r0', 'f-08-r0', 'f-09-r0', 'f-10-r0', 'f-11-r0', 'f-12-r0',
   'f-13-r0', 'f-14-r0', 'f-15a-r0', 'f-15b-r0', 'f-16-r0', 'f-17-r0', 'f-18-r0', 'f-20a-r0', 'f-20b-r0', 'f-20b-r1', 'f-20c-r0', 'f-20c-r1', 'f-21a-r0',
   'f-23a-r0', 'f-25-r0'];
-export const PENDENTES = ['f-21b-r0', 'f-23b-r0', 'f-24-r0'];
-export const CONGELADA = [...NA_BASE, ...PENDENTES];
-export const PASTA_NOME = /^f-\d+[a-z]?-r\d+$/;
+export const EM_CURSO = ['f-21b-r0', 'f-23b-r0', 'f-24-r0', 'f-22a-r0', 'f-22a-r1'];
 
 // o texto que, escrito por extenso nestes ficheiros, o próprio lint podia ler como violação
 export const NOME_SO = ['--name', 'only'].join('-');
@@ -69,7 +68,6 @@ export const copia = () => {
     mkdirSync(dirname(join(d, f)), { recursive: true });
     copyFileSync(s, join(d, f));
   }
-  for (const p of PENDENTES) if (!existsSync(join(d, 'tests/critico', p))) escreve(d, `tests/critico/${p}/LEIA.md`, 'marcador do crítico do F-26: pasta de um ramo aberto\n');
   gitOk(d, 'init', '-q', '-b', 'main');
   gitOk(d, 'add', '-A');
   gitOk(d, 'commit', '-q', '-m', 'copia');
@@ -104,34 +102,18 @@ export const corre = (d) => {
 };
 export const resumo = (r) => r.out.split(/\r?\n/).slice(-60).join('\n');
 
-// os nomes de pastas que a lista congelada contém (valores de texto e chaves, a qualquer profundidade)
-export const nomesDaLista = (j) => {
-  const o = [];
-  const anda = (v) => {
-    if (typeof v === 'string') { if (PASTA_NOME.test(v)) o.push(v); }
-    else if (Array.isArray(v)) v.forEach(anda);
-    else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { if (PASTA_NOME.test(k)) o.push(k); anda(x); }
-  };
-  anda(j);
-  return o;
+// as duas secções da lista congelada; falha clara se a forma não for {legado: [...], emCurso: [...]}
+export const secoes = (j) => {
+  if (!j || !Array.isArray(j.legado) || !Array.isArray(j.emCurso)) throw new Error('a lista congelada não tem a forma {legado: [...], emCurso: [...]}');
+  return { legado: j.legado, emCurso: j.emCurso };
 };
-// muda a lista congelada da cópia: tira `tira` e acrescenta `poe`, no array (ou objeto) que tem as pastas
+// muda a secção legado da lista da cópia: tira `tira` e acrescenta `poe`
 export const mexeLista = (d, { tira, poe }) => {
   const p = join(d, LISTA);
-  let mexeu = false;
-  const anda = (v) => {
-    if (Array.isArray(v)) {
-      if (v.includes('f-01-r0')) { mexeu = true; const n = v.filter((x) => x !== tira); if (poe) n.push(poe); return n; }
-      return v.map(anda);
-    }
-    if (v && typeof v === 'object') {
-      if ('f-01-r0' in v) { mexeu = true; const n = { ...v }; if (tira) delete n[tira]; if (poe) n[poe] = n['f-01-r0']; return n; }
-      return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, anda(x)]));
-    }
-    return v;
-  };
-  const novo = anda(JSON.parse(readFileSync(p, 'utf8')));
-  if (!mexeu) throw new Error('não encontrei as pastas na lista congelada ' + LISTA);
-  writeFileSync(p, JSON.stringify(novo, null, 2) + '\n');
+  const j = JSON.parse(readFileSync(p, 'utf8'));
+  const { legado } = secoes(j);
+  if (tira && !legado.includes(tira)) throw new Error(tira + ' não está em legado');
+  j.legado = legado.filter((x) => x !== tira).concat(poe ? [poe] : []);
+  writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
   commit(d, 'mexe a lista');
 };

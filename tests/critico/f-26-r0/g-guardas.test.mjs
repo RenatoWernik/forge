@@ -5,7 +5,9 @@
 //   coincide com uma versão do histórico do ramo f-22a-registo-learnings (skip se o ramo não existir).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { gitRaiz, caso, NOME_SO, AMB, SHA_F22A, SHA_CURTO, SHA_OUTRO } from './helpers.mjs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { ROOT, gitRaiz, caso, NOME_SO, AMB, SHA_F22A, SHA_CURTO, SHA_OUTRO } from './helpers.mjs';
 
 const NOVOS = ['tests/critico/f-26-r0/', 'tests/critico/_comum/'];
 
@@ -46,5 +48,12 @@ test('GUARDA: o caso real do f-22a coincide com uma versão do histórico do ram
     const cs = gitRaiz('log', '--format=%H', ramo, '--', p).stdout.split(/\r?\n/).filter(Boolean);
     const meu = caso(rel);
     assert.ok(cs.some((c) => gitRaiz('show', c + ':' + p).stdout.replace(/\r\n/g, '\n') === meu), 'nenhuma versão de ' + p + ' coincide com ' + rel);
+  }
+});
+test('GUARDA: a f-20c-r1 (a pasta limpa do C4 c) não tem git, shas de 7 a 40, testes de âmbito nem a opção de nomes', () => {
+  const p = join(ROOT, 'tests/critico/f-20c-r1');
+  for (const e of readdirSync(p)) {
+    const s = readFileSync(join(p, e), 'utf8');
+    assert.ok(!/\bgit\b/.test(s) && !/(?<![0-9A-Za-z_])[0-9a-f]{7,40}(?![0-9A-Za-z_])/i.test(s) && !s.includes(AMB) && !s.includes(NOME_SO), e + ' deixou de ser limpo');
   }
 });
