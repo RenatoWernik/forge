@@ -2,7 +2,7 @@
 // Executor paralelo (V-01, #125; spec #123 §4.1 e §4.2): corre as suítes de scripts/suites.json em paralelo, cada ficheiro de teste (ou bloco)
 // num filho `node --test` com home e tmp próprios, limite de tempo que mata só a árvore do PID lançado, vagas partilhadas por todos os
 // executores da máquina e resultados ligados ao sha e à árvore em .forge/resultados/. Só biblioteca padrão.
-//   node scripts/executor.mjs (--todas | --suites a,b) [--passe 1|2] [--continuar] [--paralelo N] [--raiz <dir>]
+//   node scripts/executor.mjs (--todas | --suites a,b | --afetadas [--base origin/main]) [--passe 1|2] [--continuar] [--paralelo N] [--raiz <dir>]
 // Um MOTOR destacado (o próprio script com --motor-interno; PID em .forge/motor/<sha>-<árvore>-p<passe>.json) corre a fila inteira até ao fim e
 // grava cada unidade logo que acaba. A chamada só espera pelo motor até orcamento_s e nunca mata unidades; --continuar volta a ligar-se ao
 // motor vivo ou, se ele morreu, lança outro só com as unidades sem estado final. O limite_s é só o kill de uma unidade.
@@ -13,6 +13,7 @@ import { closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, read
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { desdeBase } from './afetadas.mjs';
 
 // Todo processo lançado passa por aqui: no Windows um filho de um motor destacado (sem consola) sem windowsHide abre uma consola por spawn. O
 // contador vai nos resultados (`processos`) para um teste provar que o número de spawns não cresce com o tempo.
@@ -185,7 +186,7 @@ function mataArvore(pid) {
 }
 
 function lerArgs(argv) {
-  const o = { suites: null, passe: 1, continuar: false, paralelo: null, raiz: process.cwd(), arvoreMotor: null };
+  const o = { suites: null, afetadas: false, base: null, passe: 1, continuar: false, paralelo: null, raiz: process.cwd(), arvoreMotor: null };
   const valor = (i, nome) => { if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) throw new Uso(`${nome} precisa de um valor`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -197,10 +198,13 @@ function lerArgs(argv) {
     else if (a === '--raiz') o.raiz = resolve(valor(i++, a));
     else if (a === '--motor-interno') o.arvoreMotor = valor(i++, a); // só a chamada o passa ao motor: a árvore com que a chamada decidiu
     else if (a === '--nonce') o.nonce = valor(i++, a); // só a chamada o passa ao motor: fica na linha de comando dele (reconhece-se o processo) e em cada unidade que ele grava
-    else if (a === '--afetadas') throw new Uso('--afetadas ainda não existe (V-02)');
+    else if (a === '--afetadas') o.afetadas = true;
+    else if (a === '--base') o.base = valor(i++, a);
     else throw new Uso(`argumento desconhecido: ${a}`);
   }
-  if (!o.suites) throw new Uso('indique --todas ou --suites a,b');
+  if (o.afetadas && o.suites) throw new Uso('--afetadas não se combina com --todas nem --suites');
+  if (o.base && !o.afetadas) throw new Uso('--base só vale com --afetadas');
+  if (!o.suites && !o.afetadas) throw new Uso('indique --todas, --suites a,b ou --afetadas');
   return o;
 }
 
@@ -267,9 +271,18 @@ function prepara(argv) {
   if (!sha) throw new Uso(`${raiz} não é um repositório git`);
   const arvore = o.arvoreMotor ?? arvoreDe(raiz);
   const pasta = join(raiz, '.forge', 'resultados');
+  let afetadas = null;
+  if (o.afetadas) {
+    // as afetadas resolvem-se uma vez, na chamada: o motor recebe a lista como --suites e não volta a consultar o git
+    try { afetadas = desdeBase(o.base ?? 'origin/main', raiz); } catch (e) { throw new Uso(e.message); }
+    // um diff vazio dá as suítes `sempre`; se o mapa nem essas tem, «correr nada» seria um falso verde: é um erro de uso
+    if (!afetadas.suites.length) throw new Uso(`nenhuma suíte afetada contra ${o.base ?? 'origin/main'} (diff vazio e o mapa sem \`sempre\`)`);
+    o.suites = afetadas.suites;
+    argv = argv.filter((a, i) => a !== '--afetadas' && a !== '--base' && argv[i - 1] !== '--base').concat('--suites', afetadas.suites.join(','));
+  }
   const plano = planeia(m, o.suites, raiz, duracoesAnteriores(pasta, m.hash));
   const marca = `${sha}-${arvore === 'limpa' ? 'limpa' : arvore.replace(':', '-')}-p${o.passe}`;
-  return { o, raiz, m, sha, arvore, plano, pasta, marca, ficheiro: join(pasta, `${marca}.json`), motorDir: join(raiz, '.forge', 'motor') };
+  return { o, argv, afetadas, raiz, m, sha, arvore, plano, pasta, marca, ficheiro: join(pasta, `${marca}.json`), motorDir: join(raiz, '.forge', 'motor') };
 }
 
 // as unidades do ficheiro de resultados com estado final (só as deste sha e desta árvore)
@@ -332,6 +345,7 @@ const cobre = (motor, pedido) => motor === '*' || (pedido !== '*' && pedido.ever
 
 async function chamada(argv, saida) {
   const c = prepara(argv), { o, raiz, m, plano, marca } = c, t0 = Date.now();
+  if (c.afetadas) saida(`afetadas: ${c.afetadas.suites.length} suítes (${c.afetadas.ficheiros.length} ficheiros contra ${c.afetadas.base.slice(0, 7)}): ${c.afetadas.suites.join(', ')}`);
   const motorFicheiro = join(c.motorDir, `${marca}.json`), lock = join(c.motorDir, `${marca}.lock`);
   mkdirSync(join(c.pasta, 'logs'), { recursive: true });
   mkdirSync(c.motorDir, { recursive: true });
@@ -356,7 +370,7 @@ async function chamada(argv, saida) {
         if (!o.continuar) { try { renameSync(c.ficheiro, `${c.ficheiro}.ant`); } catch { /* ainda não havia */ } } // uma corrida nova não herda o resultado antigo, mas o motor aproveita as durações dele
         const log = openSync(join(c.motorDir, `${marca}.log`), 'a');
         // o cwd do motor é a pasta deste script: uma pasta de teste apagada pelo utilizador nunca fica presa ao processo
-        const p = lancaProc(process.execPath, [fileURLToPath(import.meta.url), ...argv, '--raiz', raiz, '--motor-interno', c.arvore, '--nonce', nonce], {
+        const p = lancaProc(process.execPath, [fileURLToPath(import.meta.url), ...c.argv, '--raiz', raiz, '--motor-interno', c.arvore, '--nonce', nonce], {
           cwd: dirname(fileURLToPath(import.meta.url)), stdio: ['ignore', log, log], detached: true });
         p.unref();
         closeSync(log);
