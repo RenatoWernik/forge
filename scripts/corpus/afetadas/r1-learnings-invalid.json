@@ -1,0 +1,10 @@
+{
+  "commit": null,
+  "ficheiros": [
+    "scripts/corpus/learnings/invalid/zz.md"
+  ],
+  "devem_incluir": [
+    "scripts",
+    "f-22a-r0"
+  ]
+}

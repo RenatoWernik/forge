@@ -189,8 +189,8 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
   if (o.afetadas) {
     let r;
     try { r = desdeBase(o.base ?? 'origin/main', raiz); } catch (e) { throw new Uso(e.message); }
-    // um diff vazio não afeta nada e «correr nada» seria um falso verde: é um erro de uso
-    if (!r.ficheiros.length) throw new Uso(`nenhum ficheiro mudou contra ${o.base ?? 'origin/main'}`);
+    // um diff vazio dá as suítes `sempre`; se o mapa nem essas tem, «correr nada» seria um falso verde: é um erro de uso
+    if (!r.suites.length) throw new Uso(`nenhuma suíte afetada contra ${o.base ?? 'origin/main'} (diff vazio e o mapa sem \`sempre\`)`);
     saida(`afetadas: ${r.suites.length} suítes (${r.ficheiros.length} ficheiros contra ${r.base.slice(0, 7)}): ${r.suites.join(', ')}`);
     o.suites = r.suites;
   }

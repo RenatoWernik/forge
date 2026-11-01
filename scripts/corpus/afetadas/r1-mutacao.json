@@ -1,0 +1,10 @@
+{
+  "commit": null,
+  "ficheiros": [
+    "scripts/corpus/mutations/agents-md-por-traduzir-em-pt.json"
+  ],
+  "devem_incluir": [
+    "scripts",
+    "f-02-r0"
+  ]
+}
