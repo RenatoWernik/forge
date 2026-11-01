@@ -90,7 +90,7 @@ test('M4: o corpus histórico tem ≥ 3 casos com { commit, ficheiros, devem_inc
 
 for (const c of casos) {
   test(`M4: caso ${c.nome}: as afetadas dos ficheiros incluem ${c.devem_incluir.join(', ')}`, () => {
-    const { suites } = afetadas(c.ficheiros, ROOT);
+    const { suites } = afetadas(c.ficheiros, { raiz: ROOT });
     assert.deepEqual(c.devem_incluir.filter((s) => !suites.includes(s)), [], `caso ${c.nome}: faltam suítes nas afetadas`);
   });
 }
@@ -142,20 +142,34 @@ test('afetadas(): regra do mapa, regra implícita, "*" e ficheiro sem regra (que
     'scripts/mapa-suites.json': JSON.stringify({ versao: 1, regras: [{ caminhos: ['lib/**'], suites: ['b'] }, { caminhos: ['tudo.txt'], suites: ['*'] }] }),
   });
   try {
-    const dos = (...fs) => afetadas(fs, d).suites.sort().join();
+    const dos = (...fs) => afetadas(fs, { raiz: d }).suites.sort().join();
     assert.equal(dos('lib/x.mjs'), 'b');
     assert.equal(dos('tests/critico/c/x.test.mjs'), 'c');
     assert.equal(dos('lib/x.mjs', 'tests/critico/a/y.mjs'), 'a,b');
     assert.equal(dos('tudo.txt'), 'a,b,c');
     assert.equal(dos('ninguem-cobre.txt'), 'a,b,c');
-    assert.deepEqual(afetadas(['ninguem-cobre.txt'], d).porque.a, [{ regra: 'sem regra', ficheiro: 'ninguem-cobre.txt' }]);
+    assert.deepEqual(afetadas(['ninguem-cobre.txt'], { raiz: d }).porque.a, [{ regra: 'sem regra', ficheiro: 'ninguem-cobre.txt' }]);
   } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('afetadas(ficheiros, { raiz }): o mesmo ficheiro dá o resultado do mapa de cada raiz, e sem raiz vale o mapa deste repo', () => {
+  const com = (suite) => pasta_({
+    'scripts/suites.json': manif('a', 'b'),
+    'scripts/mapa-suites.json': JSON.stringify({ versao: 1, regras: [{ caminhos: ['lib/**'], suites: [suite] }] }),
+  });
+  const [da, db] = [com('a'), com('b')];
+  try {
+    assert.deepEqual(afetadas(['lib/x.mjs'], { raiz: da }).suites, ['a']);
+    assert.deepEqual(afetadas(['lib/x.mjs'], { raiz: db }).suites, ['b']);
+    assert.deepEqual(afetadas(['README.md']).suites.sort(), afetadas(['README.md'], { raiz: ROOT }).suites.sort());
+    assert.ok(afetadas(['README.md']).suites.includes('f-01-r0'), 'sem raiz tem de valer o mapa do repo do módulo');
+  } finally { for (const x of [da, db]) rmSync(x, { recursive: true, force: true }); }
 });
 
 test('afetadas(): uma regra com a lista de suítes ou de caminhos vazia é inválida', () => {
   for (const regra of [{ caminhos: ['lib/**'], suites: [] }, { caminhos: [], suites: ['a'] }]) {
     const d = pasta_({ 'scripts/suites.json': manif('a'), 'scripts/mapa-suites.json': JSON.stringify({ versao: 1, regras: [regra] }) });
-    try { assert.throws(() => afetadas(['lib/x.mjs'], d), /vazia|sem caminhos/); } finally { rmSync(d, { recursive: true, force: true }); }
+    try { assert.throws(() => afetadas(['lib/x.mjs'], { raiz: d }), /vazia|sem caminhos/); } finally { rmSync(d, { recursive: true, force: true }); }
   }
 });
 
@@ -169,7 +183,7 @@ test('afetadas(): o fecho do lote segue a cadeia A → B → C pelos imports rel
     'tests/critico/c/c.test.mjs': chamada('a'),
   });
   try {
-    const r = afetadas(['lib/x.mjs'], d);
+    const r = afetadas(['lib/x.mjs'], { raiz: d });
     assert.deepEqual(r.suites.sort(), ['a', 'b', 'c']);
     assert.deepEqual(r.porque.c, [{ regra: 'doLote:b', ficheiro: 'lib/x.mjs' }]);
   } finally { rmSync(d, { recursive: true, force: true }); }
