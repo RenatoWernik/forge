@@ -67,7 +67,7 @@ test('C2 (b) GUARDA: o mesmo PT numa secção logo DEPOIS do marcador de fim dá
   langFail(check(P), 'AGENTS.md');
 });
 // RESPOSTA 6554223028, ponto 3: o salto é delimitado pelos marcadores, não pelo cabeçalho
-test('C2 (b) [ataque]: o mesmo PT logo DEPOIS do marcador de fim, sem cabeçalho novo (ainda na secção `## Learned rules`), dá FAIL (CLAUDE.md)', () => {
+test('C2 (b) GUARDA: o mesmo PT logo DEPOIS do marcador de fim, sem cabeçalho novo (ainda na secção `## Learned rules`), dá FAIL (CLAUDE.md)', () => {
   registo(P, REG);
   for (const f of ['CLAUDE.md', 'AGENTS.md']) writeFileSync(join(P, f), ORIG[f].replace(/\s+$/, '') + '\n\n' + BLOCO + (f === 'CLAUDE.md' ? '\n' + PROSA + '\n' : ''));
   langFail(check(P), 'CLAUDE.md');
