@@ -233,14 +233,18 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
       const faltam = plano.some((p) => p.suite.nome === nome && !feitas.has(p.chave));
       suites[nome] = { estado: estadoSuite(us.map((u) => u.estado), faltam), pass: soma('pass'), fail: soma('fail'), skip: soma('skip') };
     }
-    return { versao: 1, sha, arvore, node: process.version, comando: `node scripts/executor.mjs ${argv.join(' ')}`.trim(), inicio, fim: new Date().toISOString(), completo, unidades, suites };
+    // fase1_completa: todas as unidades da fase 1 têm resultado (`completo` só fica true quando a fase 2 também acabou)
+    return { versao: 1, sha, arvore, node: process.version, comando: `node scripts/executor.mjs ${argv.join(' ')}`.trim(), inicio, fim: new Date().toISOString(), completo,
+      fase1_completa: plano.every((u) => feitas.has(u.chave)), unidades, suites };
   };
-  const grava = (f, dados) => { writeFileSync(`${f}.tmp`, JSON.stringify(dados, null, 2)); renameSync(`${f}.tmp`, f); };
+  // os doLote da fase 2 leem este ficheiro enquanto ele muda: o rename pode falhar um instante no Windows se um leitor o tiver aberto
+  const grava = (f, dados) => {
+    writeFileSync(`${f}.tmp`, JSON.stringify(dados, null, 2));
+    for (let t = 0; ; t++) {
+      try { renameSync(`${f}.tmp`, f); return; } catch (e) { if (t >= 20 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
+    }
+  };
   const escreve = (completo) => grava(ficheiro, monta(completo));
-  // o resultado da fase 1 que os doLote da fase 2 leem: fica como estava quando a fase 1 acabou, sem a fase 2 a mexer-lhe
-  // (fora de .forge/resultados/: ali só fica um JSON por passe)
-  const fase1 = join(raiz, '.forge', 'lote', `${marca}.fase1.json`);
-  if (!o.continuar) rmSync(fase1, { force: true }); // um passe novo nunca herda o resultado da fase 1 de um anterior
 
   const vagas = new Vagas(m.vagas_globais, m.carga_sensivel);
   const raizTmp = mkdtempSync(join(tmpdir(), 'forge-exec-'));
@@ -262,7 +266,7 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
       else env[k] = process.env[k];
     }
     // fase 1: os testes com doLote saltam; fase 2: só eles correm, com o resultado da fase 1
-    if (u.fase === 2) env.FORGE_LOTE_RESULTADOS = fase1; else env.FORGE_LOTE_FASE = '1';
+    if (u.fase === 2) env.FORGE_LOTE_RESULTADOS = ficheiro; else env.FORGE_LOTE_FASE = '1';
     const args = ['--test', '--test-reporter=tap'];
     if (u.suite.concorrencia) args.push(`--test-concurrency=${u.suite.concorrencia}`);
     if (u.fase === 2) args.push(`--test-name-pattern=^(?:${u.nomes.map(escapaRegex).join('|')})$`);
@@ -338,9 +342,10 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
   };
 
   await roda(fila);
-  // fase 2 (spec §4.4): com a fase 1 inteira feita, os testes que saltaram com o motivo do lote voltam a correr, sozinhos, a ler o resultado dela
+  // fase 2 (spec §4.4): com a fase 1 inteira feita, os testes que saltaram com o motivo do lote voltam a correr, sozinhos, a ler o resultado
+  // (este ficheiro, que a fase 2 vai completando: o estado final de um teste do lote é o da fase 2)
   if (plano.every((u) => feitas.has(u.chave))) {
-    if (!(o.continuar && existsSync(fase1))) { mkdirSync(join(raiz, '.forge', 'lote'), { recursive: true }); grava(fase1, monta(true)); }
+    escreve(false);
     await roda(pendentesF2().map((u, i) => {
       const f = feitas.get(u.chave), nomes = f.skips.filter((s) => s.motivo === MOTIVO_LOTE).map((s) => desfazTap(s.teste));
       return { suite: { ...u.suite, sensivel_ao_tempo: false, exclusiva: false, limite_s: Math.min(u.suite.limite_s, FASE2_LIMITE_S) },

@@ -18,6 +18,7 @@ import { arvoreDe } from '../../../scripts/executor.mjs';
 export const MOTIVO = 'lote: satisfeito na fase 2';
 const RAIZ = fileURLToPath(new URL('../../../', import.meta.url));
 const FINAIS = ['pass', 'fail', 'limite', 'erro'];
+const ESPERA_MS = +(process.env.FORGE_LOTE_ESPERA_MS ?? 45000); // quanto o doLote da fase 2 espera por uma fase 2 de outro ficheiro (a unidade da fase 2 tem 90 s)
 const lerJson = (f) => JSON.parse(readFileSync(f, 'utf8').replace(/^﻿/, ''));
 const expande = (g) => globSync(g, { cwd: RAIZ }).map((f) => f.replaceAll('\\', '/'));
 
@@ -47,7 +48,7 @@ function avalia(dados, alvos, min) {
   if (dados.sha !== sha) return { erro: `o resultado é de outro sha (${dados.sha} ≠ ${sha})` };
   const arvore = arvoreDe(RAIZ);
   if (dados.arvore !== arvore) return { erro: `o resultado é de outra árvore (${dados.arvore} ≠ ${arvore})` };
-  if (dados.completo !== true) return { erro: 'o resultado não está completo' };
+  if (dados.completo !== true && dados.fase1_completa !== true) return { erro: 'o resultado não está completo' };
   let pass = 0, fail = 0, skip = 0;
   const unidades = [];
   for (const a of alvos) {
@@ -68,7 +69,9 @@ function avalia(dados, alvos, min) {
   const out = `TAP version 13\n# tests ${pass + fail}\n# pass ${pass}\n# fail ${mas.length ? Math.max(fail, 1) : fail}\n# skipped ${skip}\n`
     + (mas.length ? `${mas.map((u) => `not ok - ${u.ficheiro}: ${u.estado}, fail ${u.fail}`).join('\n')}\n${falhasDe(mas)}\n` : '');
   if (mas.length) return { erro: `o alvo falhou no lote:\n${out}` };
-  if (pass < min) return { erro: `o alvo tem ${pass} testes ok, menos do que os ${min} exigidos` };
+  // o N conta o estado final: ok na fase 1, ou skip do lote com a fase 2 ok (a unidade já fundiu a fase 2, e então o seu `pass` a inclui). Um skip
+  // do lote cuja fase 2 ainda não chegou ao resultado não conta; `pendente` deixa o doLote esperar por ela.
+  if (pass < min) return { erro: `o alvo tem ${pass} testes ok, menos do que os ${min} exigidos`, pendente: unidades.some((u) => !u.tap_fase2 && u.skips?.some((s) => s.motivo === MOTIVO)) };
   // ms: a soma das durações das unidades, que nunca fica abaixo do relógio de um filho com 2 workers (o f-06 mede o f-02 com ela)
   return { r: { status: 0, signal: null, pass, fail, skip, ms: Math.round(unidades.reduce((s, u) => s + u.duracao_s, 0) * 1000), out, stdout: out, stderr: '' } };
 }
@@ -89,11 +92,15 @@ export function doLote(t, alvo, { corre, min = 0 } = {}) {
   const alvos = [alvo].flat();
   const ficheiro = process.env.FORGE_LOTE_RESULTADOS;
   if (ficheiro !== undefined) {
-    let dados = null;
-    try { dados = lerJson(ficheiro); } catch (e) { throw new Error(`lote: o resultado ${ficheiro} não se lê (${e.code ?? e.message})`); }
-    const a = avalia(dados, alvos, min);
-    if (!a.r) throw new Error(`lote: ${a.erro}`);
-    return a.r;
+    // a fase 2 de outros ficheiros corre ao mesmo tempo e completa o resultado: se só falta uma fase 2 que o N precisa, espera por ela
+    for (const fim = Date.now() + ESPERA_MS; ;) {
+      let dados = null;
+      try { dados = lerJson(ficheiro); } catch (e) { if (Date.now() > fim) throw new Error(`lote: o resultado ${ficheiro} não se lê (${e.code ?? e.message})`); }
+      const a = dados ? avalia(dados, alvos, min) : { pendente: true };
+      if (a.r) return a.r;
+      if (!a.pendente || Date.now() > fim) throw new Error(`lote: ${a.erro}`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+    }
   }
   const r = reaproveita(alvos, min);
   if (r) return r;
