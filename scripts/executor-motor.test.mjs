@@ -3,6 +3,7 @@
 // o início e o fim em .sonda/); cada cenário tem um TEMP privado, por isso as vagas da máquina ficam intactas. Reutiliza o arnês dos ataques.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FIXTURES, correr, esperaAte, eventos, gitOk, inicios, intervalos, lerJson, limpa, mataArvore, registaPid, resultados, saida, sobreposicaoMax,
@@ -126,6 +127,19 @@ test('o motor sai sozinho e mata a sua árvore quando o ficheiro dele desaparece
   assert.equal(unidades.length, 2);
   rmSync(join(d, '.forge', 'motor'), { recursive: true, force: true });
   assert.ok(await esperaAte(() => !vivo(motor.pid) && unidades.every((p) => !vivo(p)), 20000), 'o motor ou as unidades dele ficaram vivos');
+});
+
+test('um leitor com o ficheiro de resultados aberto sem partilha (Windows) não deita o motor abaixo: acaba completo', { skip: process.platform !== 'win32' && 'só no Windows', timeout: 100000 }, async () => {
+  const d = montar('leitor', { paralelo: 1, orcamento_s: 60, suites: [{ nome: 'q', limite_s: 60 }] }, Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`q-${i}`, 1])));
+  const call = correr(d, ['--todas'], { env: tempPrivado(), limite_ms: 90000 });
+  assert.ok(await esperaAte(() => resultados(d).length === 1, 30000), 'sem ficheiro de resultados');
+  const f = join(d, '.forge', 'resultados', resultados(d)[0].nome);
+  const ps = spawn('powershell', ['-NoProfile', '-Command', `$h = [IO.File]::Open('${f}', 'Open', 'Read', 'None'); Start-Sleep 4; $h.Close()`], { stdio: 'ignore', windowsHide: true });
+  registaPid(ps.pid);
+  const r = await call;
+  assert.equal(r.status, 0, saida(r));
+  assert.equal(umResultado(d).dados.completo, true);
+  assert.equal(feitas(d).length, 8);
 });
 
 test('classe EPERM: 3 executores a tomar e largar vagas em ciclo não têm erro fatal nem passam de vagas_globais', { timeout: 150000 }, async () => {

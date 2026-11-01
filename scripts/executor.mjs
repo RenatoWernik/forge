@@ -314,8 +314,14 @@ async function motorCorre(argv, saida) {
     const cmd = argv.slice(0, argv.indexOf('--motor-interno')).join(' ');
     const dados = { versao: 1, sha: c.sha, arvore: c.arvore, node: process.version, comando: `node scripts/executor.mjs ${cmd}`.trim(), manifesto: m.hash,
       inicio, fim: new Date().toISOString(), completo, unidades, suites };
-    writeFileSync(`${ficheiro}.tmp`, JSON.stringify(dados, null, 2));
-    renameSync(`${ficheiro}.tmp`, ficheiro);
+    // Windows: renomear sobre um ficheiro que um leitor (a chamada, uma ferramenta) tem aberto dá EPERM/EBUSY/EACCES; tenta-se algumas vezes e,
+    // se continuar preso, o próximo escreve grava o estado todo, por isso um leitor nunca deita o motor abaixo
+    for (let i = 0; i < 20; i++) {
+      try { writeFileSync(`${ficheiro}.tmp`, JSON.stringify(dados, null, 2)); renameSync(`${ficheiro}.tmp`, ficheiro); return; } catch (e) {
+        if (!['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      }
+    }
   };
 
   const vagas = new Vagas(m.vagas_globais, m.carga_sensivel);
