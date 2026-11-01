@@ -104,7 +104,7 @@ function entryText({ platform = process.platform, env = process.env, home = os.h
     + `[Service]\nType=simple\nExecStart="${E(bin)}" --data-dir "${E(dataDir)}" ${argv.join(' ')}\nRestart=on-failure\nRestartSec=5s\n\n[Install]\nWantedBy=default.target\n` }
 }
 
-// the bytes of the entry: the .vbs is read by wscript in the ANSI code page, so a path outside ASCII (a profile like C:\Users\João) is only right in UTF-16 LE with a BOM; everything else is UTF-8
+// the bytes of the entry: the .vbs is read by wscript in the ANSI code page, so a path outside ASCII (a Windows profile with an accented name) is only right in UTF-16 LE with a BOM; everything else is UTF-8
 function startupEntry(a) {
   const e = entryText(a), wide = (a.platform || process.platform) === 'win32' && /[^\x00-\x7f]/.test(e.text)
   return { ...e, bytes: wide ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(e.text, 'utf16le')]) : Buffer.from(e.text) }
