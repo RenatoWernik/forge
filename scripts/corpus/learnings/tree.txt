@@ -1,0 +1,6 @@
+tests/learn/port.test.mjs
+tests/learn/port-regression.test.mjs
+tests/learn/port-clean.test.mjs
+.claude/hooks/port.mjs
+scripts/port-check.mjs
+docs/port-contract.md

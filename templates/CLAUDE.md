@@ -43,6 +43,7 @@ Code navigation, by question: relations and callers, `graphify query` and `graph
 | Ticket contracts | the issues of `{{REPO}}` (FRAMEWORK.md section 10) |
 | Checkpoint script, tool table, panel protocol, memory scopes, permissions | FRAMEWORK.md sections 5, 2, 6, 7 and 8 |
 | Panel (live CRM) | {{DASHBOARD_URL}} (ToolSearch `select:ArtifactData`); page code in `.claude/dashboard/panel.html` |
+| Error register (format: FRAMEWORK.md section 11) | `learnings/`, one file per month: `learnings/YYYY-MM.md` |
 | ai-memory scope | `workspace:"{{MEM_WORKSPACE}}"`, `project:"{{MEM_PROJECT}}"` in every `memory_*` call |
 
 ## Style

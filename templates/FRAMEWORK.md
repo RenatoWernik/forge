@@ -373,6 +373,56 @@ The orchestrator builds the batch: it cuts the batch branch and merges the appro
 - **Return.** `{checkpoint, mode, runs, batch: {verdict, reason?, failures: [{test, class, evidence}]}, regressions, flaky, fixedPorts}`. A batch with only b and c failures passes. `fixedPorts` lists the ports that two failing tests report in an `EADDRINUSE` error.
 - **Limits.** The tester never pushes, opens a PR or merges without the yes of the user, and never opens a real `claude` session.
 
+## 11. Learning from errors
+
+Every error that costs a round, a rework or the trust of the user is registered once, in `learnings/YYYY-MM.md`: one file per month, only appended to, versioned in git. The register is the canonical source of what went wrong. A lesson that lives only in a chat, in a memory page or in the head of an agent is lost with the session, and the same error comes back.
+
+`node .claude/check.cjs` validates the register with no model (the lines that start with `learnings:`), and `.claude/learnings.cjs` is the module that does it.
+
+**Rules of the register.**
+- A file starts with `# Learnings YYYY-MM`, and each entry is a heading `## E-NNN` followed by the lines of the block below, in that order. The ids have 3 or more digits, run 1 to N across all the files with no gap, and are never reused.
+- The month of `DATE` is the month of the file name. `REVIEW-BY` is never before `DATE`.
+- `CLASS` is the stable key of the error: the same kind of error always gets the same `CLASS`.
+- `APPROVED` exists, and is required, only when `PREVENTION` is `text`: the yes of the user to a rule in `CLAUDE.md`.
+- The paths exist in the repository and are relative, with no `..`. `test`, `hook` and `check` need `PREVENTION-PATH`, `REGRESSION` and `CLEAN-CASE`; `contract` needs `PREVENTION-PATH`; `text` points to `CLAUDE.md`; `memory` points to `ai-memory:<page path>`.
+- With `text` or `memory`, `REVIEW-BY` is at most 14 days after `DATE`: a weak prevention is reviewed soon.
+- The register only grows: once committed, an entry changes only in its `STATUS` line. An entry with `STATUS: open` past its `REVIEW-BY` is a warning (the clock is the UTC date, or `--today YYYY-MM-DD`), never a FAIL.
+
+**Strength of the layers** (1 is the strongest):
+- `test` 1
+- `hook` 2
+- `check` 2
+- `contract` 3
+- `text` 4
+- `memory` 5
+
+**The climb.** When a `CLASS` comes back, the new entry needs a `PREVENTION` stronger than the strongest one that class had, so a class climbs from `memory` to `text`, then to `check` or `hook`, then to `test`. `hook` and `check` are equally strong, so neither is a climb from the other. After `test` the only layer left is `test`: the check accepts it and warns that a test was not enough and the mechanism needs a redesign.
+
+**The format of an entry:**
+
+```text
+## E-001
+- DATE: 2026-10-31
+- TRIGGER: user | critic-rejected | escape | noise | hook-blocked | incident
+- DETECTED-BY: <who and where, one line>
+- SYMPTOM: <one line>
+- CLASS: <kebab-case slug, the stable key>
+- CAUSE: <one line; look for ours first: spec, instruction, harness, model>
+- CAUSE-OWNER: spec | instruction | harness | model | product
+- FAILED-LAYER: contract | round-minus-1 | tdd | critic | tester | check | hook | orchestrator
+- MISSING-CONTEXT: <one line, or none>
+- PREVENTION: test | hook | check | contract | text | memory
+- PREVENTION-PATH: <path in the repository; for memory, ai-memory:<page path>>
+- FAILS: open | closed
+- REGRESSION: <path of the case that reproduces it, or none>
+- CLEAN-CASE: <path of a clean case the prevention must not flag, or none>
+- AREA: <glob>[, <glob>]
+- SCOPE: project | package
+- REVIEW-BY: 2026-11-14
+- APPROVED: yes, 2026-10-31T10:00:00Z
+- STATUS: open | prevented | recurred | escalated | moot | expired
+```
+
 ## 12. Session continuity
 
 **Context.** When the context use reaches 85 % (the hook says `CONTEXT WARNING`), save `.checkpoints/orchestrator.md` and write the baton with `memory_handoff_begin` at once, then keep working: the automatic compaction follows, and the `compact` session start brings you back. Never ask the user to open a new session.

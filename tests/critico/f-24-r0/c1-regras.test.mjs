@@ -72,8 +72,10 @@ test('C4: os 4 limites da rede: cada trecho uma vez, o prompt começa por [forge
   assert.equal(H.conta(t, '`' + cron + '`'), 1);
 });
 
+// o âmbito do F-24 só vale no ramo dele: depois de fundido, a merge-base já tem a frase (regra 9)
+const ramo = H.git('rev-parse', '--abbrev-ref', 'HEAD').stdout.trim();
 for (const rel of ['templates/CLAUDE.md', 'templates/AGENTS.md']) {
-  test(`C1: a invariante 12 de ${rel} ganha a frase antes do «Verifies:», uma vez, e o resto da linha é o da merge-base`, () => {
+  test(`C1: a invariante 12 de ${rel} ganha a frase antes do «Verifies:», uma vez, e o resto da linha é o da merge-base`, { skip: !ramo.startsWith('f-24') && 'âmbito do f-24: fora da branch f-24*' }, () => {
     const t = H.semCr(H.le(rel));
     assert.equal(H.conta(t, H.FRASE_INV12), 1, `a frase aparece ${H.conta(t, H.FRASE_INV12)} vezes`);
     const l = t.split('\n').find((x) => x.startsWith('12. '));
