@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/briefs/critic.md",
+  "find": "PRE-EXISTING",
+  "replace": "PRE-EXIST1NG",
+  "line": "briefs"
+}

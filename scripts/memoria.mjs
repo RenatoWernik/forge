@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { arranca } from '../templates/.claude/start-ai-memory.mjs';
+import { arranca, aviso, estado } from '../templates/.claude/start-ai-memory.mjs';
 
 // /forge:new-project, ai-memory step. --plan --dest <project> prints what would be set up and writes nothing; --apply --dest <project> does it:
 // a data dir of its own and a free port for this project, the capture hooks and the MCP server in files git ignores, and the server started hidden.
@@ -24,7 +24,7 @@ const IGNORED = [SETTINGS, MCP, TOML]; // machine files: they hold this machine'
 const EVENTS = [['SessionStart', 'session-start'], ['UserPromptSubmit', 'user-prompt-submit'], ['PreToolUse', 'pre-tool-use'], ['PostToolUse', 'post-tool-use'],
   ['PreCompact', 'pre-compact'], ['Stop', 'stop'], ['SessionEnd', 'session-end'], ['SubagentStart', 'subagent-start'], ['SubagentStop', 'subagent-stop']];
 const FORGE_HOOK = { type: 'command', command: 'node', args: ['${CLAUDE_PROJECT_DIR}/.claude/hooks/forge-ai-memory.mjs'], timeout: 10 };
-const USAGE = 'Usage: memoria.mjs --plan --dest <project>\n       memoria.mjs --apply --dest <project>';
+const USAGE = 'Usage: memoria.mjs --plan --dest <project>\n       memoria.mjs --apply --dest <project> [--autostart yes|no]';
 
 const fwd = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '');
 // a value that came from the environment or a file never ends a line or starts a new one
@@ -122,7 +122,7 @@ function withBind(text, port) {
 function withForge(text, p) {
   const nl = text.includes('\r\n') ? '\r\n' : '\n';
   const lines = text === '' ? ["# This machine's ai-memory server for this project (not versioned). Written by forge's memoria.mjs --apply."] : text.split(/\r?\n/);
-  const want = { server_url: p.serverUrl, data_dir: p.dataDir };
+  const want = { server_url: p.serverUrl, data_dir: p.dataDir, ...(p.autostart ? { autostart: p.autostart } : {}) };
   const same = (l, v) => {
     const m = l.match(/^\s*\w+\s*=\s*(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/);
     return m !== null && (m[1] !== undefined ? m[1].replace(/\\(["\\])/g, '$1') : m[2]) === v;
@@ -191,16 +191,73 @@ async function apply(sys, dest, p, write) {
   put(MCP, json(mcp));
   put('.gitignore', withIgnored(read(join(dest, '.gitignore'))));
   write(`forge memoria: the ai-memory of this project is set up (data dir ${p.dataDir}, ${p.serverUrl}).`);
+  if (p.autostart) {
+    const code = await (p.autostart === 'yes' ? startAtLogon : noStartAtLogon)(sys, back, p, write, dest);
+    if (code || (p.autostart === 'yes' && sys.platform !== 'win32')) return code; // Linux and macOS: only the service manager starts the server, never a second one from here
+  }
   return arranca(dest, sys, write);
+}
+
+// The startup entry of this project's server (aim.startupEntry names the one file); nothing else in those folders is read, changed or removed.
+// Nothing here writes the registry or asks for admin: Windows is a file in the Startup folder, Linux a systemd --user unit, macOS a LaunchAgent.
+const entryOf = (sys, cfg, p) => aim.startupEntry({ platform: sys.platform, env: sys.env, home: sys.home, workspace: cfg.workspace, project: cfg.project, bin: p.bin, dataDir: p.dataDir, port: p.port });
+const ctl = (sys, cmd, args) => sys.run(cmd, args, {});
+async function uidOf(sys) {
+  const r = await ctl(sys, 'id', ['-u']);
+  const uid = String(r.stdout).trim();
+  return r.code === 0 && /^[0-9]+$/.test(uid) ? uid : null;
+}
+
+async function startAtLogon(sys, cfg, p, write, dest) {
+  const st = await estado(dest, sys);
+  if (st.state !== 'on' && st.state !== 'off') { write(aviso(st)); return 2; } // a conflict or anything else that is not on or off: no entry is written and the service manager is never called
+  const fs = sys.fs;
+  const e = entryOf(sys, cfg, p);
+  const file = join(e.dir, e.name);
+  const old = fs.existsSync(file) ? fs.readFileSync(file) : null;
+  if (old === null || !old.equals(e.bytes)) { fs.mkdirSync(e.dir, { recursive: true }); fs.writeFileSync(file, e.bytes); }
+  write(`forge memoria: this project's server starts at logon (${file}).`);
+  const run = async (cmd, args) => {
+    const r = await ctl(sys, cmd, args);
+    if (r.code !== 0) write(`${cmd} ${args.join(' ')} failed (exit ${r.code}): ${show(String(r.stderr).trim().split('\n')[0] ?? '')}. The entry ${file} is written; fix this and run the memory step again.`);
+    return r.code;
+  };
+  if (sys.platform === 'win32') return 0;
+  const on = st.state === 'on'; // a server of this project already answers: the manager only enables the entry, it does not start a second one
+  if (sys.platform === 'darwin') {
+    const uid = await uidOf(sys);
+    if (!uid) { write('id -u did not give a user id; the LaunchAgent is written but not loaded. Run the memory step again.'); return 1; }
+    if (on) return run('launchctl', ['enable', `gui/${uid}/${e.label}`]);
+    if (old !== null) await ctl(sys, 'launchctl', ['bootout', `gui/${uid}/${e.label}`]); // loaded already: reload it; a failure here only means it was not loaded
+    return run('launchctl', ['bootstrap', `gui/${uid}`, file]);
+  }
+  return (await run('systemctl', ['--user', 'daemon-reload'])) || run('systemctl', ['--user', 'enable', ...(on ? [] : ['--now']), e.name]);
+}
+
+async function noStartAtLogon(sys, cfg, p, write) {
+  const fs = sys.fs;
+  const e = entryOf(sys, cfg, p);
+  const file = join(e.dir, e.name);
+  if (!fs.existsSync(file)) return 0;
+  if (sys.platform === 'linux') await ctl(sys, 'systemctl', ['--user', 'disable', '--now', e.name]);
+  if (sys.platform === 'darwin') {
+    const uid = await uidOf(sys);
+    if (uid) await ctl(sys, 'launchctl', ['bootout', `gui/${uid}/${e.label}`]);
+  }
+  fs.unlinkSync(file);
+  if (sys.platform === 'linux') await ctl(sys, 'systemctl', ['--user', 'daemon-reload']);
+  write(`forge memoria: this project's startup entry removed (${file}); nothing else was touched.`);
+  return 0;
 }
 
 export async function main(argv, sys, write) {
   let o;
-  try { o = parseArgs({ args: argv, options: { plan: { type: 'boolean' }, apply: { type: 'boolean' }, dest: { type: 'string' } } }).values; } catch (e) { o = {}; }
-  if (!o.dest || Boolean(o.plan) === Boolean(o.apply)) { write(USAGE); return 2; }
+  try { o = parseArgs({ args: argv, options: { plan: { type: 'boolean' }, apply: { type: 'boolean' }, dest: { type: 'string' }, autostart: { type: 'string' } } }).values; } catch (e) { o = {}; }
+  if (!o.dest || Boolean(o.plan) === Boolean(o.apply) || (o.autostart !== undefined && !['yes', 'no'].includes(o.autostart))) { write(USAGE); return 2; }
   const dest = resolve(o.dest);
   const p = await makePlan(sys, dest);
   if (p.error) { write(p.error); return 1; }
+  p.autostart = o.autostart; // the answer to the startup question; without it the entry and the answer in the [forge] stay as they are
   if (o.plan) { write(JSON.stringify(p, null, 2)); return 0; }
   return apply(sys, dest, p, write);
 }

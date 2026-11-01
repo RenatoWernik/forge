@@ -96,7 +96,8 @@ async function chk(name, f) {
     let aim = null // shortcut: any load error reads as missing; upgrade: tell a broken module from an absent one
     try { aim = require('./ai-memory.cjs') } catch (e) {}
     const L_CAP = 'ai-memory: .ai-memory.toml admits capture in this project', L_PAGE = 'ai-memory: page _rules/framework.md seeded'
-    if (!aim) for (const n of ['ai-memory: binary', "ai-memory: server answers and is this project's", L_CAP, L_PAGE]) await chk(n + ' (.claude/ai-memory.cjs missing)', () => false)
+    const L_AUTO = 'ai-memory: autostart', L_CP = 'ai-memory: one page checkpoints/cp-N.md per cp-N tag'
+    if (!aim) for (const n of ['ai-memory: binary', "ai-memory: server answers and is this project's", L_CAP, L_PAGE, L_AUTO, L_CP]) await chk(n + ' (.claude/ai-memory.cjs missing)', () => false)
     else {
       const cfg = aim.readConfig('.'), { bin, version } = aim.resolveBin({ env: process.env, home: H, run: aim.run }), ready = !!(bin && cfg.serverUrl && cfg.dataDir)
       await chk(bin ? 'ai-memory: binary ' + bin + ' (' + version + ')' : 'ai-memory: binary not found (looked in: AI_MEMORY_BIN, PATH, %LOCALAPPDATA%/ai-memory/ai-memory.exe, ~/Applications/ai-memory/ai-memory, ~/.local/bin/ai-memory)', () => !!bin)
@@ -115,6 +116,12 @@ async function chk(name, f) {
           && bind.length === 1 && bind[0] === 'bind="' + new URL(cfg.serverUrl).host + '"' && ['.claude/settings.local.json', '.mcp.json', '.ai-memory.local.toml'].every(r => aim.isIgnored(g, r))
       })
       await chk(L_PAGE, () => ready && cfg.workspace && cfg.project && aim.run(bin, [...base, 'read-page', '--path', '_rules/framework.md', '--workspace', cfg.workspace, '--project', cfg.project], { env: { ...process.env, AI_MEMORY_SERVER_URL: cfg.serverUrl } }).code === 0)
+      const au = aim.autostartState({ cfg, bin, platform: process.platform, env: process.env, home: H })
+      await chk(L_AUTO + (au.detail ? ' ' + au.detail : ''), () => au.ok)
+      // A5: every cp-N tag has its page checkpoints/cp-N.md in this project's memory (the tags are git's own, never the files of .git/refs/tags)
+      const tags = (aim.run('git', ['tag', '--list', 'cp-*']).stdout || '').split(/\r?\n/).map(t => t.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+      const noPage = ready && cfg.workspace && cfg.project ? tags.filter(t => aim.run(bin, [...base, 'read-page', '--path', 'checkpoints/' + t + '.md', '--workspace', cfg.workspace, '--project', cfg.project], { env: { ...process.env, AI_MEMORY_SERVER_URL: cfg.serverUrl } }).code !== 0) : tags
+      await chk(L_CP + (!tags.length ? ' (no cp-* tags)' : noPage.length ? ' (missing: ' + noPage.join(', ') + ')' : ''), () => !noPage.length)
     }
     await chk('Spec-Kit: .specify/ and the /speckit-* skills installed', () => has('.specify/memory/constitution.md') && ['constitution', 'specify', 'clarify', 'plan', 'tasks', 'analyze', 'converge'].every(n => has('.claude/skills/speckit-' + n, 'SKILL.md')))
     await chk('Matt Pocock: /setup done (docs/agents/ and an "## Agent skills" block in CLAUDE.md)', () => has('docs/agents/issue-tracker.md') && fs.readFileSync('CLAUDE.md', 'utf8').includes('## Agent skills'))
@@ -193,7 +200,8 @@ async function chk(name, f) {
     }
     return got
   }
-  const itemOk = (b, i) => en ? b.includes('Verifies:') && b.replace(/^\d+\. \*\*/, '').startsWith(TITLES[i]) : pt ? /(?<!\p{L})Verifica:/u.test(b) : /`[^`\n]+`/.test(b)
+  const SPAN_9 = '`ai-memory: one page checkpoints/cp-N.md per cp-N tag`' // item 9 names the --env line that verifies the pages; the span is not translated
+  const itemOk = (b, i) => (i !== 8 || b.includes(SPAN_9)) && (en ? b.includes('Verifies:') && b.replace(/^\d+\. \*\*/, '').startsWith(TITLES[i]) : pt ? /(?<!\p{L})Verifica:/u.test(b) : /`[^`\n]+`/.test(b))
   if (has('CLAUDE.md')) { // the documents are only absent in the nested --render copy, which holds just .claude
     const noInv = ['CLAUDE.md', 'AGENTS.md'].filter(f => { const it = items(f); return it.length !== TITLES.length || !it.every(itemOk) })
     await chk('invariants: CLAUDE.md and AGENTS.md have the 12 numbered invariants, each with its Verifies: line' + (noInv.length ? ' (not ok: ' + noInv.join(', ') + ')' : ''), () => !noInv.length)
@@ -239,12 +247,14 @@ async function chk(name, f) {
       ['the Round -1 attacks green', [], [/Round [−-]1/i, /attacks?\b[^.\n]{0,80}\bgreen\b/i]],
       ['the contract wins over an attack', [], [/contract wins/i]],
       ['Round 0', [], [/\bRound 0\b/i]],
+      ['answer each finding with fixed or contested, and the reason', ['contested'], [/\bfixed\b/i, /\breason\b/i]],
     ],
     critic: [
       ['materiality test with its 3 criteria', [], [/materiality/i, /always[- ]fails?|fails? always|always[- ]rejects?/i, /(goal|objective|purpose|intent)\b[^.\n]{0,20}\bcriteri(on|a)|criterion'?s (goal|objective|purpose)/i, /reproducib\w*/i, /oracle/i]],
       ['the list of what is MINOR', [], [/\bMINOR\b/, /cosmetic/i, /literal (reading|read)|read(ing)? literally/i, /ambigu/i, /\b(own|your)\b[^.\n]{0,10}\battacks?\b/i]],
       ['the verdict format', [], [/\bVERDICT\b/, /\bBLOCKING\b|\bBLOCKERS\b/, /\bMINOR\b/, /QUESTIONS (TO|FOR|ON|ABOUT) THE BAR|BAR QUESTIONS/, /\bFOLLOW-?UPS?\b/]],
       ['R1 exhaustive and short later rounds', [], [/\bR1\b|\bround 1\b|\bfirst round\b/i, /exhaustive/i, /(later|following|subsequent|next|other)\s+rounds\b[^.\n]{0,100}\b(short|only)\b/i]],
+      ['PRE-EXISTING defects dated by git blame, and the seguimento label', ['PRE-EXISTING', 'seguimento'], [/git blame/i]],
     ],
     'round-minus-1': [
       ['exactly the oracle, without adding requirements', [], [/exactly\b[^.\n]{0,20}\boracles?/i, /(without|never|no|not)\s+add\w*\b[^.\n]{0,40}\b(requirements?|demands?)/i]],
@@ -340,6 +350,39 @@ async function chk(name, f) {
   await chk('build: roles use the models and effort from forge.json (developer, critic, aux); no other model', () => devs.length > 0 && crit.length > 0 && rolesOk(r.calls))
   await chk('build: the critic gets the goal, bar, context, root and owns of the piece; the prompt does not say which candidate is ours and the label alternates', () => crit.every(c => MARKS.every(t => c.prompt.includes(t)) && !/\bours\b|Project code:|Reference:/i.test(c.prompt)) && new Set(crit.map(c => /^A: .*src\/a\.js/m.test(c.prompt))).size === 2)
   await chk('build: the developer gets the goal, bar, context, root and owns of the piece', () => devs.length > 0 && devs.every(d => MARKS.every(t => d.prompt.includes(t))))
+  // The delivery names its commit (head, diffHash) and answers each finding; the verdict names the commit it judged (sha) and the PRE-EXISTING defects. head/diffHash/sha are valid hex of the right length.
+  const HEAD = n => 'c'.repeat(39) + n, HASH = n => 'd'.repeat(63) + n, none = () => ({})
+  const rich = (p, o, at, cx = none, dx = none) => o.label.startsWith('build:') ? { ...dev, head: HEAD(rn(o)), diffHash: HASH(rn(o)), responses: [], ...dx(rn(o)) } : o.label.startsWith('critic:') ? critic(p, o, at, { sha: HEAD(rn(o)), preExisting: [], ...cx(rn(o)) }) : 'ok'
+  const go = (impl, over = {}) => wf('gauntlet-build.js', { ...base, ...over, pieces: [piece] }, impl)
+  await chk('build: the PRE-EXISTING items and the followUp lines of the verdict of each round reach followUps (kind pre-existing and follow-up, with the round) in both modes, and a PRE-EXISTING item never blocks or counts as a failed criterion', async () => {
+    const pe = n => ({ preExisting: [{ description: 'PRE-' + n, blame: HEAD(n) + ' src/a.js:' + n }, { description: 'PRE-' + n + 'b', blame: HEAD(n) + ' src/b.js:' + n }], followUp: ['FU-' + n] })
+    const rs = await Promise.all(['rigorous', 'accelerated'].map(mode => go((p, o) => rich(p, o, 2, pe), { mode })))
+    const one = await go((p, o) => rich(p, o, 1, pe))
+    const has = (f, k, n, d) => f.some(i => i.kind === k && i.round === n && i.description === d)
+    return rs.every(x => { const y = x.out.results[0], f = y.followUps; return y.won && y.rounds === 2 && y.metrics.sameCriterionFailures === 1 && [1, 2].every(n => has(f, 'pre-existing', n, 'PRE-' + n) && has(f, 'pre-existing', n, 'PRE-' + n + 'b') && has(f, 'follow-up', n, 'FU-' + n)) && f.find(i => i.description === 'PRE-1').blame === HEAD(1) + ' src/a.js:1' })
+      && one.out.results[0].won && one.out.results[0].rounds === 1 && one.out.results[0].followUps.length === 3
+  })
+  await chk('build: the verdict is tied to the commit: a sha other than the delivered head never wins and log() says so, the critic is told the head of its round and to read the sha with git rev-parse HEAD, the result has head and sha, and the schemas require head, diffHash and sha', async () => {
+    const bad = 'e'.repeat(40), x = await go((p, o) => rich(p, o, 1, () => ({ sha: bad }))), y = await go((p, o) => rich(p, o, 1))
+    const c = only(y.calls, /^critic:/)[0], d = only(y.calls, /^build:/)[0], z = y.out.results[0]
+    const req = (s, k, re) => s.required.includes(k) && s.properties[k].type === 'string' && s.properties[k].pattern === re
+    return !x.out.results[0].won && x.logs.includes(`WARNING p r1: the verdict is for ${bad} but the delivery is ${HEAD(1)}`) && z.won && z.head === HEAD(1) && z.sha === HEAD(1)
+      && c.prompt.includes(HEAD(1)) && c.prompt.includes('git rev-parse HEAD') && req(d.opts.schema, 'head', '^[0-9a-f]{40}$') && req(d.opts.schema, 'diffHash', '^[0-9a-f]{64}$') && req(c.opts.schema, 'sha', '^[0-9a-f]{40}$')
+  })
+  await chk('build: a diffHash equal to the one of the previous round does not call the critic: the round counts as failed with the previous verdict (the criterion fails again) and log() says so; an absent or invalid diffHash never skips the critic', async () => {
+    const same = () => ({ diffHash: HASH(1) }), x = await go((p, o) => rich(p, o, 9, none, same)), r1 = x.out.results[0]
+    const bad = await Promise.all([() => ({ diffHash: 'x' }), () => ({ diffHash: 'D'.repeat(64) }), () => ({ diffHash: undefined })].map(f => go((p, o) => rich(p, o, 3, none, f))))
+    return only(x.calls, /^critic:/).length === 1 && only(x.calls, /^build:/).length === 2 && r1.rounds === 2 && !r1.won && r1.stopped === 'redesign' && r1.criterion === 'C1' && r1.metrics.sameCriterionFailures === 2
+      && x.logs.includes('p r2: diff unchanged since r1, critic not rerun') && only(x.calls, /^panel:verdict:p:r2$/).length === 1
+      && bad.every(y => only(y.calls, /^critic:/).length === 3 && y.out.results[0].won)
+  })
+  await chk('build: each blocking failure gets the id F<round>-<n> that the developer of the next round sees (the one of round 1 sees none), a contested answer reaches results[].contested with the round of the finding, the critic never gets the answer or its reason, and a missing answer gives a WARNING', async () => {
+    const two = n => n === 1 ? { blocking: [item(11, 1), item(12, 3)] } : {}, ans = n => n === 2 ? { responses: [{ finding: 'F1-1', answer: 'contested', reason: 'REASON-CONTESTED-1' }] } : {}
+    const x = await go((p, o) => rich(p, o, 2, two, ans)), ds = only(x.calls, /^build:/), cs = only(x.calls, /^critic:/), [c] = x.out.results[0].contested
+    return ds.length === 2 && !/\bF\d+-\d+\b/.test(ds[0].prompt) && ['F1-1', 'F1-2', 'BLOCK-11', 'BLOCK-12'].every(t => ds[1].prompt.includes(t)) && x.out.results[0].contested.length === 1
+      && c.finding === 'F1-1' && c.round === 1 && c.reason === 'REASON-CONTESTED-1' && c.criterion === 'C1' && cs.length === 2 && cs.every(k => !k.prompt.includes('REASON-CONTESTED-1'))
+      && x.logs.includes('WARNING p r2: no answer to F1-2') && !x.logs.some(l => l.includes('no answer to F1-1'))
+  })
   r = await wf('gauntlet-build.js', { ...base, pieces: [piece] }, (p, o) => o.label === 'critic:p:r2' ? null : build(p, o))
   await chk('build: an agent without an answer ends the piece (stopped) instead of spinning, and log() says which round', () => !r.out.results[0].won && r.out.results[0].stopped && r.out.results[0].rounds === 2 && r.logs.some(l => l.startsWith('p r2:') && l.includes('without an answer')))
   r = await wf('gauntlet-build.js', { ...base, pieces: [piece] }, (p, o) => o.label === 'build:p:r1' ? null : build(p, o))
