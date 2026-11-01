@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { applySeed } from '../../../scripts/corpus-seed.mjs';
 import { CORPUS, loadCorpus, buildProject, check, lineState } from './helpers.mjs';
 
 const FIELDS = ['base', 'file', 'find', 'replace', 'line'];
@@ -15,6 +16,7 @@ test('C2: o corpus tem pelo menos 5 mutações, cada uma com base, file, find, r
     for (const k of FIELDS) assert.equal(typeof m.value?.[k], 'string', `${m.name}.${k}`);
     for (const k of ['base', 'file', 'find', 'line']) assert.ok(m.value[k].length > 0, `${m.name}.${k} vazio`);
     assert.notEqual(m.value.find, m.value.replace, m.name + ': find igual a replace');
+    if (m.value.seed !== undefined) assert.ok(m.value.seed && typeof m.value.seed === 'object' && !Array.isArray(m.value.seed), m.name + '.seed tem de ser um objeto');
   }
 });
 
@@ -37,6 +39,7 @@ test('C2: cada mutação, aplicada de forma independente a uma cópia, encontra 
   for (const { name, value: m } of muts) {
     assert.ok(sets[m.base], name + ': base desconhecida ' + m.base);
     const { dest } = await buildProject(sets[m.base]);
+    applySeed(dest, m.seed);
     const before = check(dest);
     assert.equal(lineState(before.out, m.line), 'ok', `${name}: a linha «${m.line}» não está «ok» no projeto sem mutação (nome inexato, ou já falhava)`);
     const file = join(dest, m.file);
