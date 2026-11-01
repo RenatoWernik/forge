@@ -67,9 +67,9 @@ function provaNegativa(nomeCaso, escolhe, oQue) {
   const d = copiaRepo(), c = caso(nomeCaso);
   assert.ok(c, `falta o caso ${nomeCaso}`);
   const mapa = lerMapa(d);
+  // AJUSTE (REDESENHO #126): o código leva "*", por isso o "*" passa a ser todas as suítes do manifesto e é dessa lista que se tira o f-02-r0
+  for (const r of mapa.regras) if (r.suites.includes('*')) r.suites = nomesManifesto(d);
   const doCaso = new Set(c.ficheiros.flatMap((f) => regrasDe(mapa, f)));
-  assert.deepEqual([...doCaso].filter((r) => r.suites.includes('*')).map((r) => r.caminhos.slice(0, 3)), [],
-    `uma regra "*" casa com ${nomeCaso}: traz o f-02-r0 e o M4 não o pode perder`);
   const tiradas = escolhe(mapa, doCaso).filter((r) => r.suites.includes('f-02-r0'));
   assert.ok(tiradas.length > 0, `nenhuma regra (${oQue}) tem o f-02-r0`);
   for (const r of tiradas) r.suites = r.suites.filter((s) => s !== 'f-02-r0');
