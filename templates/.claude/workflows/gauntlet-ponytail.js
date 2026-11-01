@@ -29,7 +29,16 @@ const rx = s => { try { return new RegExp(s, 'i') } catch (e) { return null } } 
 const R = Object.fromEntries(['developer', 'critic', 'aux'].map(r => { const m = M[r] || {}; return [r, { ...m, label: m.label || m.model, match: rx(m.match || m.model) }] }))
 const bad = UNITS.filter(u => !(u.id && u.title && (u.paths || []).length))
 const badRoles = Object.keys(R).filter(r => !(typeof R[r].model === 'string' && R[r].model && EFFORTS.includes(R[r].effort) && R[r].match))
-if (!DASH || !ROOT || !TEST || !UNITS.length || bad.length || badRoles.length) throw new Error('incomplete args: root, dashboardUrl, testCommand and units with id, title and paths' + (bad.length ? ' (review: ' + bad.map(u => u.id || u.title).join(', ') + ')' : '') + '; models.developer, models.critic and models.aux each need model, effort (one of ' + EFFORTS.join(', ') + ') and, if present, a valid regex in match, from .claude/forge.json' + (badRoles.length ? ' (review: ' + badRoles.join(', ') + ')' : ''))
+// Graph of the run (B3): args.graph is optional; with it, every unit has affected {nodes, files}, the output of graphify affected that the orchestrator pastes (the same block is in gauntlet-build.js and gauntlet-attacks.js)
+const GRAPH = A.graph
+const strs = x => Array.isArray(x) && x.every(s => typeof s === 'string')
+const graphProblems = (items, what) => [
+  ...(GRAPH == null || (typeof GRAPH === 'string' && /^(?:[A-Za-z]:[\\/]|\/)/.test(GRAPH)) ? [] : ['graph: an absolute path of graph.json (X:\\, X:/ or /), or leave it out']),
+  ...(GRAPH == null ? [] : items.filter(x => !(x.affected && typeof x.affected === 'object' && strs(x.affected.nodes) && strs(x.affected.files))).map(x => `${what} ${x.id}, affected: {nodes: [strings], files: [strings]}, from graphify affected`)),
+]
+const graphNote = x => GRAPH ? `Graph of this run: ${GRAPH}. Pass --graph "${GRAPH}" to graphify query, graphify affected and graphify explain. Affected by this unit: nodes ${JSON.stringify(x.affected.nodes)}, files ${JSON.stringify(x.affected.files)}.` : 'No graph for this run.'
+const graphIssues = graphProblems(UNITS, 'unit')
+if (!DASH || !ROOT || !TEST || !UNITS.length || bad.length || badRoles.length || graphIssues.length) throw new Error('incomplete args: root, dashboardUrl, testCommand and units with id, title and paths' + (bad.length ? ' (review: ' + bad.map(u => u.id || u.title).join(', ') + ')' : '') + '; models.developer, models.critic and models.aux each need model, effort (one of ' + EFFORTS.join(', ') + ') and, if present, a valid regex in match, from .claude/forge.json' + (badRoles.length ? ' (review: ' + badRoles.join(', ') + ')' : '') + (graphIssues.length ? '; ' + graphIssues.join('; ') : ''))
 
 // Which label (A or B) carries the current version: derived from unit and round, never told to the critic (the runtime's random draw would break resume).
 const currentIsA = s => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 2 === 0
@@ -97,6 +106,9 @@ const VERDICT = {
 }
 
 phase('Panel')
+// graph:update (B2): ONE call per run, before any other agent; no LLM. The graph is a help, so an answer that is not "graph: ..." (null included) only warns.
+const upd = await agent(`Run this command in the foreground, never in the background, and reply with its last line only, nothing else: node "${ROOT}/.claude/graph.mjs" update`, { label: 'graph:update', phase: 'Panel', model: R.aux.model, effort: R.aux.effort })
+if (!/^graph:/.test(String(upd).trim())) log(`WARNING graph:update: ${String(upd).slice(0, 100)}`)
 await aux(`Record on the panel the Ponytail gauntlet of checkpoint ${CP.n}. Load ArtifactData via ToolSearch "select:ArtifactData"; url ${DASH}. Time: Bash "date -u +%Y-%m-%dT%H:%M:%SZ" (updatedAt field of each agent). Use ONE "batch". For an existing document ("get" first) use "update" with if_version; otherwise "set".
 - checkpoints/cp${CP.n}: {"n":${JSON.stringify(CP.n)},"title":${JSON.stringify(CP.title)},"status":"${PANEL.active}","ponytail":"${PANEL.running}"}
 ${UNITS.map(u => `- pieces/cp${CP.n}-pt-${u.id}: {"title":${JSON.stringify('Ponytail · ' + u.title)},"checkpoint":"${CP.n}","status":"backlog","rounds":0,"loop":"ponytail","bar":"minimal version that still passes the tests"}
@@ -115,6 +127,7 @@ async function runUnit(u) {
     const fb = last ? `\nROUND ${round}. The critic did not approve. Biggest gap: ${last.biggestGap}\nRejections (restore what was cut wrongly): ${JSON.stringify(last.wronglyCut)}\nStill left to cut: ${JSON.stringify(last.remainingCuts)}\nTests passed: ${last.testsPass}; behavior preserved: ${last.behaviourPreserved}` : ''
     cut = await agent(`You are the DEVELOPER of the Ponytail gauntlet (a loop separate from the build one; here you only cut), with your own context. Read .claude/briefs/dev.md first and follow it. Project: ${ROOT}. Checkpoint ${CP.n}: ${CP.title}.
 Unit "${u.title}": ${JSON.stringify(u.paths)}
+${graphNote(u)}
 Spec, plan and tasks: ${CTX}
 Full suite: ${TEST}
 1. ${round === 1 ? `Copy the unit's files, with the same structure, to ${beforeDir}: that is the "before" the critic compares. Never edit that copy.` : `The "before" copy already exists at ${beforeDir}; do not touch it.`}
@@ -131,6 +144,7 @@ ${panel(bid, 'Ponytail dev · ' + short, 'builder', round === 1 ? 'Cut excess in
     const BEFORE = `version at ${beforeDir}`
     const v = await agent(`You are a HARSH CRITIC of the Ponytail gauntlet, with a fresh context. Read .claude/briefs/critic.md first and follow it. Praise is worthless, there is no numeric grade and you edit no file.
 Project: ${ROOT}. Unit: ${JSON.stringify(u.paths)}. Spec, plan and tasks: ${CTX}. Full suite: ${TEST}
+${graphNote(u)}
 Two versions of the same unit, labeled blind (judge only by the code):
 A: ${cur ? NOW : BEFORE}
 B: ${cur ? BEFORE : NOW}

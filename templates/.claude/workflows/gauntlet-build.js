@@ -21,6 +21,14 @@ const MODE = A.mode
 const CTX = A.context || '(specs/ of Spec-Kit)'
 const LANG = A.language || 'English' // ponytail: the panel agent writes the free text in this language (no string table); upgrade to one table per language if the wording must be exact
 const MEM = A.memory && A.memory.workspace && A.memory.project ? `workspace "${A.memory.workspace}", project "${A.memory.project}"` : 'the workspace and project from the .ai-memory.toml at the project root'
+// Graph of the run (B3): args.graph is optional; with it, every piece has affected {nodes, files}, the output of graphify affected that the orchestrator pastes (the same block is in gauntlet-attacks.js and gauntlet-ponytail.js)
+const GRAPH = A.graph
+const strs = x => Array.isArray(x) && x.every(s => typeof s === 'string')
+const graphProblems = (items, what) => [
+  ...(GRAPH == null || (typeof GRAPH === 'string' && /^(?:[A-Za-z]:[\\/]|\/)/.test(GRAPH)) ? [] : ['graph: an absolute path of graph.json (X:\\, X:/ or /), or leave it out']),
+  ...(GRAPH == null ? [] : items.filter(x => !(x.affected && typeof x.affected === 'object' && strs(x.affected.nodes) && strs(x.affected.files))).map(x => `${what} ${x.id}, affected: {nodes: [strings], files: [strings]}, from graphify affected`)),
+]
+const graphNote = x => GRAPH ? `Graph of this run: ${GRAPH}. Pass --graph "${GRAPH}" to graphify query, graphify affected and graphify explain. Affected by this piece: nodes ${JSON.stringify(x.affected.nodes)}, files ${JSON.stringify(x.affected.files)}.` : 'No graph for this run.'
 // Fixed values the dashboard reads; they stay as they are in every language.
 const PANEL = { active: 'ativo', pending: 'pendente', question: 'pergunta', won: 'ganhou', lost: 'perdeu' }
 // Models come from args.models (the orchestrator copies .claude/forge.json; scripts cannot read files): {developer, critic, aux}, each {model, effort, label?, match?}.
@@ -39,6 +47,7 @@ const ESC_TYPES = { sameCriterionFailures: 'int', attacksRedOnDelivery: 'bool', 
 const modeProblems = [
   ...(Object.hasOwn(ROUNDS, MODE) ? [] : ['mode: "rigorous" or "accelerated", copied from .claude/forge.json (there is no default)']),
   ...Object.entries(ESC_TYPES).filter(([k, t]) => { const v = ESC && ESC[k] && ESC[k].value; return !(t === 'bool' ? typeof v === 'boolean' : Number.isInteger(v) && v >= (k === 'sameCriterionFailures' ? 2 : 1) && (k !== 'sameCriterionFailures' || v <= 3)) }).map(([k, t]) => `escalation.${k}.value: ${t === 'bool' ? 'true or false' : k === 'sameCriterionFailures' ? 'an integer, 2 or 3' : 'an integer, 1 or more'}, as in .claude/forge.json`),
+  ...graphProblems(PIECES, 'piece'),
   ...PIECES.flatMap(p => [
     ...(p.ui === undefined || typeof p.ui === 'boolean' ? [] : [`piece ${p.id}, ui: true or false`]),
     ...(p.redesigns === undefined || (Number.isInteger(p.redesigns) && p.redesigns >= 0) ? [] : [`piece ${p.id}, redesigns: an integer, 0 or more`]),
@@ -159,9 +168,10 @@ const BUILD = {
         required: ['finding', 'answer'],
       },
     },
+    graphNodes: { type: 'array', items: { type: 'string' }, description: 'the graph nodes you consulted (graphify query, affected, explain); [] when you consulted none or the run has no graph' },
     model: MODEL,
   },
-  required: ['filesChanged', 'testCommand', 'redEvidence', 'greenEvidence', 'head', 'diffHash', 'responses', 'model'],
+  required: ['filesChanged', 'testCommand', 'redEvidence', 'greenEvidence', 'head', 'diffHash', 'responses', 'graphNodes', 'model'],
 }
 // The verdict has the sections of .claude/briefs/critic.md: BLOCKING (each with the materiality criterion 1, 2 or 3 and the repro), MINOR, BAR QUESTIONS, PRE-EXISTING, FOLLOW-UP.
 const CATEGORIES = ['secret', 'security', 'data-loss', 'false-alarm', 'regression', 'no-evidence', 'criterion'] // the 6 always-fails and the plain criterion failure
@@ -215,6 +225,9 @@ const VERDICT = {
 }
 
 phase('Panel')
+// graph:update (B2): ONE call per run, before any other agent; no LLM. The graph is a help, so an answer that is not "graph: ..." (null included) only warns.
+const upd = await agent(`Run this command in the foreground, never in the background, and reply with its last line only, nothing else: node "${ROOT}/.claude/graph.mjs" update`, { label: 'graph:update', phase: 'Panel', model: R.aux.model, effort: R.aux.effort })
+if (!/^graph:/.test(String(upd).trim())) log(`WARNING graph:update: ${String(upd).slice(0, 100)}`)
 await aux(`Record on the panel the pieces of checkpoint ${CP.n} and the agents of the first round. Load ArtifactData via ToolSearch "select:ArtifactData"; url ${DASH}. Time: Bash "date -u +%Y-%m-%dT%H:%M:%SZ" (updatedAt field of each agent). Use ONE "batch". For an existing document ("get" first) use "update" with if_version; otherwise "set".
 - checkpoints/cp${CP.n}: {"n":${JSON.stringify(CP.n)},"title":${JSON.stringify(CP.title)},"status":"${PANEL.active}","ponytail":"${PANEL.pending}"}
 ${PIECES.map(p => `- pieces/cp${CP.n}-${p.id}: {"title":${JSON.stringify(p.title)},"checkpoint":"${CP.n}","status":"backlog","rounds":0,"loop":"build","bar":${JSON.stringify(p.bar)}}
@@ -224,10 +237,10 @@ Write every free-text value in ${LANG}. Reply only "ok" or the error.`, 'panel:s
 
 async function runPiece(p) {
   const blocked = gate(p)
-  if (blocked) { log(`${p.id}: blocked before the developer (${blocked.reason}): ${JSON.stringify(blocked.gaps || blocked.attacks).slice(0, 200)}`); return { id: p.id, won: false, rounds: 0, blocked } }
+  if (blocked) { log(`${p.id}: blocked before the developer (${blocked.reason}): ${JSON.stringify(blocked.gaps || blocked.attacks).slice(0, 200)}`); return { id: p.id, won: false, rounds: 0, blocked, graphNodes: [] } }
   const pid = `cp${CP.n}-${p.id}`, short = p.title.slice(0, 40), role = devRole(p), DEV = devOf(p), CAP = ROUNDS[MODE]
   const attackIds = attacksOf(p).map(a => a.id)
-  const minutes = minutesOf(p), failed = {}, followUps = [], contested = [] // failed: criterion -> rounds in which it failed (a failure moved to followUps, or a PRE-EXISTING one, does not count)
+  const minutes = minutesOf(p), failed = {}, followUps = [], contested = [], graphNodes = new Set() // failed: criterion -> rounds in which it failed (a failure moved to followUps, or a PRE-EXISTING one, does not count)
   let round = 0, won = false, last = null, lastRound = 0, prevDiff = null, build = null, stopped = null, more = {}, red = 0 // lastRound: the round whose findings F<round>-<n> `last` holds
   const metrics = () => ({ rounds: round, sameCriterionFailures: Math.max(0, ...Object.values(failed)), attacksRedOnDelivery: red, minutesWithoutProgress: minutes })
   const stop = (why, extra = {}) => { stopped = why; more = extra; log(`${p.id} r${round}: stopped, ${typeof why === 'string' ? why : why.reason}${extra.condition ? ' (' + extra.condition + ')' : ''}${extra.criterion ? ' (' + extra.criterion + ')' : ''}`) }
@@ -247,7 +260,7 @@ You may edit only these files: ${JSON.stringify(p.owns)}
 Spec, plan, tasks and test command: ${CTX}
 Contract: issue #${p.issue}, read with gh issue view ${p.issue} --json body,comments. Round -1 attacks, which must be green when you deliver and which you never weaken or delete: ${JSON.stringify(attacksOf(p).map(a => a.file))}
 Rules:
-1. Before exploring code, run ai-memory memory_query (ToolSearch "select:mcp__ai-memory__memory_query"; ${MEM}) about the piece and, if graphify-out/ exists, graphify query and graphify affected on the files.
+1. Before exploring code, run ai-memory memory_query (ToolSearch "select:mcp__ai-memory__memory_query"; ${MEM}) about the piece and use the graph (graphify query, graphify affected, graphify explain). ${graphNote(p)} Return in graphNodes the nodes you consulted ([] if none).
 2. ${tdd}
 3. Ponytail full (skill ponytail): before writing, climb the ladder: must it exist? does it already exist in the code? stdlib? native? dependency already installed? one line? A deliberate shortcut gets the comment "ponytail: <ceiling>, <upgrade path>".
 4. Never cut: validation at a trust boundary, an error that prevents data loss, security, accessibility, an explicit spec requirement.
@@ -258,6 +271,9 @@ ${panel(bid, 'Dev · ' + short, 'builder', round === 1 ? p.goal.slice(0, 160) : 
       { label: `build:${p.id}:r${round}`, phase: 'Build', model: DEV.model, effort: DEV.effort, schema: BUILD })
     if (!build) { stopped = 'developer without an answer (agent skipped or API error)'; log(`${p.id} r${round}: ${stopped}`); break }
     if (!modelOk(role, build)) log(`WARNING ${p.id} r${round}: the developer declared model "${build.model}", expected ${DEV.label}`)
+    const seen = strs(build.graphNodes) ? build.graphNodes : [] // an absent graphNodes counts as []
+    seen.forEach(n => graphNodes.add(n))
+    if (GRAPH && !seen.length) log(`WARNING ${p.id} r${round}: the developer consulted no graph node`)
     // The developer answers each finding of the previous round by its id; a contested one goes to the result for the orchestrator, and the critic never sees the answer.
     const given = Array.isArray(build.responses) ? build.responses : [] // a missing field counts as empty
     ;(last ? last.blocking : []).forEach((b, i) => {
@@ -283,6 +299,7 @@ Project: ${ROOT}. Piece "${p.title}": ${p.goal}
 Contract: issue #${p.issue}, read with gh issue view ${p.issue} --json body,comments (the body, the orchestrator's comments and the critics' comments only: the developer's Round 0 comment is never part of the contract)
 Spec, plan, tasks and test command: ${CTX}
 Files the piece may change: ${JSON.stringify(p.owns)}
+${graphNote(p)}
 Delivery: the commit ${typeof build.head === 'string' ? build.head : '(none declared)'}. Judge that commit: in the worktree of the delivery read it with git rev-parse HEAD and return it in sha.
 Two candidates, labeled blind (judge only by content, not origin):
 A: ${ours ? OURS : p.bar}
@@ -345,7 +362,7 @@ ${panel(cid, 'Critic · ' + short, 'critic', `Round ${round}: judge blind agains
     await aux(verdict(p, pid, cid, round, won, v), `panel:verdict:${p.id}:r${round}`, 'Build')
     if (more.blocked) break
   }
-  return { id: p.id, won, rounds: round, stopped, ...more, metrics: metrics(), followUps, contested, head: build && build.head, sha: last && last.sha, files: build && build.filesChanged, testCommand: build && build.testCommand, models: { builder: build && build.model, critic: last && last.model }, lastVerdict: last }
+  return { id: p.id, won, rounds: round, stopped, ...more, metrics: metrics(), followUps, contested, head: build && build.head, sha: last && last.sha, files: build && build.filesChanged, testCommand: build && build.testCommand, models: { builder: build && build.model, critic: last && last.model }, lastVerdict: last, graphNodes: [...graphNodes] }
 }
 
 phase('Build')
