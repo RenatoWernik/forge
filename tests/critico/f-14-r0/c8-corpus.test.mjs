@@ -10,6 +10,7 @@ import { join, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { ROOT, BASE, git, sandboxEnv } from './helpers.mjs';
+import { limiteMs } from './limite.mjs';
 
 test('C6: as mutações do corpus da base continuam lá (pelo nome) e o corpus não encolheu', () => {
   const r = git('ls-tree', '--name-only', BASE + ':scripts/corpus/mutations');
@@ -21,10 +22,13 @@ test('C6: as mutações do corpus da base continuam lá (pelo nome) e o corpus n
   assert.deepEqual(answers.filter((n) => !readdirSync(join(ROOT, 'scripts/corpus/answers')).includes(basename(n))), []);
 });
 
-test('C6 e seguimento: node --test scripts/corpus.test.mjs sai 0 e corre em menos de 60 s', () => {
+test('C6 e seguimento: node --test scripts/corpus.test.mjs sai 0 e corre em menos de 60 s × max(1, N_agora / N_base) (F-27)', () => {
+  const ls = (d) => readdirSync(join(ROOT, d)).filter((n) => n.endsWith('.json')).length;
+  const nBase = git('ls-tree', '--name-only', BASE + ':scripts/corpus/mutations').stdout.split('\n').filter((n) => n.trim().endsWith('.json')).length;
+  const nAgora = ls('scripts/corpus/mutations'), limite = limiteMs(nAgora, nBase);
   const t0 = Date.now();
   const r = spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'scripts/corpus.test.mjs'], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout: 500000 });
   const ms = Date.now() - t0, out = (r.stdout ?? '') + (r.stderr ?? '');
   assert.equal(r.status, 0, out.split(/\r?\n/).filter((l) => /^\s*not ok/.test(l)).join('\n') + '\n' + out.slice(-2000));
-  assert.ok(ms < 60000, `o corpus levou ${(ms / 1000).toFixed(1)} s (limite: 60 s)`);
+  assert.ok(ms < limite, `o corpus levou ${(ms / 1000).toFixed(1)} s (limite: ${(limite / 1000).toFixed(1)} s = 60 s × max(1, ${nAgora} / ${nBase}); N_agora=${nAgora}, N_base=${nBase})`);
 });

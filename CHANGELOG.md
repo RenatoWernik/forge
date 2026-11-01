@@ -4,6 +4,9 @@
 
 - `/forge:discovery` (experimental): a conversational study that takes a new project (software, process, consulting, data or BI) from an idea to a go / adjust / stop decision. Problem before solution, criteria before options, decisions graded by reversibility, a single register of decisions and assumptions, sources on every claim, a devil's advocate on costly decisions, a fresh-context review and a document menu sized to the project. Built from research on how product and engineering teams run the early phases, with and without AI.
 
+- `gauntlet-build`: a blocking failure only fails the piece after another agent (the `tester` role) ran its repro again; one that does not reproduce becomes `minor` with `notReproduced: true` and counts in `metrics.criticNotReproduced` (an always-fail stays blocking, marked `unconfirmed`). Each blocking failure carries a kebab-case `class`, and `metrics.classes` counts them. `args.knownClasses` (the output of `learn.mjs classes`) reaches the Round -1 critic and the build critic, never the developer.
+- A corpus of the critic (`scripts/corpus/critico/`: 4 defect and 4 clean cases, each with its proof) and `node scripts/eval-critico.mjs --verdicts <file>`, which prints the recall and the noise of a critic.
+
 ## 1.0.0 (2026-10-30)
 
 First release. forge turns an empty folder into a project run by the gauntlet loop, with the lessons of a real project built that way.

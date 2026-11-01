@@ -1,7 +1,7 @@
 export const meta = {
   name: 'gauntlet-attacks',
   description: 'Round -1 gauntlet: per piece, {{critic}} reads the contract and writes the attacks that fail on the base, before {{developer}} is launched',
-  whenToUse: 'Step 2 of every checkpoint, before gauntlet-build. args: the same as gauntlet-build (graph? and affected included), each piece with its contract {issue, objective, input, criteria:[{text, oracle?, command}], fails, outOfScope, env, output}. Returns {checkpoint, results:[{id, attacks:[{id, file, guard?, passesOnBase}], failingOnBase, gaps}]}; give results to gauntlet-build as args.attacks',
+  whenToUse: 'Step 2 of every checkpoint, before gauntlet-build. args: the same as gauntlet-build (graph? and affected included, and the optional knownClasses), each piece with its contract {issue, objective, input, criteria:[{text, oracle?, command}], fails, outOfScope, env, output}. Returns {checkpoint, results:[{id, attacks:[{id, file, guard?, passesOnBase}], failingOnBase, gaps}]}; give results to gauntlet-build as args.attacks',
   phases: [
     { title: 'Attacks', detail: 'one critic per piece writes the attacks and runs them on the base' },
     { title: 'Panel', detail: 'records the Round -1 of each piece on the panel', model: '{{aux.model}}' },
@@ -35,6 +35,12 @@ const graphProblems = (items, what) => [
 const graphNote = x => GRAPH ? `Graph of this run: ${GRAPH}. Pass --graph "${GRAPH}" to graphify query, graphify affected and graphify explain. Affected by this piece: nodes ${JSON.stringify(x.affected.nodes)}, files ${JSON.stringify(x.affected.files)}.` : 'No graph for this run.'
 const graphIssues = graphProblems(PIECES, 'piece')
 if (!DASH || !ROOT || !PIECES.length || bad.length || badRoles.length || graphIssues.length) throw new Error('incomplete args: root, dashboardUrl and pieces with id, title, goal, bar and owns' + (bad.length ? ' (review: ' + bad.map(p => p.id || p.title).join(', ') + ')' : '') + '; models.critic and models.aux each need model, effort (one of ' + EFFORTS.join(', ') + ') and, if present, a valid regex in match, from .claude/forge.json' + (badRoles.length ? ' (review: ' + badRoles.join(', ') + ')' : '') + (graphIssues.length ? '; ' + graphIssues.join('; ') : ''))
+
+// Known failure classes (the output of learn.mjs classes, copied by the orchestrator): optional, but a class must be kebab-case; the same block is in gauntlet-build.js.
+const KC = A.knownClasses
+const classProblems = KC == null ? [] : !Array.isArray(KC) ? ['a list of {class, entries, strongest}'] : KC.flatMap((k, i) => k && typeof k.class === 'string' && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(k.class) ? [] : [`[${i}].class: kebab-case, such as port-race`])
+if (classProblems.length) throw new Error('incomplete args: knownClasses: ' + classProblems.join('; '))
+const CLASSES = KC && KC.length ? KC.map(k => k.class).join(', ') : 'No known classes yet.'
 
 // contract:begin (the same block is in gauntlet-build.js; scripts/contrato.test.mjs keeps the two identical)
 // The contract of each piece is the transcript of its GitHub issue; it is validated before any agent() is spent.
@@ -101,7 +107,8 @@ The contract is the body plus the orchestrator's comments; the critics' comments
 Spec, plan, tasks and test command: ${CTX}
 Files the piece may change: ${JSON.stringify(p.owns)}
 ${graphNote(p)}
-Write the attacks as tests under tests/critico/, one set per criterion, exactly the oracle of the criterion and nothing more, and run each one on the base in the foreground. Return in "attacks" one entry per attack: its id, its file, passesOnBase (the result you measured: true means it passes on the base, so it attacks nothing) and guard: true only for a regression or hygiene check that is allowed to pass on the base. Return in "gaps" each criterion whose oracle forces you to guess (BAR GAPS), one sentence each; an empty list if there is none. Do not edit product code and do not commit.`
+Write the attacks as tests under tests/critico/, one set per criterion, exactly the oracle of the criterion and nothing more, and run each one on the base in the foreground. Return in "attacks" one entry per attack: its id, its file, passesOnBase (the result you measured: true means it passes on the base, so it attacks nothing) and guard: true only for a regression or hygiene check that is allowed to pass on the base. Return in "gaps" each criterion whose oracle forces you to guess (BAR GAPS), one sentence each; an empty list if there is none. Known failure classes (names only): ${CLASSES}. Attack first the known classes that apply to this contract.
+Do not edit product code and do not commit.`
 
 // failingOnBase is computed here, never taken from the critic: true when there is at least one attack without guard and none of them passes on the base.
 async function attack(p) {
