@@ -14,6 +14,7 @@
 // só se usam onde o próprio corpo da #77 as nomeia («0 chamadas critic:p:r2») e para o registo do veredito no painel.
 // Referência das guardas: o gauntlet-build.js da BASE (git show), corrido no mesmo runtime falso.
 import { after } from 'node:test';
+import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename, relative, sep } from 'node:path';
@@ -95,9 +96,16 @@ export const why = (run, id = 'pa') => JSON.stringify({ err: run.err && String(r
 export const devCalls = (run) => run.calls.filter(isDev);
 export const criticCalls = (run) => run.calls.filter((c) => roleOf(c.opts) === 'critic');
 export const labeled = (run, label) => run.calls.filter((c) => c.opts.label === label);
-// O desfecho de uma peça (o que um campo ausente nunca pode mudar). Do `metrics` só as 4 medidas de antes do F-23b (#78, resposta do orquestrador à Ronda −1, opção c)
-const OLD_METRICS = ['rounds', 'sameCriterionFailures', 'attacksRedOnDelivery', 'minutesWithoutProgress'];
-export const outcome = (r) => r && JSON.parse(JSON.stringify({ won: r.won, rounds: r.rounds, stopped: r.stopped ?? null, criterion: r.criterion ?? null, condition: r.condition ?? null, blocked: r.blocked ?? null, metrics: r.metrics ? Object.fromEntries(OLD_METRICS.map((k) => [k, r.metrics[k]])) : null }));
+// O desfecho de uma peça (o que um campo ausente nunca pode mudar). Do `metrics` ficam TODAS as chaves menos as duas do F-23b (#78, opção (c) e emenda do orquestrador):
+// uma chave nova inesperada, ou uma medida antiga alterada, continua a dar FAIL. O conjunto de chaves confere-se à parte, em sameOutcome.
+const NEW_METRICS = ['criticNotReproduced', 'classes'];
+const without = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => !NEW_METRICS.includes(k)));
+export const outcome = (r) => r && JSON.parse(JSON.stringify({ won: r.won, rounds: r.rounds, stopped: r.stopped ?? null, criterion: r.criterion ?? null, condition: r.condition ?? null, blocked: r.blocked ?? null, metrics: r.metrics ? without(r.metrics) : null }));
+// As duas asserções das guardas: (i) as chaves de `metrics` são EXATAMENTE as da base mais criticNotReproduced e classes; (ii) o `metrics` sem essas duas deepEqual ao da base (e o resto do desfecho).
+export const sameOutcome = (got, ref, msg) => {
+  if (ref && ref.metrics) assert.deepEqual(Object.keys(got?.metrics ?? {}).sort(), [...new Set([...Object.keys(ref.metrics), ...NEW_METRICS])].sort(), 'chaves de metrics: ' + msg);
+  assert.deepEqual(outcome(got), outcome(ref), msg);
+};
 
 // ---------- Contrato da peça (forma do F-07) e args ----------
 const CRIT_TEXT = ['The export returns 3 rows for the sample file', 'The header row matches the reference CSV byte for byte', 'An empty file exports only the header', 'The totals row sums the amount column'];
