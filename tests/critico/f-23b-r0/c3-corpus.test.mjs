@@ -1,7 +1,7 @@
 // F-23b, C3 (D5): o corpus comportamental do crítico em scripts/corpus/critico/<caso>/ (contract.json, piece/, expect.json,
 // proof.test.mjs). Oráculo do corpo da #78: cada proof.test.mjs corre contra o piece/ do seu caso; nos casos defect a prova FALHA, nos
 // clean PASSA; cada expect.json valida contra o formato; há pelo menos 4 e 4. Os defect citam a issue de origem em expect.json › source.
-// Leituras (ver as PERGUNTAS na #78):
+// Leituras (confirmadas na resposta 8 do orquestrador na #78, salvo a do contract.json):
 //   - a prova corre com `node --test proof.test.mjs` numa cópia da pasta do caso (cwd = a cópia), por isso só pode chegar ao piece/ por
 //     caminhos relativos ao próprio caso; o corpus do repositório nunca é escrito;
 //   - «a prova falha» pelo motivo certo: uma asserção que falha, nunca um módulo em falta nem um erro de sintaxe;

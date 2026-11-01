@@ -7,11 +7,12 @@
 // BASE: `git merge-base HEAD origin/main` (regra 8 do brief: nunca um sha fixo). A referência das guardas é o gauntlet-build.js
 // dessa base, corrido no mesmo runtime falso.
 //
-// LEITURA DO CONTRATO (corpo da #78; a issue não tem comentários do orquestrador a 2026-11-01). Nomes LITERAIS do corpo:
+// LEITURA DO CONTRATO: corpo da #78 e RESPOSTA do orquestrador às PERGUNTAS da Ronda −1 (2026-11-01, prevalece). Nomes LITERAIS:
 //   repro: UMA chamada `repro:<id>:r<N>` por veredito com `blocking` não vazio, com models.tester; resposta [{finding, reproduced, output}];
 //   bloqueante não reproduzido (materialidade ≠ 1) → sai do blocking, vai para minor com notReproduced: true, metrics.criticNotReproduced + 1;
-//   materialidade 1 não reproduzida → fica, com unconfirmed: true (e «só» isso: não conta na métrica);
-//   resposta em falta, não-array ou sem um dos ids → mantém TODOS;
+//   materialidade 1 não reproduzida → fica, com unconfirmed: true, e não conta na métrica (resposta 5);
+//   o prompt do repro cola o root dos args (o caminho da worktree, resposta 6); os ids F<r>-<n> não mudam quando um achado sai (resposta 9);
+//   resposta em falta, propriedade da lista ausente ou que não é lista, ou sem um dos ids → mantém TODOS;
 //   args.knownClasses [{class, entries, strongest}], class kebab-case, senão `incomplete args: knownClasses: ...` antes de qualquer agente;
 //   sem knownClasses os prompts de crítico dizem `No known classes yet.`; blocking[].class obrigatório; metrics.classes {<class>: n}.
 // Os papéis reconhecem-se pelo modelo e pelo esforço (modelos de sonda distintos); o repro é o papel tester.
@@ -134,17 +135,15 @@ export const KNOWN = [
 // Um bloqueante do crítico, com marcas por ronda e critério; `cls` só entra quando é dado (o crítico «antigo» não manda class)
 export const item = (round, crit, mat = 2, cat = 'criterion', cls) => ({ criterion: 'C' + crit, materiality: mat, category: cat, description: `DESC-r${round}-C${crit}`, repro: `REPRO-r${round}-C${crit}`, ...(cls ? { class: cls } : {}) });
 const flip = (l) => (l === 'A' ? 'B' : 'A');
-// A forma da resposta do repro (PERGUNTA na #78): o corpo pede a lista [{finding, reproduced, output}], mas o runtime só aceita schemas com
-// raiz object (linha do check.cjs «the schema has an object root»). Os fakes respondem na forma que o schema do workflow declara: a lista nua
-// se a raiz for array, ou {<a única propriedade array>: lista} se a raiz for object. Nenhum nome de campo é adivinhado.
+// A forma da resposta do repro (resposta 2 do orquestrador na #78): o schema tem raiz object com UMA só propriedade array, e a lista
+// [{finding, reproduced, output}] vai nessa propriedade; «não seja um array» = essa propriedade ausente ou que não é uma lista. Os fakes
+// respondem só nesta forma, com o nome da propriedade lido do schema do workflow; um schema noutra forma recebe {} (sem a lista).
 export const SLOT = Symbol('lista do repro');
 export const inSlot = (x) => ({ [SLOT]: x }); // põe x (mesmo que não seja uma lista) no lugar da lista
 export const reproShape = (schema) => {
-  if (schema?.type === 'object') {
-    const ks = Object.entries(schema.properties || {}).filter(([, v]) => v?.type === 'array').map(([k]) => k);
-    if (ks.length === 1) return { key: ks[0], items: schema.properties[ks[0]].items, wrap: (l) => ({ [ks[0]]: l, model: declared(PROBE.tester) }) };
-  }
-  return { key: null, items: schema?.items, wrap: (l) => l };
+  const ks = schema?.type === 'object' ? Object.entries(schema.properties || {}).filter(([, v]) => v?.type === 'array').map(([k]) => k) : [];
+  if (ks.length === 1) return { key: ks[0], items: schema.properties[ks[0]].items, wrap: (l) => ({ [ks[0]]: l, model: declared(PROBE.tester) }) };
+  return { key: null, items: undefined, wrap: () => ({}) };
 };
 // A resposta do repro de uma ronda: oks[i] é o reproduced do achado F<round>-<i+1>
 export const answer = (round, oks) => oks.map((ok, i) => ({ finding: `F${round}-${i + 1}`, reproduced: ok, output: `OUT-r${round}-${i + 1}` }));

@@ -3,8 +3,7 @@
 // `Bad Class` e com `"x y"`; metrics.classes conta as classes das rondas; sem knownClasses nada é recusado e os prompts dizem
 // `No known classes yet.`. Também o que o critério fixa por escrito: blocking[].class obrigatório e kebab-case no schema do veredito, e o
 // §10.1 do FRAMEWORK com `node .claude/learn.mjs classes --ref <integration branch>`.
-// Leitura: «o workflow recusa» vale para os dois workflows que recebem args.knownClasses (o gauntlet-attacks recebe «the same as
-// gauntlet-build»); ver a PERGUNTA na #78.
+// «o workflow recusa» vale para os dois workflows, gauntlet-build e gauntlet-attacks (resposta 4 do orquestrador na #78).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { srcNow, attacksNow, contract, baseArgs, runWf, scenario, resultOf, why, devCalls, criticCalls, allReproduced, attacksImpl, plain, KNOWN, KEBAB, s101 } from './helpers.mjs';

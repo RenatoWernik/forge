@@ -53,14 +53,23 @@ test('C1 [ataque]: o prompt do repro recebe os pares {finding, repro} da ronda e
   }
 });
 
-test('C1 [ataque]: o schema do repro declara a lista de {finding, reproduced: boolean, output} (na raiz, ou na única propriedade array de uma raiz object), com o comando em primeiro plano e a saída truncada a 2000', async () => {
+test('C1 [ataque]: o prompt do repro cola o root dos args (o caminho da worktree) como caminho absoluto', async () => {
+  const ROOTP = 'E:/probe/worktree-f23b';
+  const run = await runWf(srcNow(), baseArgs([p], { root: ROOTP }), scenario(p, { critic: (r) => [{ blocking: [[1]] }, {}][r - 1] || {}, repro: byRound({}) }));
+  const c = reproCalls(run)[0];
+  assert.ok(c, 'sem chamada repro: ' + why(run));
+  assert.ok(c.prompt.includes(ROOTP), 'o prompt do repro não tem o root dos args: ' + c.prompt.slice(0, 400));
+});
+
+test('C1 [ataque]: o schema do repro tem raiz object com uma só propriedade array, a lista de {finding, reproduced: boolean, output}, com o comando em primeiro plano e a saída truncada a 2000', async () => {
   const run = await go([{ blocking: [[1]] }, {}], byRound({}));
   const c = reproCalls(run)[0];
   assert.ok(c, 'sem chamada repro: ' + why(run));
   const s = c.opts.schema || {};
   const { key, items } = reproShape(s);
-  assert.ok(s.type === 'array' || (s.type === 'object' && key), 'o schema do repro não declara a lista (raiz array, ou raiz object com uma só propriedade array): ' + JSON.stringify(s).slice(0, 300));
-  if (key) assert.ok((s.required || []).includes(key), `required sem ${key}`);
+  assert.equal(s.type, 'object', 'o schema do repro não tem raiz object: ' + JSON.stringify(s).slice(0, 300));
+  assert.ok(key, 'o schema do repro não tem uma e uma só propriedade array: ' + JSON.stringify(s).slice(0, 300));
+  assert.ok((s.required || []).includes(key), `required sem ${key}`);
   assert.equal(items?.type, 'object', 'os itens da lista não são objetos');
   for (const k of ['finding', 'reproduced', 'output']) assert.ok(items.properties?.[k], `items sem ${k}`);
   assert.equal(items.properties.reproduced.type, 'boolean', 'reproduced não é boolean');
@@ -92,6 +101,24 @@ test('C1 [ataque]: o não reproduzido sai do blocking para minor com notReproduc
   const moved = (lv.minor || []).filter((m) => m && typeof m === 'object' && m.notReproduced === true);
   assert.equal(moved.length, 1, 'lastVerdict.minor sem o achado com notReproduced: true: ' + JSON.stringify(lv.minor));
   assert.ok(JSON.stringify(moved[0]).includes('REPRO-r2-C1'), 'o item movido para minor não é o C1 da r2: ' + JSON.stringify(moved[0]));
+});
+
+test('C1 [ataque]: os ids F<r>-<n> não mudam quando um achado sai do blocking: o F1-2 continua F1-2 para o dev da r2, nas respostas e no contested', async () => {
+  // R1 reprova C1 e C3, com o F1-1 (C1) não reproduzido: fica só o F1-2 (C3)
+  const plan = [{ blocking: [[1], [3]] }, {}];
+  const MARK = 'REASON-STABLE-ID';
+  const run = await go(plan, byRound({ 1: [false, true] }), { dev: (r) => (r === 2 ? { responses: [{ finding: 'F1-2', answer: 'contested', reason: MARK }] } : {}) });
+  const r = resultOf(run);
+  assert.ok(r?.won, why(run));
+  assert.equal(nr(r), 1, 'o F1-1 não saiu do blocking (pré-condição do cenário): ' + JSON.stringify(r.metrics));
+  const d2 = devCalls(run)[1]?.prompt || '';
+  assert.match(d2, /"id":"F1-2"[^}]*REPRO-r1-C3|REPRO-r1-C3[^}]*"id":"F1-2"/, 'o dev da r2 não recebeu o achado do C3 com o id F1-2');
+  assert.doesNotMatch(d2, /"id":"F1-1"[^}]*REPRO-r1-C3|REPRO-r1-C3[^}]*"id":"F1-1"/, 'o achado do C3 foi renumerado para F1-1');
+  assert.ok(!run.logs.some((l) => /no answer to F1-2\b/.test(l)), 'WARNING para o F1-2, que o dev respondeu: ' + JSON.stringify(run.logs));
+  assert.deepEqual(plain(r.contested), [{ finding: 'F1-2', round: 1, reason: MARK, criterion: 'C3' }], 'contested: ' + JSON.stringify(r.contested));
+  // o dev que responde pelo id renumerado (F1-1) deixa o F1-2 sem resposta
+  const bad = await go(plan, byRound({ 1: [false, true] }), { dev: (n) => (n === 2 ? { responses: [{ finding: 'F1-1', answer: 'fixed' }] } : {}) });
+  assert.ok(bad.logs.includes('WARNING pa r2: no answer to F1-2'), 'sem o WARNING para o F1-2: ' + JSON.stringify(bad.logs));
 });
 
 test('C1 [ataque]: os 2 bloqueantes não reproduzidos, com o vencedor certo e testsPass: a peça ganha na r1', async () => {
@@ -131,8 +158,9 @@ const INVALID = {
   null: () => null,
   undefined: () => undefined,
   'texto (o "ok" dos runtimes antigos)': () => 'ok',
-  'objeto no lugar da lista': (r) => inSlot({ results: answer(r, [false, false]) }),
-  'objeto sem a lista': () => ({}),
+  'um objeto na propriedade da lista': (r) => inSlot({ results: answer(r, [false, false]) }),
+  'um texto na propriedade da lista': () => inSlot('F1-1 false, F1-2 false'),
+  'sem a propriedade da lista': () => ({}),
   'sem o id F1-2': (r) => answer(r, [false, false]).slice(0, 1),
   'ids de outra ronda': () => answer(9, [false, false]),
   'lista vazia': () => [],

@@ -5,7 +5,7 @@
 // Oráculo do corpo da #78: ficheiros de vereditos falsos com resultados exatos (todos certos; um defect sem bloqueante; um bloqueante com
 // o critério errado; um clean com um bloqueante). O corpo dá «4/4» para 4 e 4 casos; o corpus pode ter mais («no mínimo»), por isso os
 // denominadores aqui são as contagens reais de defect e clean do corpus. E o README que diz quando se corre com um crítico real.
-// Leitura: «O README.md» é o README.md da raiz ou o scripts/corpus/critico/README.md (ver a PERGUNTA na #78).
+// «O README.md» é o scripts/corpus/critico/README.md (resposta 7 do orquestrador na #78).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync, existsSync, readFileSync } from 'node:fs';
@@ -97,9 +97,10 @@ test('C4 [ataque]: um ficheiro de vereditos vazio sai com 0: recall 0/<defect>, 
 });
 
 test('C4 [ataque]: o README diz quando se corre a avaliação com um crítico real (muda o critic.md, o prompt do crítico, as ferramentas ou o modelo), que custa quota e precisa do sim do utilizador, e que nada é agendado', () => {
-  const cands = ['README.md', 'scripts/corpus/critico/README.md'].filter((f) => existsSync(join(ROOT, f))).map((f) => [f, read(f)]);
-  const ok = cands.find(([, t]) => /eval-critico/.test(t));
-  assert.ok(ok, 'nenhum README (raiz ou scripts/corpus/critico/) fala do eval-critico');
+  const f = 'scripts/corpus/critico/README.md';
+  assert.ok(existsSync(join(ROOT, f)), `${f} não existe`);
+  const ok = [f, read(f)];
+  assert.match(ok[1], /eval-critico/, `${f} não fala do eval-critico`);
   const t = ok[1];
   for (const [what, re] of [['critic.md', /critic\.md/], ['o prompt do crítico', /prompt/i], ['as ferramentas', /\btools?\b|ferramentas?/i], ['o modelo', /\bmodel\b|modelo/i], ['a quota', /quota/i], ['o sim do utilizador', /\byes\b|approv|\bsim\b/i], ['nada é agendado', /schedul|agend/i]]) assert.match(t, re, `${ok[0]}: não diz ${what}`);
 });
