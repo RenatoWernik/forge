@@ -82,3 +82,21 @@ for (const plat of ['linux', 'darwin']) {
     assert.deepEqual(gestor, plat === 'linux' ? ['--user daemon-reload', `--user enable ${UNIT}`] : [`enable gui/${UID}/${LABEL}`]);
   });
 }
+
+// #97, o $ na unit linux (repro do crítico): o executável do ExecStart leva o $ tal como está (só o % vira %%); nos argumentos o $ vai como $$.
+// O check usa o mesmo escape por posição, por isso uma unit escrita assim continua «ok» e a que tem o $$ no executável dá FAIL.
+test('#97 linux: $ no executável fica literal e nos argumentos vai como $$; o check concorda', () => {
+  const a = { platform: 'linux', env: {}, home: '/home/u', workspace: W, project: P, bin: '/opt/a$b%c/ai-memory', dataDir: '/d/x$y%z', port: 41234 };
+  const exec = aim.startupEntry(a).text.split('\n').find((l) => l.startsWith('ExecStart='));
+  assert.ok(exec.startsWith('ExecStart="/opt/a$b%%c/ai-memory" '), exec);
+  assert.ok(exec.includes('--data-dir "/d/x$$y%%z"'), exec);
+  const d = mkdtempSync(join(tmpdir(), 'critico f20c r1 '));
+  limpar.push(() => apaga(d));
+  const cfg = { workspace: W, project: P, serverUrl: 'http://127.0.0.1:41234', dataDir: a.dataDir, autostart: 'yes' };
+  const grava = (texto) => { const e = aim.startupEntry({ ...a, env: { XDG_CONFIG_HOME: d } }); mkdirSync(e.dir, { recursive: true }); writeFileSync(join(e.dir, e.name), texto); };
+  const estado = () => aim.autostartState({ cfg, bin: a.bin, platform: 'linux', env: { XDG_CONFIG_HOME: d }, home: d });
+  grava(aim.startupEntry(a).text);
+  assert.equal(estado().ok, true);
+  grava(aim.startupEntry(a).text.replace('"/opt/a$b%%c/ai-memory"', () => '"/opt/a$$b%%c/ai-memory"'));
+  assert.equal(estado().ok, false);
+});

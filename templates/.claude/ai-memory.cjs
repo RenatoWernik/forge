@@ -82,12 +82,13 @@ async function serverState({ serverUrl, dataDir, bin, platform = process.platfor
 // Only this project's file is ever named: forge-ai-memory-<W>--<P>.vbs (Windows Startup folder), forge-ai-memory-<W>--<P>.service (systemd user unit),
 // com.forge.ai-memory.<W>.<P>.plist (LaunchAgent).
 const XML = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-const ESC = { win32: s => s, linux: s => s.replace(/%/g, '%%').replace(/\$/g, '$$$$'), darwin: XML } // systemd reads % and $ in ExecStart; shortcut: a backslash in a Linux path is not escaped
+const ESC = { win32: s => s, linux: s => s.replace(/%/g, '%%').replace(/\$/g, '$$$$'), darwin: XML } // systemd reads % and $ in the arguments of ExecStart, but only % in the program itself (the first word, see ESCX); shortcut: a backslash in a Linux path is not escaped
+const ESCX = { ...ESC, linux: s => s.replace(/%/g, '%%') } // the program of ExecStart is not expanded for variables
 // a value as it stands in the entry, between the marks that end it; the check looks for it that way, so /x/ai-memory never matches /x/ai-memory2
 const WRAP = { win32: s => '""' + s + '""', linux: s => '"' + s + '"', darwin: s => '<string>' + s + '</string>' }
 
 function entryText({ platform = process.platform, env = process.env, home = os.homedir(), workspace: w, project: p, bin, dataDir, port }) {
-  const E = ESC[platform] || ESC.linux
+  const E = ESC[platform] || ESC.linux, X = ESCX[platform] || ESCX.linux
   const argv = ['serve', '--transport', 'http', '--bind', '127.0.0.1:' + port, '--workspace', w, '--project', p]
   if (platform === 'win32') {
     const dir = path.join(envVar(env, 'APPDATA') || path.join(home, 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
@@ -101,7 +102,7 @@ function entryText({ platform = process.platform, env = process.env, home = os.h
       + `  <key>Label</key>\n  <string>${label}</string>\n  <key>ProgramArguments</key>\n  <array>\n${args}\n  </array>\n  <key>RunAtLoad</key>\n  <true/>\n  <key>KeepAlive</key>\n  <true/>\n</dict>\n</plist>\n` }
   }
   return { dir: path.join(envVar(env, 'XDG_CONFIG_HOME') || path.join(home, '.config'), 'systemd', 'user'), name: `forge-ai-memory-${w}--${p}.service`, text: `[Unit]\nDescription=ai-memory server of the forge project ${w}/${p}\n\n`
-    + `[Service]\nType=simple\nExecStart="${E(bin)}" --data-dir "${E(dataDir)}" ${argv.join(' ')}\nRestart=on-failure\nRestartSec=5s\n\n[Install]\nWantedBy=default.target\n` }
+    + `[Service]\nType=simple\nExecStart="${X(bin)}" --data-dir "${E(dataDir)}" ${argv.join(' ')}\nRestart=on-failure\nRestartSec=5s\n\n[Install]\nWantedBy=default.target\n` }
 }
 
 // the bytes of the entry: the .vbs is read by wscript in the ANSI code page, so a path outside ASCII (a Windows profile with an accented name) is only right in UTF-16 LE with a BOM; everything else is UTF-8
@@ -124,8 +125,8 @@ function autostartState({ cfg, bin, platform = process.platform, env = process.e
   }
   if (text === null) return { ok: false, detail: `(yes, but the startup entry is missing: ${again})` }
   if (e.bytes[0] === 0xff && !bom) return { ok: false, detail: `(yes, but the startup entry does not match .ai-memory.toml: ${again})` } // a path outside ASCII needs the UTF-16 file
-  const W = WRAP[platform] || WRAP.linux, E = ESC[platform] || ESC.linux, bind = new RegExp('127\\.0\\.0\\.1:' + port + '(?![0-9])')
-  const same = !!bin && !!cfg.dataDir && Number.isInteger(port) && text.includes(W(E(bin))) && text.includes(W(E(cfg.dataDir))) && bind.test(text)
+  const W = WRAP[platform] || WRAP.linux, E = ESC[platform] || ESC.linux, X = ESCX[platform] || ESCX.linux, bind = new RegExp('127\\.0\\.0\\.1:' + port + '(?![0-9])')
+  const same = !!bin && !!cfg.dataDir && Number.isInteger(port) && text.includes(W(X(bin))) && text.includes(W(E(cfg.dataDir))) && bind.test(text)
   return same ? { ok: true, detail: '' } : { ok: false, detail: `(yes, but the startup entry does not match .ai-memory.toml: ${again})` }
 }
 
