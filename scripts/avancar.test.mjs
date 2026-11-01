@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { bloqueiosDe, proximas, provasDe } from './avancar.mjs';
+import { bloqueiosDe, proximas, provasDe, ticketsDe } from './avancar.mjs';
 
 const AVANCAR = fileURLToPath(new URL('./avancar.mjs', import.meta.url));
 const H = 'a'.repeat(40), OUTRO = 'b'.repeat(40), X64 = 'c'.repeat(64);
@@ -17,6 +17,21 @@ test('provasDe: aceita só o último VEREDITO APROVADO e o último CHECK-TICKET 
   assert.equal(provasDe([veredito('APROVADO'), check(), { body: 'CRLF' }, { body: `VEREDITO: APROVADO\r\nHEAD: ${H}\r\nEXECUTOR: f ${X64}\r\n` }], H), null);
 });
 
+test('provasDe: formatos reais — BOM, cabeçalho, bloco de código, negrito, lista, sha de 7 hex; o último veredito do head decide', () => {
+  const real = (v, head) => ({ body: `﻿## Crítico R2 — HEAD ${head}\r\n\r\n\`\`\`\r\n${veredito(v, head).body.replaceAll('\n', '\r\n')}\r\n\`\`\`` });
+  assert.equal(provasDe([real('APROVADO', H.slice(0, 7)), check('VERDE', H.slice(0, 7))], H), null);
+  assert.equal(provasDe([{ body: `**VEREDITO: APROVADO**\n- **HEAD:** ${H}\n- EXECUTOR: f ${X64}` }, check()], H), null);
+  assert.equal(provasDe([veredito('APROVADO'), check(), real('REPROVADO', OUTRO), real('REPROVADO', H.slice(0, 7)), real('APROVADO', H.slice(0, 7))], H), null, 'o REPROVADO de outro head não conta; o APROVADO posterior ao do head decide');
+  assert.notEqual(provasDe([real('REPROVADO', H.slice(0, 7)), real('APROVADO', H.slice(0, 7)), real('REPROVADO', H.slice(0, 40))], H), null);
+});
+
+test('ticketsDe: «Closes #n», «Fixes #n», «Fecha #n» no corpo; «Referencia #n» não fecha nada', () => {
+  assert.deepEqual(ticketsDe('Closes #130'), [130]);
+  assert.deepEqual(ticketsDe('texto\n\nfecha #7 e Resolves #8'), [7, 8]);
+  assert.deepEqual(ticketsDe('Referencia #130'), []);
+  assert.deepEqual(ticketsDe(null), []);
+});
+
 test('provasDe: recusa por classe — sem prova, prova do último não aprova, prova de outro sha, prova incompleta', () => {
   const casos = [
     ['sem comentários', []],
@@ -25,7 +40,17 @@ test('provasDe: recusa por classe — sem prova, prova do último não aprova, p
     ['o último VEREDITO é REPROVADO', [veredito('APROVADO'), check(), veredito('REPROVADO')]],
     ['APROVADO com ressalvas não é APROVADO', [{ body: `VEREDITO: APROVADO COM RESSALVAS\nHEAD: ${H}\nEXECUTOR: f ${X64}` }, check()]],
     ['APROVADO de outro head', [veredito('APROVADO', OUTRO), check()]],
-    ['HEAD abreviado', [veredito('APROVADO', H.slice(0, 7)), check()]],
+    ['HEAD abreviado a 6 hex', [veredito('APROVADO', H.slice(0, 6)), check()]],
+    ['HEAD de 7 hex que não é prefixo', [veredito('APROVADO', 'abcdef0'), check()]],
+    ['REPROVADO depois do APROVADO, com BOM', [veredito('APROVADO'), check(), { body: `﻿${veredito('REPROVADO').body}` }]],
+    ['REPROVADO depois do APROVADO, com cabeçalho e bloco de código', [veredito('APROVADO'), check(), { body: `## Crítico R2\n\n\`\`\`\n${veredito('REPROVADO').body}\n\`\`\`` }]],
+    ['REPROVADO depois do APROVADO, em CRLF e em negrito', [veredito('APROVADO'), check(), { body: `**VEREDITO: REPROVADO**\r\nHEAD: ${H}\r\n` }]],
+    ['REPROVADO depois do APROVADO, só citado', [veredito('APROVADO'), check(), { body: `> VEREDITO: REPROVADO\n> HEAD: ${H}` }]],
+    ['REPROVADO sem HEAD depois do APROVADO', [veredito('APROVADO'), check(), { body: 'VEREDITO: REPROVADO' }]],
+    ['APROVADO e REPROVADO no mesmo comentário', [{ body: `${veredito('APROVADO').body}\nVEREDITO: REPROVADO` }, check()]],
+    ['APROVADO sem HEAD', [{ body: `VEREDITO: APROVADO\nEXECUTOR: f ${X64}` }, check()]],
+    ['APROVADO só citado', [{ body: `> ${veredito('APROVADO').body.replaceAll('\n', '\n> ')}` }, check()]],
+    ['CHECK-TICKET VERDE só citado', [veredito('APROVADO'), { body: `> CHECK-TICKET: VERDE ${H} ${X64}` }]],
     ['sem EXECUTOR', [veredito('APROVADO', H, ''), check()]],
     ['EXECUTOR sem sha256', [veredito('APROVADO', H, 'EXECUTOR: .forge/resultados/x.json\n'), check()]],
     ['sem CHECK-TICKET', [veredito('APROVADO')]],
