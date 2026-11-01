@@ -16,7 +16,26 @@ const PASSO_MS = 100; // varredura do agendador e da carga global
 const FINAIS = ['pass', 'fail', 'limite', 'erro'];
 const MOTIVO_LOTE = 'lote: satisfeito na fase 2'; // o skip dos testes que usam doLote (tests/critico/_comum/lote.mjs) na fase 1
 const FASE2_LIMITE_S = 90; // a fase 2 só lê o resultado da fase 1: uma unidade nunca precisa de mais
-const regex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export const escapaRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// o TAP do node escreve `\`, `#` e os controlos nos nomes (tap.js › tapEscape); isto desfaz-o
+const TAP_ESC = { b: '\b', f: '\f', t: '\t', n: '\n', r: '\r', v: '\v', '\\': '\\', '#': '#' };
+export const desfazTap = (s) => s.replace(/\\([bftnrv\\#])/g, (_, c) => TAP_ESC[c]);
+
+// os testes de um TAP: [{ nome (completo, os grupos unidos por « > »), folha (o nome do próprio teste), estado: pass|fail|skip|todo, motivo }].
+// Um grupo abre com `# Subtest: x` ao nível da indentação (4 espaços por nível) e fecha com o seu `ok N - x`, depois dos filhos.
+export function testesDoTap(texto) {
+  const pilha = [], testes = [];
+  for (const l of texto.split(/\r?\n/)) {
+    const h = /^( *)# Subtest: (.*)$/.exec(l);
+    if (h) { pilha[h[1].length >> 2] = desfazTap(h[2]); pilha.length = (h[1].length >> 2) + 1; continue; }
+    const ok = /^( *)(not )?ok \d+ - (.*?)(?: # (SKIP|TODO)\b ?(.*))?$/.exec(l);
+    if (!ok || ok[1].length % 4) continue;
+    const nivel = ok[1].length >> 2, folha = desfazTap(ok[3]);
+    testes.push({ nome: [...pilha.slice(0, nivel), folha].join(' > '), folha, estado: ok[4] === 'SKIP' ? 'skip' : ok[4] === 'TODO' ? 'todo' : ok[2] ? 'fail' : 'pass', motivo: ok[5] ?? '' });
+    pilha.length = nivel;
+  }
+  return testes;
+}
 class Uso extends Error {}
 
 // --- TAP do node --test: contagens das linhas `# pass|fail|skipped|todo` (a última de cada), motivos de `# SKIP`, duration_ms por teste ---
@@ -246,7 +265,7 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
     if (u.fase === 2) env.FORGE_LOTE_RESULTADOS = fase1; else env.FORGE_LOTE_FASE = '1';
     const args = ['--test', '--test-reporter=tap'];
     if (u.suite.concorrencia) args.push(`--test-concurrency=${u.suite.concorrencia}`);
-    if (u.fase === 2) args.push(`--test-name-pattern=^(?:${u.nomes.map(regex).join('|')})$`);
+    if (u.fase === 2) args.push(`--test-name-pattern=^(?:${u.nomes.map(escapaRegex).join('|')})$`);
     else if (u.bloco) args.push(`--test-name-pattern=${u.bloco}`);
     args.push(u.ficheiro);
     const r = { u, vaga, cmax: vaga.carga, inicio: new Date(), limite: false, out: '', err: '' };
@@ -278,9 +297,15 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
     if (u.fase === 2) { // a fase 2 junta-se à unidade da fase 1: os skips do lote dão lugar ao que correu
       const a = feitas.get(u.base), lote = a.skips.filter((s) => s.motivo === MOTIVO_LOTE).length;
       const ainda = c.skips.some((s) => s.motivo === MOTIVO_LOTE); // um teste que continua a saltar na fase 2 não foi provado
-      feitas.set(u.base, { ...a, estado: estadoSuite([a.estado, ainda && estado === 'pass' ? 'erro' : estado], false), pass: a.pass + (c.pass ?? 0), fail: a.fail + (c.fail ?? 0),
+      // cada teste esperado tem de aparecer no TAP, ok ou not ok (pelo nome exato): um padrão que não casa deixava o ficheiro «pass» sem o teste ter corrido
+      const vistos = testesDoTap(r.out).filter((t) => t.estado === 'pass' || t.estado === 'fail').map((t) => t.folha);
+      const naoExec = u.nomes.filter((n) => { const i = vistos.indexOf(n); if (i < 0) return true; vistos.splice(i, 1); return false; });
+      const estados = [a.estado, estado, ...(naoExec.length ? ['fail'] : []), ...(ainda && estado === 'pass' ? ['erro'] : [])];
+      feitas.set(u.base, { ...a, estado: estadoSuite(estados, false), pass: a.pass + (c.pass ?? 0), fail: a.fail + (c.fail ?? 0) + naoExec.length,
         skip: a.skip - lote + (c.skip ?? 0), todo: a.todo + (c.todo ?? 0), skips: [...a.skips.filter((s) => s.motivo !== MOTIVO_LOTE), ...c.skips],
-        duracoes: { ...a.duracoes, ...c.duracoes }, duracao_s: Math.round((a.duracao_s + (Date.now() - r.inicio) / 1000) * 10) / 10, tap_fase2: tap });
+        duracoes: { ...a.duracoes, ...c.duracoes }, duracao_s: Math.round((a.duracao_s + (Date.now() - r.inicio) / 1000) * 10) / 10, tap_fase2: tap,
+        ...(naoExec.length ? { nao_executados: naoExec } : {}) });
+      for (const n of naoExec) saida(`FAIL ${u.ficheiro} [fase 2]: não executado: ${JSON.stringify(n)}`);
     } else {
       feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado, pass: c.pass ?? 0, fail: c.fail ?? 0, skip: c.skip ?? 0, todo: c.todo ?? 0,
         skips: c.skips, duracoes: c.duracoes, duracao_s: Math.round((Date.now() - r.inicio) / 100) / 10, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap });
@@ -317,7 +342,7 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
   if (plano.every((u) => feitas.has(u.chave))) {
     if (!(o.continuar && existsSync(fase1))) { mkdirSync(join(raiz, '.forge', 'lote'), { recursive: true }); grava(fase1, monta(true)); }
     await roda(pendentesF2().map((u, i) => {
-      const f = feitas.get(u.chave), nomes = f.skips.filter((s) => s.motivo === MOTIVO_LOTE).map((s) => s.teste.replaceAll('\\#', '#'));
+      const f = feitas.get(u.chave), nomes = f.skips.filter((s) => s.motivo === MOTIVO_LOTE).map((s) => desfazTap(s.teste));
       return { suite: { ...u.suite, sensivel_ao_tempo: false, exclusiva: false, limite_s: Math.min(u.suite.limite_s, FASE2_LIMITE_S) },
         ficheiro: u.ficheiro, bloco: null, chave: `${u.chave}\0fase2`, base: u.chave, fase: 2, nomes, ordem: plano.length + i };
     }));

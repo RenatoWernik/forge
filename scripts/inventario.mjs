@@ -10,26 +10,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { testesDoTap } from './executor.mjs';
 
 const MOTIVO_LOTE = 'lote: satisfeito na fase 2';
 class Uso extends Error {}
 
-// os testes de um TAP: [{ nome (completo), estado: pass|fail|skip|todo, motivo }]. Um grupo abre com `# Subtest: x` ao nível da indentação
-// (4 espaços por nível) e fecha com o seu `ok N - x`, depois dos filhos.
-export function testesDoTap(texto) {
-  const pilha = [], testes = [];
-  const limpa = (s) => s.replace(/\\#/g, '#');
-  for (const l of texto.split(/\r?\n/)) {
-    const h = /^( *)# Subtest: (.*)$/.exec(l);
-    if (h) { pilha[h[1].length >> 2] = limpa(h[2]); pilha.length = (h[1].length >> 2) + 1; continue; }
-    const ok = /^( *)(not )?ok \d+ - (.*?)(?: # (SKIP|TODO)\b ?(.*))?$/.exec(l);
-    if (!ok || ok[1].length % 4) continue;
-    const nivel = ok[1].length >> 2, nome = limpa(ok[3]);
-    testes.push({ nome: [...pilha.slice(0, nivel), nome].join(' > '), estado: ok[4] === 'SKIP' ? 'skip' : ok[4] === 'TODO' ? 'todo' : ok[2] ? 'fail' : 'pass', motivo: ok[5] ?? '' });
-    pilha.length = nivel;
-  }
-  return testes;
-}
+export { testesDoTap }; // o leitor do TAP vive no executor (a fase 2 também o usa)
 
 // o inventário de um resultado: Map «suite › ficheiro › nome» → execuções [{ estado, motivo }]
 function inventarioDe(json, logs) {

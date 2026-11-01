@@ -40,7 +40,7 @@ test('regressão: node --test "scripts/*.test.mjs" passa, com mais testes do que
 test('regressão: os ataques da Ronda −1 do F-01, F-02, F-03 e F-10 continuam verdes', (t) => {
   const dirs = ['f-01-r0', 'f-02-r0', 'f-03-r0', 'f-10-r0'];
   for (const d of dirs) assert.ok(existsSync(join(ROOT, 'tests/critico', d)), d + ' desapareceu');
-  const r = doLote(t, dirs, { corre: () => runTests(dirs.map((d) => `tests/critico/${d}/c*.test.mjs`), 500000) });
+  const r = doLote(t, dirs.map((d) => ({ suite: d, ficheiros: [`tests/critico/${d}/c*.test.mjs`] })), { corre: () => runTests(dirs.map((d) => `tests/critico/${d}/c*.test.mjs`), 500000) });
   if (!r) return;
   assert.equal(r.status, 0, failures(r.out));
   assert.equal(r.fail, 0, failures(r.out));

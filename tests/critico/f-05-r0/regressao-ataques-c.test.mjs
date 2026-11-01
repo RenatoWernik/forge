@@ -7,4 +7,4 @@ import { doLote } from '../_comum/lote.mjs';
 
 const MIN_C = 3; // testes a passar em e083b6a
 
-test('regressão: o regressao.test.mjs da Ronda −1 do F-03 continua verde', { skip: NESTED_SKIP }, (t) => { doLote(t, 'f-03-r0', { min: MIN_C, corre: () => priorGreen(['f-03-r0/regressao.test.mjs'], MIN_C) }); });
+test('regressão: o regressao.test.mjs da Ronda −1 do F-03 continua verde', { skip: NESTED_SKIP }, (t) => { doLote(t, { suite: 'f-03-r0', ficheiros: ['tests/critico/f-03-r0/regressao.test.mjs'] }, { min: MIN_C, corre: () => priorGreen(['f-03-r0/regressao.test.mjs'], MIN_C) }); });
