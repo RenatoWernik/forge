@@ -111,6 +111,14 @@ export function arvoreComCriticoDaBase(b) {
   return d;
 }
 
+// A árvore de agora, como está no disco, com cada pasta de `corpus` plantada como tests/critico/<caso>/ (o lint lê-as como pastas de ataques)
+export function arvoreComCasos(corpus, casos) {
+  const d = join(tmp('v03-casos-'), 'r');
+  for (const f of ficheirosDoDisco()) { mkdirSync(dirname(join(d, f)), { recursive: true }); cpSync(join(ROOT, f), join(d, f)); }
+  for (const c of casos) cpSync(join(corpus, c), join(d, crit(c)), { recursive: true });
+  return d;
+}
+
 // --- correr um ficheiro de teste num filho, com o espião ---
 export const escapa = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // os testes de topo do TAP (`ok N - título # SKIP motivo`, sem indentação): { título: { estado, motivo } }, pela ordem
