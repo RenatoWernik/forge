@@ -11,14 +11,16 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { ROOT, LISTA, LEGADO, EM_CURSO, temLint, copia, repoe, corre, resumo, mexeLista, secoes, planta, caso, apaga } from './helpers.mjs';
+import { ROOT, LISTA, LEGADO, EM_CURSO, temLint, copia, repoe, corre, resumo, mexeLista, secoes, planta, caso, apaga, soNoTicket } from './helpers.mjs';
 
 const temTudo = () => { assert.ok(temLint(), 'falta scripts/guardas-critico.test.mjs'); assert.ok(existsSync(join(ROOT, LISTA)), 'falta ' + LISTA); };
 let d = null;
 before(() => { if (temLint() && existsSync(join(ROOT, LISTA))) d = copia(); });
 after(() => { if (d) apaga(d); });
 
-test('C3 scripts/guardas-legado.json é {legado, emCurso} com as listas exatas da #101, sem repetidas', () => {
+// o conteúdo exato da lista só vale no ramo do F-26: depois do merge, as pastas passam de emCurso para legado (regra 9)
+test('ÂMBITO: scripts/guardas-legado.json é {legado, emCurso} com as listas exatas da #101, sem repetidas', (t) => {
+  if (soNoTicket(t, 'f-26')) return;
   assert.ok(existsSync(join(ROOT, LISTA)), 'falta ' + LISTA);
   const { legado, emCurso } = secoes(JSON.parse(readFileSync(join(ROOT, LISTA), 'utf8')));
   for (const [n, v] of [['legado', legado], ['emCurso', emCurso]]) assert.equal(new Set(v).size, v.length, n + ' com repetidas: ' + v.join(', '));

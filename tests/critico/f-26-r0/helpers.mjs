@@ -117,3 +117,11 @@ export const mexeLista = (d, { tira, poe }) => {
   writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
   commit(d, 'mexe a lista');
 };
+// regra 9: o mesmo contrato do soNoTicket de tests/critico/_comum/ambito.mjs, que ainda não existe na base (o ramo vem de GITHUB_HEAD_REF ou do
+// git; HEAD destacado conta como fora); faz t.skip com o motivo e devolve true fora dos ramos <id>*
+export const soNoTicket = (t, id) => {
+  const ramo = process.env.GITHUB_HEAD_REF || gitRaiz('rev-parse', '--abbrev-ref', 'HEAD').stdout.trim();
+  if (ramo !== 'HEAD' && ramo.startsWith(id)) return false;
+  t.skip(`âmbito do ${id}: fora da branch ${id}*`);
+  return true;
+};
