@@ -9,6 +9,7 @@ import { join, extname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
 import { ROOT, BASE, sandboxEnv, git } from './helpers.mjs';
+import { doLote } from '../_comum/lote.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em 9f176c1
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'mod-painel.test.mjs': 10, 'painel-web.test.mjs': 2, 'painel.test.mjs': 13, 'scaffold.test.mjs': 35, 'sem-claude-mem.test.mjs': 1, 'skill-new-project.test.mjs': 8, 'sync.test.mjs': 22 };
@@ -30,8 +31,9 @@ test('regressão: nenhum ficheiro de teste do pacote perde testes', () => {
   }
 });
 
-test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os testes que passavam em 9f176c1', () => {
-  const r = runTests(['scripts/*.test.mjs']);
+test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os testes que passavam em 9f176c1', (t) => {
+  const r = doLote(t, 'scripts', { corre: () => runTests(['scripts/*.test.mjs']) });
+  if (!r) return;
   assert.equal(r.status, 0, failures(r.out));
   assert.equal(r.fail, 0, failures(r.out));
   assert.ok(r.pass >= PASS_BASE, 'passaram ' + r.pass);

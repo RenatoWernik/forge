@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, BASE, git, runTests, failures } from './helpers.mjs';
+import { doLote } from '../_comum/lote.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em e083b6a; a suíte passava com 139
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
@@ -27,18 +28,20 @@ test('regressão: existe scripts/skill-new-project.test.mjs, com os oráculos li
   assert.deepEqual(literais.filter((l) => !src.includes(l)), [], 'literais do contrato que o teste do dev não contém');
 });
 
-test('regressão: node --test "scripts/*.test.mjs" passa, com mais testes do que os 139 de e083b6a', () => {
-  const r = runTests(['scripts/*.test.mjs']);
+test('regressão: node --test "scripts/*.test.mjs" passa, com mais testes do que os 139 de e083b6a', (t) => {
+  const r = doLote(t, 'scripts', { corre: () => runTests(['scripts/*.test.mjs']) });
+  if (!r) return;
   assert.equal(r.status, 0, failures(r.out));
   assert.equal(r.fail, 0, failures(r.out));
   assert.ok(r.pass > 139, 'passaram ' + r.pass);
 });
 
 // Os regressao.test.mjs deles voltam a correr a suíte do pacote, já corrida acima: ficam de fora para o tempo caber em 540 s
-test('regressão: os ataques da Ronda −1 do F-01, F-02, F-03 e F-10 continuam verdes', () => {
+test('regressão: os ataques da Ronda −1 do F-01, F-02, F-03 e F-10 continuam verdes', (t) => {
   const dirs = ['f-01-r0', 'f-02-r0', 'f-03-r0', 'f-10-r0'];
   for (const d of dirs) assert.ok(existsSync(join(ROOT, 'tests/critico', d)), d + ' desapareceu');
-  const r = runTests(dirs.map((d) => `tests/critico/${d}/c*.test.mjs`), 500000);
+  const r = doLote(t, dirs.map((d) => ({ suite: d, ficheiros: [`tests/critico/${d}/c*.test.mjs`] })), { corre: () => runTests(dirs.map((d) => `tests/critico/${d}/c*.test.mjs`), 500000) });
+  if (!r) return;
   assert.equal(r.status, 0, failures(r.out));
   assert.equal(r.fail, 0, failures(r.out));
   assert.ok(r.pass >= 150, 'passaram ' + r.pass);
