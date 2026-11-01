@@ -126,8 +126,9 @@ test('GUARDA C6: scripts/scaffold.test.mjs mantém todas as linhas da base pela 
   assert.deepEqual(novas.map((l) => l.trim()).filter((l) => !["'.claude/learnings.cjs',", "'learnings/README.md',"].includes(l)), [], 'linhas novas além das duas do dry run');
 });
 test('GUARDA: os ataques de tests/critico/ que existiam na base ficam byte a byte (nunca se enfraquecem nem se apagam)', () => {
-  const fs_ = gitR('ls-tree', '-r', '--name-only', BASE, 'tests/critico').split('\n').filter(Boolean);
+  const base = gitR('merge-base', 'HEAD', 'origin/main').trim(); // a main atual, não a BASE fixa (regra 8)
+  const fs_ = gitR('ls-tree', '-r', '--name-only', base, 'tests/critico').split('\n').filter(Boolean);
   assert.ok(fs_.length > 50, 'controlo: ' + fs_.length);
-  const mudados = fs_.filter((f) => { const p = join(ROOT, f); return !existsSync(p) || linhas(readFileSync(p, 'utf8')).join('\n') !== linhas(gitR('show', BASE + ':' + f)).join('\n'); });
+  const mudados = fs_.filter((f) => { const p = join(ROOT, f); return !existsSync(p) || linhas(readFileSync(p, 'utf8')).join('\n') !== linhas(gitR('show', base + ':' + f)).join('\n'); });
   assert.deepEqual(mudados, []);
 });
