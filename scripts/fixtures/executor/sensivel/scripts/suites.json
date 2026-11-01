@@ -1,0 +1,5 @@
+{ "versao": 1, "paralelo": 6, "vagas_globais": 6, "carga_sensivel": 2, "orcamento_s": 120,
+  "suites": [
+    { "nome": "rapidas", "tipo": "node-test", "ficheiros": ["rapidas/*.fx.mjs"], "limite_s": 30 },
+    { "nome": "fina", "tipo": "node-test", "ficheiros": ["fina/*.fx.mjs"], "limite_s": 30, "sensivel_ao_tempo": true }
+  ] }
