@@ -291,7 +291,7 @@ The orchestrator writes `meta/*`, `checkpoints/cp{N}` (creates `{n, title, statu
 | `check.cjs` fails on `build:`, `ponytail:` or `panel:` lines | a workflow edit broke an invariant (a changed round cap, a model outside forge.json, critic without a label map, parallel Ponytail units, numeric `checkpoint` in the seed) | fix the workflow; change the simulation only if the invariant changed (and then CLAUDE.md and this manual) |
 | `check.cjs` fails on the `forge.json` line or on `the meta text names` | `forge.json` is missing a role or the workflow `meta` does not say what forge.json says | fix `forge.json`, or make the meta text and the `Panel` phase model match it |
 | `graphify query` says "No matching nodes" | the search is literal by label, no synonyms | identifiers of 3 or more letters; `explain`, `path`, `affected` with the exact label |
-| subscription quota exhausted | every agent of the project spends the same quota | tell the user and wait; stopped workflow: resume as in section 5 (Preconditions) |
+| subscription quota exhausted | every agent of the project spends the same quota | write the state of every agent, schedule the wake-up and resume as in section 12; stopped workflow: resume as in section 5 (Preconditions) |
 | `agent()` throws on the 1001st call of a run | runtime limit of 1000 calls per run, all pieces together; each round spends 3 (developer, critic and panel), so a run fits about 330 rounds | resume as in section 5 (Preconditions) or call again with only what the panel does not show as `won` |
 | the SessionStart notice says `ai-memory: OFF at <url>` | the ai-memory server of this project is not running (after a reboot, or it was stopped); nothing is captured meanwhile | `node .claude/start-ai-memory.mjs`, then confirm with `node .claude/check.cjs --env` |
 | the SessionStart notice says `ai-memory: CONFLICT at <url>` | another server answers on the port of this project, with another data directory | do not start anything; `node .claude/check.cjs --env` names the data directory it reports; free the port, or delete the `[forge]` table of `.ai-memory.local.toml` and run `memoria.mjs --apply` again: it picks another free port and keeps the data directory |
@@ -374,3 +374,75 @@ The orchestrator builds the batch: it cuts the batch branch and merges the appro
   - **c**: flaky, out of the diff: it passes when rerun alone and fails only in some executions, or main is intermittent. It does not fail the batch, and the tester opens an issue with the label `flaky` for it, in a second call after the classification.
 - **Return.** `{checkpoint, mode, runs, batch: {verdict, reason?, failures: [{test, class, evidence}]}, regressions, flaky, fixedPorts}`. A batch with only b and c failures passes. `fixedPorts` lists the ports that two failing tests report in an `EADDRINUSE` error.
 - **Limits.** The tester never pushes, opens a PR or merges without the yes of the user, and never opens a real `claude` session.
+
+## 11. Learning from errors
+
+Every error that costs a round, a rework or the trust of the user is registered once, in `learnings/YYYY-MM.md`: one file per month, only appended to, versioned in git. The register is the canonical source of what went wrong. A lesson that lives only in a chat, in a memory page or in the head of an agent is lost with the session, and the same error comes back.
+
+`node .claude/check.cjs` validates the register with no model (the lines that start with `learnings:`), and `.claude/learnings.cjs` is the module that does it.
+
+**Rules of the register.**
+- A file starts with `# Learnings YYYY-MM`, and each entry is a heading `## E-NNN` followed by the lines of the block below, in that order. The ids have 3 or more digits, run 1 to N across all the files with no gap, and are never reused.
+- The month of `DATE` is the month of the file name. `REVIEW-BY` is never before `DATE`.
+- `CLASS` is the stable key of the error: the same kind of error always gets the same `CLASS`.
+- `APPROVED` exists, and is required, only when `PREVENTION` is `text`: the yes of the user to a rule in `CLAUDE.md`.
+- The paths exist in the repository and are relative, with no `..`. `test`, `hook` and `check` need `PREVENTION-PATH`, `REGRESSION` and `CLEAN-CASE`; `contract` needs `PREVENTION-PATH`; `text` points to `CLAUDE.md`; `memory` points to `ai-memory:<page path>`.
+- With `text` or `memory`, `REVIEW-BY` is at most 14 days after `DATE`: a weak prevention is reviewed soon.
+- The register only grows: once committed, an entry changes only in its `STATUS` line. An entry with `STATUS: open` past its `REVIEW-BY` is a warning (the clock is the UTC date, or `--today YYYY-MM-DD`), never a FAIL.
+
+**Strength of the layers** (1 is the strongest):
+- `test` 1
+- `hook` 2
+- `check` 2
+- `contract` 3
+- `text` 4
+- `memory` 5
+
+**The climb.** When a `CLASS` comes back, the new entry needs a `PREVENTION` stronger than the strongest one that class had, so a class climbs from `memory` to `text`, then to `check` or `hook`, then to `test`. `hook` and `check` are equally strong, so neither is a climb from the other. After `test` the only layer left is `test`: the check accepts it and warns that a test was not enough and the mechanism needs a redesign.
+
+**The format of an entry:**
+
+```text
+## E-001
+- DATE: 2026-10-31
+- TRIGGER: user | critic-rejected | escape | noise | hook-blocked | incident
+- DETECTED-BY: <who and where, one line>
+- SYMPTOM: <one line>
+- CLASS: <kebab-case slug, the stable key>
+- CAUSE: <one line; look for ours first: spec, instruction, harness, model>
+- CAUSE-OWNER: spec | instruction | harness | model | product
+- FAILED-LAYER: contract | round-minus-1 | tdd | critic | tester | check | hook | orchestrator
+- MISSING-CONTEXT: <one line, or none>
+- PREVENTION: test | hook | check | contract | text | memory
+- PREVENTION-PATH: <path in the repository; for memory, ai-memory:<page path>>
+- FAILS: open | closed
+- REGRESSION: <path of the case that reproduces it, or none>
+- CLEAN-CASE: <path of a clean case the prevention must not flag, or none>
+- AREA: <glob>[, <glob>]
+- SCOPE: project | package
+- REVIEW-BY: 2026-11-14
+- APPROVED: yes, 2026-10-31T10:00:00Z
+- STATUS: open | prevented | recurred | escalated | moot | expired
+```
+
+## 12. Session continuity
+
+**Context.** When the context use reaches 85 % (the hook says `CONTEXT WARNING`), save `.checkpoints/orchestrator.md` and write the baton with `memory_handoff_begin` at once, then keep working: the automatic compaction follows, and the `compact` session start brings you back. Never ask the user to open a new session.
+
+**Quota.** When an answer says the usage limit was reached (`resets <time>`), write in `.checkpoints/orchestrator.md` the state of every agent (name, ticket, checkpoint, what it was doing), schedule your own wake-up with `node .claude/acordar.mjs --at <time> --cron` and the `CronCreate` tool (ToolSearch `select:CronCreate`, `recurring: false`, the prompt below); without `CronCreate`, run `node .claude/acordar.mjs --at <time> --sleep` with Bash `run_in_background` (a timer, not a test). When you wake, resume without asking the user.
+
+```text
+Resume the forge run: run node .claude/retoma.mjs, read .checkpoints/orchestrator.md and the baton, then wake each agent it lists by its name (SendMessage) or relaunch it from its checkpoint. Do not ask the user.
+```
+
+**Agents.** No agent stays idle for more than 10 minutes: `node .claude/retoma.mjs` lists the ones to wake; wake each one by its name with `SendMessage`, or relaunch it from its checkpoint, in the same turn and without asking the user. An agent past `minutesWithoutProgress` of `.claude/forge.json` also goes into `args.vida`, so the workflow escalates it.
+
+**Checkpoints.** Every long-running agent (developer, critic, tester, research) saves `.checkpoints/<role>-<task>.md` after each step, in the format of `.checkpoints/README.md`; a research agent writes its report incrementally, with a `STATE` block at the top.
+
+**Orchestrator.** Save `.checkpoints/orchestrator.md` and write the baton at the end of each objective and when the context reaches 85 %. The safety net of the quota is in the next paragraph.
+
+**Safety net.** Only while an autonomous run has active subagents, keep exactly one recurring `CronCreate` job with the cron `7,27,47 * * * *` and the safety-net prompt below. Create it at the start of the run, and before creating it list the jobs with `CronList`: create it only if no job's prompt starts with `[forge-safety-net]`. Delete it with `CronDelete` when the run ends. It costs one model call per fire, 3 per hour; a fire with nothing to do answers in one line and stops.
+
+```text
+[forge-safety-net] Run node .claude/retoma.mjs. If it prints "nothing to resume" and no usage limit is waiting for its reset, answer "forge-safety-net: nothing to do" in one line and stop. Otherwise resume the forge run: read .checkpoints/orchestrator.md and the baton, then wake each agent it lists by its name (SendMessage) or relaunch it from its checkpoint. Do not ask the user.
+```

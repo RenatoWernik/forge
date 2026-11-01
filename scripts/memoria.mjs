@@ -24,6 +24,8 @@ const IGNORED = [SETTINGS, MCP, TOML]; // machine files: they hold this machine'
 const EVENTS = [['SessionStart', 'session-start'], ['UserPromptSubmit', 'user-prompt-submit'], ['PreToolUse', 'pre-tool-use'], ['PostToolUse', 'post-tool-use'],
   ['PreCompact', 'pre-compact'], ['Stop', 'stop'], ['SessionEnd', 'session-end'], ['SubagentStart', 'subagent-start'], ['SubagentStop', 'subagent-stop']];
 const FORGE_HOOK = { type: 'command', command: 'node', args: ['${CLAUDE_PROJECT_DIR}/.claude/hooks/forge-ai-memory.mjs'], timeout: 10 };
+// the session continuity hooks (F-24, FRAMEWORK.md section 12): joined like the capture hooks, found again by their script name
+const CONTINUITY = [['UserPromptSubmit', '', 'forge-contexto.mjs'], ['PostToolUse', '', 'forge-contexto.mjs'], ['SessionStart', 'compact', 'forge-retoma.mjs']];
 const USAGE = 'Usage: memoria.mjs --plan --dest <project>\n       memoria.mjs --apply --dest <project> [--autostart yes|no]';
 
 const fwd = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '');
@@ -64,7 +66,7 @@ async function makePlan(sys, dest) {
     bin, version, dataDir, port, serverUrl: `http://127.0.0.1:${port}`,
     outside: [`${dataDir}/ : the data directory of this project's ai-memory (ai-memory init, only when config.toml is missing)`, `${dataDir}/config.toml : one line, bind = "127.0.0.1:${port}"`,
       `a hidden ai-memory server on 127.0.0.1:${port}, started now and by .claude/start-ai-memory.mjs`],
-    inside: [`${TOML} : the [forge] table (server_url, data_dir)`, `${SETTINGS} : the 9 capture hooks, the SessionStart notice and enabledMcpjsonServers`, `${MCP} : the ai-memory MCP server`, `.gitignore : the three machine files above`],
+    inside: [`${TOML} : the [forge] table (server_url, data_dir)`, `${SETTINGS} : the 9 capture hooks, the SessionStart notice, the session continuity hooks (forge-contexto.mjs, forge-retoma.mjs) and enabledMcpjsonServers`, `${MCP} : the ai-memory MCP server`, `.gitignore : the three machine files above`],
   };
 }
 
@@ -95,6 +97,17 @@ function mergeSettings(s, p) {
     });
     const ours = { matcher: '', hooks: [{ type: 'command', command: p.bin, args: ['--data-dir', p.dataDir, 'hook', '--event', name, '--agent', 'claude-code', '--server-url', p.serverUrl] }] };
     hooks[event] = [...kept, ours, ...(event === 'SessionStart' ? [{ matcher: '', hooks: [FORGE_HOOK] }] : [])];
+  }
+  const scripts = CONTINUITY.map((c) => `/hooks/${c[2]}`);
+  for (const [event, groups] of Object.entries(hooks)) {
+    hooks[event] = groups.flatMap((g) => {
+      if (!Array.isArray(g?.hooks)) return [g];
+      const rest = g.hooks.filter((h) => !(Array.isArray(h?.args) && h.args.some((a) => scripts.some((x) => String(a).endsWith(x)))));
+      return rest.length === g.hooks.length ? [g] : rest.length ? [{ ...g, hooks: rest }] : [];
+    });
+  }
+  for (const [event, matcher, script] of CONTINUITY) {
+    hooks[event] = [...(hooks[event] ?? []), { matcher, hooks: [{ type: 'command', command: 'node', args: [`\${CLAUDE_PROJECT_DIR}/.claude/hooks/${script}`], timeout: 10 }] }];
   }
   const enabled = s.enabledMcpjsonServers ?? [];
   return { ...s, hooks, enabledMcpjsonServers: enabled.includes('ai-memory') ? enabled : [...enabled, 'ai-memory'] };

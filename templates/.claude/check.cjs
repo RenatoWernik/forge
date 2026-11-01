@@ -148,6 +148,18 @@ async function chk(name, f) {
     try { wired = JSON.stringify(JSON.parse(fs.readFileSync('.claude/settings.json', 'utf8').replace(/^﻿/, '')).hooks || {}).replace(/\\\\/g, '/') } catch (e) {}
     const hooksOn = Object.keys(HOOKS).filter(k => wired.includes('.claude/hooks/' + HOOKS[k]))
     await chk('hooks installed in .claude/settings.json: ' + (hooksOn.join(', ') || 'none') + ' (each script must exist in .claude/hooks/)', () => hooksOn.every(k => has('.claude/hooks', HOOKS[k])))
+    // checkpoints (FRAMEWORK.md section 12): every agent of painel.json on an open ticket saved its checkpoint less than 10 min ago, and the orchestrator has its own; the clock is FORGE_VIGIA_NOW_MS, as in .claude/retoma.mjs
+    let ck = { ok: false, note: ' (.claude/retoma.mjs missing)' }
+    try {
+      const inj = Number(process.env.FORGE_VIGIA_NOW_MS), r = (await import(require('node:url').pathToFileURL(path.resolve('.claude/retoma.mjs')).href)).ativos(process.cwd(), inj > 0 ? inj : Date.now())
+      if (r.erro) ck = { ok: false, note: ' (painel.json: ' + r.erro + ')' }
+      else {
+        const stale = r.ativos.filter(a => a.vida !== 'ativo'), noOrch = r.ativos.length > 0 && !has('.checkpoints/orchestrator.md')
+        const why = [stale.length ? 'stale: ' + stale.map(a => a.nome + (a.minutos === null ? ' no checkpoint' : ' ' + a.minutos + ' min')).join(', ') : '', noOrch ? '.checkpoints/orchestrator.md missing' : ''].filter(Boolean)
+        ck = { ok: !why.length, note: why.length ? ' (' + why.join('; ') + ')' : r.ativos.length ? '' : ' (no active agents)' }
+      }
+    } catch (e) {}
+    await chk('checkpoints: every active agent of painel.json saved its checkpoint less than 10 min ago' + ck.note, () => ck.ok)
     await chk('global skills (ponytail*, graphify, tdd) and the mattpocock-skills plugin', () => ['ponytail', 'ponytail-review', 'ponytail-audit', 'ponytail-debt', 'graphify', 'tdd'].every(s => has(H, '.claude/skills', s, 'SKILL.md')) && Object.keys(JSON.parse(fs.readFileSync(path.join(H, '.claude/plugins/installed_plugins.json'), 'utf8')).plugins).some(k => k.startsWith('mattpocock-skills@')))
     const cst = has('.specify/memory/constitution.md') ? fs.readFileSync('.specify/memory/constitution.md', 'utf8') : ''
     console.log('info  constitution: ' + (!cst ? 'missing' : cst.includes('[PROJECT_NAME]') ? 'still the template (run /speckit-constitution)' : 'filled in'))
@@ -753,6 +765,37 @@ async function chk(name, f) {
       const before = wfText(), x = run('--render')
       return x.code === 1 && /gauntlet-build\.js/.test(x.text) && /forge render/.test(x.text) && wfText().join() === before.join()
     }))
+  }
+
+  // learnings/: the error register (FRAMEWORK.md section 11), read by .claude/learnings.cjs. The clock is the UTC date, or --today YYYY-MM-DD; a past REVIEW-BY on an open entry is a warning, never a FAIL.
+  // ponytail: a register under 1 MB per file (the default buffer of git show); upgrade: pass maxBuffer to spawnSync if one ever grows past it
+  {
+    const L_FORM = 'learnings: every entry of learnings/ is well formed', L_GROW = 'learnings: learnings/ only grows (only STATUS lines change)'
+    let lib = null
+    try { lib = require('./learnings.cjs') } catch (e) {}
+    const eq = process.argv.find(a => a.startsWith('--today=')), ti = process.argv.indexOf('--today'), given = eq !== undefined || ti >= 0 // --today X or --today=X
+    const today = eq !== undefined ? eq.slice(8) : ti >= 0 ? process.argv[ti + 1] : new Date().toISOString().slice(0, 10)
+    let names = []
+    try { names = fs.readdirSync('learnings').filter(n => n !== 'README.md') } catch (e) {}
+    const texts = {}
+    for (const n of names) try { texts[n] = fs.readFileSync(path.join('learnings', n), 'utf8') } catch (e) { texts[n] = '' }
+    const git = (...a) => { const r = sh('git', a); return r.error || r.status ? null : r.stdout }
+    let head = null // the register at git HEAD, or null: no git, no commit
+    const listed = git('ls-tree', '--name-only', 'HEAD', 'learnings/')
+    if (listed !== null) {
+      head = {}
+      for (const f of listed.split(/\r?\n/).filter(f => /^learnings\/[^/]+\.md$/.test(f) && f !== 'learnings/README.md')) { const t = git('show', 'HEAD:./' + f); if (t === null) { head = null; break } head[f.slice(10)] = t }
+    }
+    const parsed = lib ? names.map(n => lib.parse(texts[n], n)) : [], clockOk = !!lib && lib.isDay(today)
+    const r = lib ? lib.validate(parsed.flatMap(p => p.entries), { today: clockOk ? today : undefined, exists: p => has(p), headTexts: head || undefined, texts }) : { fails: [], warns: [] }
+    const form = [...(given && !clockOk && lib ? ['--today ' + today + ' is not a date YYYY-MM-DD'] : []), ...parsed.flatMap(p => p.problems), ...r.fails.filter(f => f.kind === 'form').map(f => f.message)]
+    const grow = r.fails.filter(f => f.kind === 'grow').map(f => f.message)
+    if (!lib && names.length) form.push('.claude/learnings.cjs is missing')
+    await chk(L_FORM + (form.length ? ' (' + form.join('; ') + ')' : parsed.every(p => !p.entries.length) ? ' (no entries)' : ''), () => !form.length)
+    await chk(L_GROW + (grow.length ? ' (' + grow.join('; ') + ')' : head === null ? ' (no history)' : ''), () => !grow.length)
+    const late = r.warns.filter(w => w.kind === 'review-by'), again = r.warns.filter(w => w.kind === 'recurred-test')
+    if (late.length) console.log('warn  learnings: open entries past their REVIEW-BY (today ' + today + '): ' + late.map(w => w.message).join(', '))
+    if (again.length) console.log('warn  learnings: recurrence in the strongest layer, the test was not enough, review it (redesign): ' + again.map(w => w.message).join(', '))
   }
 
   console.log(bad ? '\nThere is a FAIL above.' : '\nAll ok.')

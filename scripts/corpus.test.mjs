@@ -1,7 +1,9 @@
 // Corpus do forge (F-02, #3): o oráculo fechado dos invariantes do check.cjs. Só biblioteca padrão.
 //   scripts/corpus/answers/<nome>.json    um conjunto de respostas de setup (o objeto que scaffold.mjs --answers aceita)
 //   scripts/corpus/mutations/<nome>.json  { base, file, find, replace, line }: sobre o projeto gerado de `base`, troca `find` por `replace`
-//                                         (texto literal, todas as ocorrências) em `file`; o check.cjs tem de falhar a linha `line`
+//                                         (texto literal, todas as ocorrências) em `file`; o check.cjs tem de falhar a linha `line`.
+//                                         `seed` opcional { files, commit }: ficheiros que o projeto gerado ainda não tem, escritos antes do
+//                                         find/replace (ver corpus-seed.mjs); sem a mutação a linha tem de ficar «ok»
 // 1. Cada conjunto gera um projeto que passa o check.cjs («All ok.»). Os projetos em português passam pelo mesmo substituto de tradução do
 //    scaffold.test.mjs: sem ele, um projeto acabado de gerar em português falha a linha `language`.
 // 2. Cada mutação faz falhar a sua linha; uma que não falha é uma mutação sem verificação e o teste diz o nome dela.
@@ -14,6 +16,7 @@ import { join, resolve, relative, extname, basename, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { scaffold } from './scaffold.mjs';
+import { applySeed } from './corpus-seed.mjs';
 
 const T0 = Date.now();
 const BUDGET_MS = 300000;
@@ -62,10 +65,11 @@ const build = async (set) => {
 // At most 2 check.cjs run at once (a slot is handed to the next waiting call, so the count never goes above 2)
 let active = 0;
 const waiting = [];
-const slot = async () => { if (active >= 2) await new Promise((r) => waiting.push(r)); else active++; };
+// `urgent` goes to the front: a seeded mutation has two more checks after its first, and at the back of the queue they would stretch the whole run
+const slot = async (urgent) => { if (active >= 2) await new Promise((r) => (urgent ? waiting.unshift(r) : waiting.push(r))); else active++; };
 const free = () => { const next = waiting.shift(); if (next) next(); else active--; };
-const check = async (cwd) => {
-  await slot();
+const check = async (cwd, urgent = false) => {
+  await slot(urgent);
   try {
     return await new Promise((done) => {
       const c = spawn(process.execPath, ['.claude/check.cjs'], { cwd, env });
@@ -96,13 +100,18 @@ async function verifyMutation(m) {
   if (!answers.has(m.base)) return `a base «${m.base}» não é um conjunto de respostas do corpus`;
   if (state((await baseline(m.base)).out, m.line) !== 'ok') return `a linha «${m.line}» não está «ok» no projeto sem mutação (nome inexato, ou já falhava)`;
   const { dest } = await build(m.base);
+  if (m.seed) {
+    try { applySeed(dest, m.seed); } catch (e) { return e.message; }
+    // o caso limpo: com o seed e sem a mutação a linha continua «ok»
+    if (state((await check(dest, true)).out, m.line) !== 'ok') return `a linha «${m.line}» não está «ok» com o seed e sem a mutação`;
+  }
   const file = resolve(dest, m.file);
   if (!file.startsWith(dest + sep)) return `${m.file} está fora do projeto gerado`;
   if (!existsSync(file)) return `${m.file} não existe no projeto gerado`;
   const text = readFileSync(file, 'utf8');
   if (!text.includes(m.find)) return `o texto a procurar não existe em ${m.file}`;
   writeFileSync(file, text.replaceAll(m.find, m.replace));
-  const post = await check(dest);
+  const post = await check(dest, !!m.seed);
   return state(post.out, m.line) === 'FAIL' && post.status === 1 ? null : `mutação sem verificação: depois dela a linha «${m.line}» não falhou`;
 }
 
@@ -113,6 +122,7 @@ test('corpus: pelo menos 8 conjuntos de respostas e 5 mutações em 5 linhas dis
     for (const k of ['base', 'file', 'find', 'replace', 'line']) assert.equal(typeof m[k], 'string', `${name}.${k}`);
     for (const k of ['base', 'file', 'find', 'line']) assert.ok(m[k], `${name}.${k} vazio`);
     assert.notEqual(m.find, m.replace, `${name}: find igual a replace`);
+    if (m.seed !== undefined) assert.deepEqual(Object.keys(m).filter((k) => !['base', 'file', 'find', 'replace', 'line', 'seed'].includes(k)), [], `${name}: campos desconhecidos`);
   }
   const lines = new Set([...mutations.values()].map((m) => m.line));
   assert.ok(lines.size >= 5, 'linhas distintas do check.cjs: ' + lines.size);
