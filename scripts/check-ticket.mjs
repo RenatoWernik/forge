@@ -10,7 +10,7 @@
 // 1.ª linha é `CHECK-TICKET: VERDE <sha> <sha256 do relatório>` ou `CHECK-TICKET: VERMELHO <sha>`. Só biblioteca padrão.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +42,7 @@ function lerArgs(argv) {
 const git = (cwd, ...a) => spawnSync('git', a, { cwd, encoding: 'utf8', maxBuffer: 1 << 30 });
 const nomes = (txt) => txt.split('\0').filter(Boolean);
 const curto = (s, n = 300) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const casa = (f, globs) => globs.some((g) => { const p = g.replace(/^\.\//, ''); return f === p || posix.matchesGlob(f, p); });
+const casa = (f, globs) => globs.some((g) => { const p = g.replaceAll('\\', '/').replace(/^\.\//, ''); return f === p || posix.matchesGlob(f, p); });
 
 // 1: tudo commitado (o .forge/ é do executor e não conta)
 function arvoreLimpa(raiz) {
@@ -104,9 +104,11 @@ async function corre(prefixo, raiz, suites, sha, continuar) {
   return { estado: 'ok', detalhe: suites.join(', '), suites: estados, ficheiro };
 }
 
+// curto de propósito: os logs do executor levam o sha e o nome do ficheiro, e o Windows corta os caminhos nos 260 caracteres
+const clonePath = (sha) => join(tmpdir(), `fct-${sha.slice(0, 12)}`);
 // o clone do passo 5: main = origin/main = HEAD; com --continuar reaproveita o do mesmo sha (tem os resultados das unidades já feitas)
 function clona(raiz, sha, continuar) {
-  const dir = join(tmpdir(), 'forge-check-ticket', sha);
+  const dir = clonePath(sha);
   if (continuar && existsSync(join(dir, '.git')) && git(dir, 'rev-parse', 'HEAD').stdout.trim() === sha) return dir;
   rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   mkdirSync(dirname(dir), { recursive: true });
@@ -146,13 +148,11 @@ async function main(argv) {
   const falha = (e) => ({ estado: 'FAIL', detalhe: curto(e.message) });
   const orfao = (porque) => ({ estado: 'FAIL', detalhe: porque });
 
-  const pLint = lint(raiz);
+  const pLint = lint(raiz); // corre em paralelo com o executor: o orçamento_s dele já ocupa quase toda a chamada
   diz('árvore limpa', arvoreLimpa(raiz));
-  diz('lint', await pLint);
 
   let ficheiros = null, suites = null, todas = [], erro;
   try { ficheiros = diffDoRamo(raiz, o.base); } catch (e) { erro = e; }
-  diz('âmbito', ficheiros ? ambito(ficheiros, o.ambito) : falha(erro));
 
   let pRamo = Promise.resolve(orfao('sem diff contra a base')), pPos = pRamo;
   if (ficheiros) {
@@ -166,6 +166,8 @@ async function main(argv) {
       pPos = Promise.resolve().then(() => corre('pós-merge', clona(raiz, sha, o.continuar), suites, sha, o.continuar)).catch(falha);
     } catch (e) { pRamo = Promise.resolve(falha(e)); pPos = pRamo; suites = null; }
   }
+  diz('lint', await pLint);
+  diz('âmbito', ficheiros ? ambito(ficheiros, o.ambito) : falha(erro));
   const p4 = await pRamo;
   diz('afetadas no ramo', p4);
   diz('pós-merge', await pPos);
@@ -177,14 +179,15 @@ async function main(argv) {
   const codigo = falhou ? 1 : pendente ? 3 : 0;
   const pasta = join(raiz, '.forge', 'check-ticket'), rel = join(pasta, `${sha}.json`);
   mkdirSync(pasta, { recursive: true });
-  writeFileSync(rel, JSON.stringify({ versao: 1, sha, base: o.base, ambito: o.ambito, ficheiros, suites, resultado: falhou ? 'VERMELHO' : pendente ? 'INCOMPLETO' : 'VERDE',
+  writeFileSync(`${rel}.tmp`, JSON.stringify({ versao: 1, sha, base: o.base, ambito: o.ambito, ficheiros, suites, resultado: falhou ? 'VERMELHO' : pendente ? 'INCOMPLETO' : 'VERDE',
     passos, fim: new Date().toISOString() }, null, 2) + '\n');
+  renameSync(`${rel}.tmp`, rel);
   if (pendente && !falhou) console.log('check-ticket: incompleto; repetir com --continuar (o relatório fica para a chamada final)');
   if (o.publicar !== null && codigo !== 3) {
     const cabeca = falhou ? `CHECK-TICKET: VERMELHO ${sha}` : `CHECK-TICKET: VERDE ${sha} ${createHash('sha256').update(readFileSync(rel)).digest('hex')}`;
     publica(ghEnv, raiz, o.publicar, [cabeca, ...passos.map((p) => `${p.estado === 'ok' ? 'ok' : 'FAIL'} ${p.passo}${p.detalhe ? ` (${p.detalhe})` : ''}`)].join('\n'));
   }
-  if (codigo !== 3) rmSync(join(tmpdir(), 'forge-check-ticket', sha), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  if (codigo !== 3) rmSync(clonePath(sha), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   return codigo;
 }
 
