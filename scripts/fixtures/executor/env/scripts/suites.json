@@ -1,0 +1,5 @@
+{ "versao": 1, "paralelo": 2, "vagas_globais": 4, "carga_sensivel": 3, "orcamento_s": 120,
+  "suites": [
+    { "nome": "sonda", "tipo": "node-test", "ficheiros": ["sonda/*.fx.mjs"], "limite_s": 60 },
+    { "nome": "real", "tipo": "node-test", "ficheiros": ["real/*.fx.mjs"], "limite_s": 60, "env": { "USERPROFILE": "@real" } }
+  ] }
