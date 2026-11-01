@@ -125,10 +125,13 @@ test('GUARDA C6: scripts/scaffold.test.mjs mantém todas as linhas da base pela 
   assert.deepEqual(perdidas, [], 'linhas da base alteradas ou apagadas em scripts/scaffold.test.mjs');
   assert.deepEqual(novas.map((l) => l.trim()).filter((l) => !["'.claude/learnings.cjs',", "'learnings/README.md',"].includes(l)), [], 'linhas novas além das duas do dry run');
 });
-test('GUARDA: os ataques de tests/critico/ que existiam na base ficam byte a byte (nunca se enfraquecem nem se apagam)', () => {
+// o âmbito do F-22a só vale no ramo dele (regra 9); as duas exceções autorizadas na #75: o c5 do f-23a passa a aplicar o seed das mutações
+const ramo = gitR('rev-parse', '--abbrev-ref', 'HEAD').trim();
+const AUTORIZADOS = ['tests/critico/f-23a-r0/c5-mutacoes.test.mjs', 'tests/critico/f-23a-r0/helpers.mjs', 'tests/critico/f-21a-r0/c4-passos.test.mjs']; // o último: o skip de âmbito da guarda do f-21a (#75)
+test('GUARDA: os ataques de tests/critico/ que existiam na base ficam byte a byte (nunca se enfraquecem nem se apagam)', { skip: !ramo.startsWith('f-22a') && 'só nos ramos f-22a*' }, () => {
   const base = gitR('merge-base', 'HEAD', 'origin/main').trim(); // a main atual, não a BASE fixa (regra 8)
   const fs_ = gitR('ls-tree', '-r', '--name-only', base, 'tests/critico').split('\n').filter(Boolean);
   assert.ok(fs_.length > 50, 'controlo: ' + fs_.length);
   const mudados = fs_.filter((f) => { const p = join(ROOT, f); return !existsSync(p) || linhas(readFileSync(p, 'utf8')).join('\n') !== linhas(gitR('show', base + ':' + f)).join('\n'); });
-  assert.deepEqual(mudados, []);
+  assert.deepEqual(mudados.filter((f) => !AUTORIZADOS.includes(f)), []);
 });
