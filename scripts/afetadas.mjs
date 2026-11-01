@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Suítes afetadas por um diff (V-02, #126; spec #123 §4.3). Só biblioteca padrão.
-//   afetadas(ficheiros) → { suites, porque }: a união de três coisas
+//   afetadas(ficheiros, { raiz }) → { suites, porque }: a união de três coisas (o mapa, o manifesto e os ficheiros lidos vêm de `raiz`,
+//   por omissão a raiz do repo deste módulo)
 //     1. as regras de scripts/mapa-suites.json cujo glob casa com um ficheiro do diff ("*" = todas as suítes);
 //     2. a regra implícita: tests/critico/<x>/** afeta a suíte <x>;
 //     3. o fecho do lote: as suítes-alvo dos doLote das suítes já afetadas (repetido até não entrar nenhuma).
@@ -68,7 +69,7 @@ export function diretas(ficheiros, raiz = RAIZ) {
 const reLote = /\bdoLote\(\s*[\w$.]+\s*,\s*(['"`])([^'"`\n]+)\1/g;
 const alvosDoLote = (raiz, suite) => new Set(ficheirosDaSuite(raiz, suite).flatMap((f) => [...readFileSync(join(raiz, f), 'utf8').matchAll(reLote)].map((m) => m[2])));
 
-export function afetadas(ficheiros, raiz = RAIZ) {
+export function afetadas(ficheiros, { raiz = RAIZ } = {}) {
   const { nomes, porque } = diretas(ficheiros, raiz), suites = json(raiz, 'scripts/suites.json').suites;
   const fila = Object.keys(porque);
   while (fila.length && Object.keys(porque).length < nomes.length) {
@@ -90,7 +91,7 @@ export function desdeBase(base, raiz = RAIZ) {
   const d = g('diff', '--name-only', '--no-renames', '-z', mb.stdout.trim(), 'HEAD');
   if (d.status !== 0) throw new Error(`git diff falhou: ${d.stderr.trim()}`);
   const ficheiros = d.stdout.split('\0').filter(Boolean);
-  return { base: mb.stdout.trim(), ficheiros, ...afetadas(ficheiros, raiz) };
+  return { base: mb.stdout.trim(), ficheiros, ...afetadas(ficheiros, { raiz }) };
 }
 
 // uma linha por suíte: a primeira razão (as das regras vêm antes das do fecho) e quantas mais há
