@@ -1,0 +1,4 @@
+{ "versao": 1, "paralelo": 1, "vagas_globais": 4, "carga_sensivel": 3, "orcamento_s": 14,
+  "suites": [
+    { "nome": "curta", "tipo": "node-test", "ficheiros": ["curta/*.fx.mjs"], "limite_s": 8 }
+  ] }

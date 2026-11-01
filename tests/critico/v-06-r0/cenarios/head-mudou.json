@@ -1,0 +1,12 @@
+{
+  "nome": "head-mudou",
+  "criterio": "head-mudou",
+  "descricao": "As duas provas são do head H que o gh mostra, mas o head real mudou (H2): o gh falso recusa o --match-head-commit H; 0 merges feitos",
+  "modo": "forge",
+  "pr": { "isDraft": false, "base": "main", "posMerge": "verde", "headMuda": true },
+  "comentarios": [
+    { "corpo": "VEREDITO: APROVADO\nHEAD: @H\nEXECUTOR: .forge/resultados/@H-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 5/5\nFALHAS (todas, numeradas): nenhuma\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" },
+    { "corpo": "CHECK-TICKET: VERDE @H @SHA256" }
+  ],
+  "esperado": { "codigo": 2, "recusa": true, "pr_merge_max": 1, "merges": 0, "regressao": 0, "pos_merge_verde": false, "fase": null }
+}
