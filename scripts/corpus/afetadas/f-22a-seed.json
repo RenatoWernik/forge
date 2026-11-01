@@ -1,0 +1,12 @@
+{
+  "commit": "8ff53ac",
+  "ficheiros": [
+    "scripts/corpus-seed.mjs",
+    "scripts/corpus/mutations/learnings-entrada-malformada.json",
+    "scripts/corpus/mutations/learnings-linha-reescrita.json"
+  ],
+  "devem_incluir": [
+    "f-02-r0",
+    "scripts"
+  ]
+}
