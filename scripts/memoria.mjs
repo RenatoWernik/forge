@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { arranca, estado } from '../templates/.claude/start-ai-memory.mjs';
+import { arranca, aviso, estado } from '../templates/.claude/start-ai-memory.mjs';
 
 // /forge:new-project, ai-memory step. --plan --dest <project> prints what would be set up and writes nothing; --apply --dest <project> does it:
 // a data dir of its own and a free port for this project, the capture hooks and the MCP server in files git ignores, and the server started hidden.
@@ -209,6 +209,8 @@ async function uidOf(sys) {
 }
 
 async function startAtLogon(sys, cfg, p, write, dest) {
+  const st = await estado(dest, sys);
+  if (st.state !== 'on' && st.state !== 'off') { write(aviso(st)); return 2; } // a conflict or anything else that is not on or off: no entry is written and the service manager is never called
   const fs = sys.fs;
   const e = entryOf(sys, cfg, p);
   const file = join(e.dir, e.name);
@@ -221,7 +223,7 @@ async function startAtLogon(sys, cfg, p, write, dest) {
     return r.code;
   };
   if (sys.platform === 'win32') return 0;
-  const on = (await estado(dest, sys)).state === 'on'; // a server of this project already answers: the manager only enables the entry, it does not start a second one
+  const on = st.state === 'on'; // a server of this project already answers: the manager only enables the entry, it does not start a second one
   if (sys.platform === 'darwin') {
     const uid = await uidOf(sys);
     if (!uid) { write('id -u did not give a user id; the LaunchAgent is written but not loaded. Run the memory step again.'); return 1; }

@@ -4,7 +4,7 @@
 // o gestor só faz o enable (linux sem --now; darwin launchctl enable), nunca arranca outro.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -100,3 +100,24 @@ test('#97 linux: $ no executável fica literal e nos argumentos vai como $$; o c
   grava(aim.startupEntry(a).text.replace('"/opt/a$b%%c/ai-memory"', () => '"/opt/a$$b%%c/ai-memory"'));
   assert.equal(estado().ok, false);
 });
+
+// R2 (#97), a classe: no «yes», qualquer estado do servidor que não seja on nem off (conflito: outro servidor na porta; nobin: o binário deixa de se encontrar)
+// escreve o aviso e sai com 2 ANTES de escrever a entrada e de chamar o gestor de serviços, em win32, linux e darwin.
+const SEM_ON_OFF = {
+  conflict: { texto: /CONFLICT/, prepara: (f, dd) => { const run = f.sys.run; f.sys.fetch = async () => ({ ok: true }); f.sys.run = (cmd, args = [], o = {}) => (args.includes('status') ? { code: 0, stdout: JSON.stringify({ data_dir: dd + '-outro' }), stderr: '' } : run(cmd, args, o)); } },
+  nobin: { texto: /binary not found/, prepara: (f) => { const run = f.sys.run; let n = 0; f.sys.run = (cmd, args = [], o = {}) => (args.length === 1 && args[0] === '--version' && ++n > 1 ? { code: 1, stdout: '', stderr: '' } : run(cmd, args, o)); } },
+};
+for (const plat of ['win32', 'linux', 'darwin']) {
+  for (const [estado, c] of Object.entries(SEM_ON_OFF)) {
+    test(`#97 ${plat} «yes» com o servidor em estado ${estado}: aviso, código 2, nenhuma entrada e nenhum gestor`, async () => {
+      const { proj, f } = await cena(plat, false);
+      c.prepara(f, forge(proj).dataDir);
+      const r = await autostart(proj, f.sys, 'yes');
+      assert.equal(r.code, 2, `code=${r.code}\n${r.out}`);
+      assert.match(r.out, c.texto);
+      assert.deepEqual(f.regs.cmds.filter((x) => x.cmd === 'systemctl' || x.cmd === 'launchctl'), []);
+      assert.equal(existsSync(f.entrada), false, 'a entrada foi escrita');
+      assert.deepEqual(serve(f), []);
+    });
+  }
+}
