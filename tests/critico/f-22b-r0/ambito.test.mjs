@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, projeto, apaga, learn, base, soNoTicket, LEARN } from './helpers.mjs';
+import { ROOT, projeto, apaga, learn, LEARN } from './helpers.mjs';
+import { base } from '../_comum/base.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const gitRoot = (...a) => { const r = spawnSync('git', a, { cwd: ROOT, encoding: 'utf8' }); assert.equal(r.status, 0, 'git ' + a.join(' ') + ': ' + r.stderr); return r.stdout; };
 

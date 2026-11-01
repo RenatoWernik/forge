@@ -12,8 +12,7 @@
 // As goldens (texto do `add`, bloco, relatório, `for`, `classes` e `gotcha`) são literais tirados do corpo da issue e do formato do F-22a
 // (uma linha em branco entre entradas, LF, fim de linha final, como no corpus scripts/corpus/learnings/valid/), nunca recalculados como o código.
 //
-// Regras 8 e 9 dos briefs: os helpers do F-26 (tests/critico/_comum/base.mjs e ambito.mjs) ainda não estão na main, por isso `base()` e
-// `soNoTicket()` vivem aqui com a mesma API; quando o F-26 entrar, os imports passam para lá sem mudar nenhum teste.
+// Regras 8 e 9 dos briefs: `base()` e `soNoTicket()` são os de tests/critico/_comum/ (F-26), reexportados daqui.
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -23,24 +22,9 @@ import { ROOT, projeto, check, linha, git, ambiente, escreve, apaga, tmp, entrad
 
 export { ROOT, projeto, check, linha, git, ambiente, escreve, apaga, tmp, entrada, ficheiro, valores, id, esperaOk };
 
-// ---------- Regra 8: a base é sempre o merge-base com origin/main ----------
-// O sha de `git merge-base HEAD origin/main`, ou null sem origin/main (quem chama faz skip com «sem origin/main»).
-export function base() {
-  const r = spawnSync('git', ['merge-base', 'HEAD', 'origin/main'], { cwd: ROOT, encoding: 'utf8' });
-  return r.status === 0 && r.stdout.trim() ? r.stdout.trim() : null;
-}
-
-// ---------- Regra 9: os testes de âmbito só correm na branch do ticket ----------
-// GITHUB_HEAD_REF (a branch do PR na CI) prevalece sobre a branch local; um HEAD destacado conta como fora.
-const ramoAtual = () => process.env.GITHUB_HEAD_REF
-  || spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout.trim();
-// Faz skip de `t` e devolve true quando a branch atual não começa por `id`; quem chama faz `if (soNoTicket(t, id)) return;`.
-export function soNoTicket(t, idTicket) {
-  const ramo = ramoAtual();
-  if (ramo !== 'HEAD' && ramo.startsWith(idTicket)) return false;
-  t.skip(`âmbito do ${idTicket}: fora da branch ${idTicket}*`);
-  return true;
-}
+// Regras 8 e 9: base() e soNoTicket() vêm dos helpers do F-26
+export { base } from '../_comum/base.mjs';
+export { soNoTicket } from '../_comum/ambito.mjs';
 
 // ---------- Literais do contrato ----------
 export const LEARN = '.claude/learn.mjs';
