@@ -1,0 +1,30 @@
+{ "versao": 1,
+  "sempre": {
+    "f-01-r0": "varre templates/, skills/, scripts/, components.json e os READMEs à procura de termos proibidos: um documento ou um teste novo também o pode partir",
+    "f-03-r0": "regressao: falha se mudar um ficheiro de tests/critico/f-01-r0 ou f-02-r0 (git diff das pastas anteriores)",
+    "f-04-r0": "regressao: falha se mudar um ficheiro de tests/critico/f-01-r0, f-02-r0, f-03-r0 ou f-10-r0 (git diff das pastas anteriores)",
+    "f-05-r0": "regressao: falha se mudar um ficheiro das pastas anteriores de tests/critico (git diff)",
+    "f-06-r0": "regressao: falha se mudar um ficheiro das pastas anteriores de tests/critico (git diff)",
+    "f-11-r0": "c2-sem-caminhos varre o que o diff acrescenta fora de tests/ à procura de caminhos absolutos, UUIDs e nomes de projeto",
+    "f-14-r0": "regressao-higiene varre o que o diff acrescenta fora de tests/ (inclui documentos e skills/)",
+    "f-26-r0": "o lint das guardas lê todas as pastas de tests/critico e a guarda de pasta nova compara tests/critico com a base"
+  },
+  "foraDaLista": {
+    "f-02-r0": "regressao: o git diff é de templates/ e de scripts (código, que já leva todas as suítes)",
+    "f-07-r0": "regressao: git diff -- . :(exclude)tests e ls-files --others; o código já leva todas as suítes e um diff só em testes não as muda",
+    "f-08-r0": "regressao: git diff -- . :(exclude)tests e ls-files --others; o código já leva todas as suítes e um diff só em testes não as muda",
+    "f-09-r0": "regressao: git diff -- . :(exclude)tests e ls-files --others; o código já leva todas as suítes e um diff só em testes não as muda",
+    "f-10-r0": "regressao: git diff -- . :(exclude)tests e ls-files --others; o código já leva todas as suítes e um diff só em testes não as muda",
+    "f-12-r0": "regressao: git diff -- . :(exclude)tests e ls-files --others; o código já leva todas as suítes e um diff só em testes não as muda",
+    "f-13-r0": "regressao: git diff -- . :(exclude)tests e ls-files --others; o código já leva todas as suítes e um diff só em testes não as muda",
+    "f-15a-r0": "regressao: git diff -- . :(exclude)tests e ls-files --others; o código já leva todas as suítes e um diff só em testes não as muda",
+    "f-16-r0": "só menciona git ls-files num comentário dos helpers",
+    "f-20b-r0": "c6-manual: git diff de scripts/scaffold.test.mjs (código, que já leva todas as suítes)",
+    "f-22b-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket) e olha para o diff do ticket",
+    "f-22c-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket) e olha para o diff do ticket",
+    "f-24-r0": "c0-pecas: git diff de scripts/scaffold.test.mjs (código, que já leva todas as suítes)",
+    "f-30-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket) e olha para o diff do ticket",
+    "v-01-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o c6-manifesto (nomes = pastas) cobre-se porque uma pasta fora do manifesto leva todas as suítes",
+    "v-02-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o C5 compara a saída do CLI com o diff contra a base"
+  }
+}

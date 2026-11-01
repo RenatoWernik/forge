@@ -1,0 +1,35 @@
+{
+  "commit": "af08eb2",
+  "ficheiros": [
+    "scripts/memoria.mjs",
+    "scripts/scaffold.test.mjs",
+    "skills/new-project/SKILL.md",
+    "templates/.checkpoints/README.md",
+    "templates/.claude/acordar.mjs",
+    "templates/.claude/briefs/batch.md",
+    "templates/.claude/briefs/critic.md",
+    "templates/.claude/briefs/dev.md",
+    "templates/.claude/briefs/round-minus-1.md",
+    "templates/.claude/check.cjs",
+    "templates/.claude/hooks/forge-contexto.mjs",
+    "templates/.claude/hooks/forge-retoma.mjs",
+    "templates/.claude/retoma.mjs",
+    "templates/AGENTS.md",
+    "templates/CLAUDE.md",
+    "templates/FRAMEWORK.md",
+    "tests/critico/f-24-r0/c0-pecas.test.mjs",
+    "tests/critico/f-24-r0/c1-regras.test.mjs",
+    "tests/critico/f-24-r0/c2-contexto.test.mjs",
+    "tests/critico/f-24-r0/c3-retoma-hook.test.mjs",
+    "tests/critico/f-24-r0/c4-acordar.test.mjs",
+    "tests/critico/f-24-r0/c5-retoma.test.mjs",
+    "tests/critico/f-24-r0/c6-check.test.mjs",
+    "tests/critico/f-24-r0/golden/c5.txt",
+    "tests/critico/f-24-r0/guardas.test.mjs",
+    "tests/critico/f-24-r0/helpers.mjs",
+    "tests/critico/f-24-r1/janela.test.mjs"
+  ],
+  "devem_incluir": [
+    "f-24-r0"
+  ]
+}

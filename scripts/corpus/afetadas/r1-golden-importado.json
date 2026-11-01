@@ -1,0 +1,13 @@
+{
+  "commit": null,
+  "ficheiros": [
+    "tests/critico/f-20c-r0/golden/darwin.plist",
+    "tests/critico/f-24-r0/golden/c5.txt"
+  ],
+  "devem_incluir": [
+    "f-20c-r0",
+    "f-20c-r1",
+    "f-24-r0",
+    "f-24-r1"
+  ]
+}
