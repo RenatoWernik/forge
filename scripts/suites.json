@@ -41,5 +41,6 @@
     { "nome": "f-27-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-27-r0/*.test.mjs"], "limite_s": 60 },
     { "nome": "f-30-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-30-r0/*.test.mjs"], "limite_s": 120 },
     { "nome": "v-01-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-01-r0/*.test.mjs"], "limite_s": 600, "sensivel_ao_tempo": ["tests/critico/v-01-r0/c1-f12-real.test.mjs", "tests/critico/v-01-r0/c2-arvore.test.mjs"], "env": {"USERPROFILE": "@real"} },
-    { "nome": "v-03-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-03-r0/*.test.mjs"], "limite_s": 240 }
+    { "nome": "v-03-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-03-r0/*.test.mjs"], "limite_s": 240 },
+    { "nome": "v-02-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-02-r0/*.test.mjs"], "limite_s": 240 }
   ] }
