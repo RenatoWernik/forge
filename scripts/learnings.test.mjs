@@ -173,6 +173,18 @@ test('history: a BOM is not a change', () => {
   assert.deepEqual(grows('﻿' + head), []);
   assert.deepEqual(grows(head, '﻿' + head), []);
 });
+// the style line skips the Learned rules block (the register's own words) and still reads the text around it
+test('style: a dash inside the Learned rules block is the register\'s text, a dash right after the block is a FAIL', async () => {
+  const text = (await readFile(join(CORPUS, 'valid', 'climb-and-triggers.md'), 'utf8')).replace(/^- SYMPTOM: (.*)$/gm, (m, s) => `- SYMPTOM: ${s} — again`);
+  const style = (out) => out.split(/\r?\n/).find((l) => l.slice(6).startsWith('style: '));
+  const inside = await run({ '2026-10.md': text }, undefined, true);
+  assert.ok((await readFile(join(dest, 'CLAUDE.md'), 'utf8')).includes('— again (learnings/'), 'the dash is not in the block');
+  assert.match(style(inside.out), /^ok {4}/, inside.out.slice(-800));
+  await writeFile(join(dest, 'CLAUDE.md'), (await readFile(join(dest, 'CLAUDE.md'), 'utf8')) + '\nA dash — right after the block.\n');
+  const env = { ...process.env, HOME: dest, USERPROFILE: dest, DISABLE_AUTOUPDATER: '1' };
+  const after = spawnSync(process.execPath, ['.claude/check.cjs', '--today', TODAY], { cwd: dest, encoding: 'utf8', env });
+  assert.match(style(after.stdout), /^FAIL {2}/);
+});
 // learn.mjs refuses a rule that repeats an invariant by the TITLES of learnings.cjs; check.cjs keeps its own copy of the list
 test('the invariant titles of learnings.cjs are the TITLES of check.cjs', async () => {
   const src = await readFile(fileURLToPath(new URL('../templates/.claude/check.cjs', import.meta.url)), 'utf8');

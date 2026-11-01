@@ -169,15 +169,16 @@ async function chk(name, f) {
   const DOCS = ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md']
   const BRIEFS = ['dev', 'critic', 'round-minus-1', 'batch'] // .claude/briefs/<name>.md, one per role
   const PROSE = [...DOCS, ...BRIEFS.map(b => '.claude/briefs/' + b + '.md'), '.checkpoints/README.md'] // the files whose language and style are checked
-  if (FJ.plainStyle) await chk('style: no dash, arrow or emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist) (also the briefs and .checkpoints/README.md)', () => PROSE.filter(f => has(f)).every(f => !/[\u2013\u2014\u2192\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u.test(fs.readFileSync(f, 'utf8'))))
+  // The Learned rules block (between its two marker lines) is written by .claude/learn.mjs from the register, in the words and the language of the register: language and style skip it, the text around the markers is read.
+  const unblock = t => t.replace(/^[ \t]*<!-- forge:learnings:start -->[^\n]*\n[\s\S]*?^[ \t]*<!-- forge:learnings:end -->/gm, ' ')
+  if (FJ.plainStyle) await chk('style: no dash, arrow or emoji in CLAUDE.md, AGENTS.md, FRAMEWORK.md and BOOTSTRAP.md (when they exist) (also the briefs and .checkpoints/README.md)', () => PROSE.filter(f => has(f)).every(f => !/[\u2013\u2014\u2192\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u.test(unblock(fs.readFileSync(f, 'utf8')))))
   // language: the three documents follow "language" of forge.json. Their prose (outside code blocks, backtick spans, links and URLs) is scored by the share of very common
   // function words per language, so any correct translation passes whatever it calls its headings, and a translation of the headings alone does not (no network, no model).
   // English must be mostly English words; any other language must have almost none left; Portuguese must also show its own words.
   // ponytail: two built-in word lists (English, Portuguese); the Portuguese list leaves out the words Spanish shares (que, para, por, ...); another language is only checked for "not English any more", upgrade: add its list here when a third one ships
   const WORDS = { en: 'the and of is are to in that it for with be this by on or not from each when an at if which before after only every any all was were has have its their your our does can must may', pt: 'não uma com das são ao pelo pela também mais quando sem os um é da em seu sua nas há ou isso ele ela pode deve já o seus suas nem só ainda depois apenas sempre' }
   const share = (ws, list) => ws.filter(w => list.includes(w)).length / (ws.length || 1)
-  // The Learned rules block (between its two marker lines) is written by .claude/learn.mjs from the register, in the language the register was written in, and is skipped; the text around the markers is scored.
-  const clean = f => fs.readFileSync(f, 'utf8').replace(/^[ \t]*<!-- forge:learnings:start -->[^\n]*\n[\s\S]*?^[ \t]*<!-- forge:learnings:end -->/gm, ' ').replace(/^\s*```[\s\S]*?^\s*```/gm, ' ').replace(/`[^`\n]*`/g, ' ').replace(/\]\([^)]*\)/g, ']').replace(/https?:\/\/\S+/g, ' ')
+  const clean = f => unblock(fs.readFileSync(f, 'utf8')).replace(/^\s*```[\s\S]*?^\s*```/gm, ' ').replace(/`[^`\n]*`/g, ' ').replace(/\]\([^)]*\)/g, ']').replace(/https?:\/\/\S+/g, ' ')
   // The language is read from the BCP 47 "langTag" (forge writes it next to the English name, whatever spelling the user typed).
   // ponytail: a forge.json from before langTag falls back to the name (English, Portuguese or "und"); upgrade: drop the fallback once no such project is left
   const tag = FJ.langTag === undefined ? (/^en/i.test(FJ.language) ? 'en' : /portugu|^pt\b/i.test(FJ.language) ? 'pt-BR' : 'und') : FJ.langTag

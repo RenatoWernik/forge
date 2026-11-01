@@ -65,7 +65,7 @@ function add() {
   const month = obj.DATE.slice(0, 7), name = month + '.md', dir = 'learnings', lock = join(dir, '.lock')
   const made = !existsSync(dir)
   if (made) mkdirSync(dir, { recursive: true })
-  let fd
+  let fd // shortcut: a lock left by a killed process stays until someone deletes learnings/.lock (the contract has no timeout); upgrade: store the pid and take over a dead one
   try { fd = openSync(lock, 'wx') } catch (e) {
     if (made) try { rmdirSync(dir) } catch {}
     stop(e.code === 'EEXIST' ? 3 : 1, e.code === 'EEXIST' ? 'learnings: busy, try again' : 'add: ' + e.message)
