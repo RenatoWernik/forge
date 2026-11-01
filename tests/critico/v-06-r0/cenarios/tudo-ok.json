@@ -1,0 +1,14 @@
+{
+  "nome": "tudo-ok",
+  "criterio": "tudo-ok",
+  "descricao": "PR em rascunho, ronda 2: REPROVADO e CHECK de P1 antes, depois APROVADO e CHECK-TICKET VERDE do head: pr ready, 1 merge --squash --match-head-commit H, PÓS-MERGE VERDE e a fase seguinte (9101, 9102)",
+  "modo": "forge",
+  "pr": { "isDraft": true, "base": "main", "posMerge": "verde", "headMuda": false },
+  "comentarios": [
+    { "corpo": "VEREDITO: REPROVADO\nHEAD: @P1\nEXECUTOR: .forge/resultados/@P1-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 4/5\nFALHAS (todas, numeradas): 1. C2 — falha — tests/critico/v-99-r0/c2.test.mjs\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" },
+    { "corpo": "CHECK-TICKET: VERDE @P1 @SHA256" },
+    { "corpo": "VEREDITO: APROVADO\nHEAD: @H\nEXECUTOR: .forge/resultados/@H-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 5/5\nFALHAS (todas, numeradas): nenhuma\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" },
+    { "corpo": "CHECK-TICKET: VERDE @H @SHA256" }
+  ],
+  "esperado": { "codigo": 0, "recusa": false, "pr_merge": 1, "merges": 1, "pr_ready": true, "regressao": 0, "pos_merge_verde": true, "fase": [9101, 9102] }
+}
