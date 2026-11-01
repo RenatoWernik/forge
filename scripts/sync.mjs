@@ -23,6 +23,25 @@ const READER = /^(<script type="module">\n)[\s\S]*?\n(\/\/ The page code\.)/m;
 const collapse = (text) => text.replace(READER, '$1{{PAINEL_LEITOR}}\n$2');
 const split = (text) => (text ? text.replace(/\n$/, '').split('\n') : []);
 
+// The Learned rules block that .claude/learn.mjs readout writes into CLAUDE.md and AGENTS.md (title, marker lines, rules) is project data:
+// it never travels into a template. Only these two files carry it; check.cjs and learnings.cjs hold the markers in their code.
+// Returns the text without the block (and the blank lines around it), or null when a marker has no pair.
+const LEARNED = { files: ['CLAUDE.md', 'AGENTS.md'], title: '## Learned rules', start: '<!-- forge:learnings:start -->', end: '<!-- forge:learnings:end -->' };
+function unlearn(rel, text) {
+  if (!LEARNED.files.includes(rel)) return text;
+  const lines = split(text);
+  const at = (marker) => lines.flatMap((l, i) => (l.trim() === marker ? [i] : []));
+  const [s, e] = [at(LEARNED.start), at(LEARNED.end)];
+  if (!s.length && !e.length) return text;
+  if (s.length !== 1 || e.length !== 1 || e[0] < s[0]) return null;
+  const from = lines[s[0] - 1] === '' && lines[s[0] - 2] === LEARNED.title ? s[0] - 2 : s[0];
+  const before = lines.slice(0, from), after = lines.slice(e[0] + 1);
+  while (before.at(-1) === '') before.pop();
+  while (after[0] === '') after.shift();
+  const out = [...before, ...(before.length && after.length ? [''] : []), ...after];
+  return out.length ? out.join('\n') + '\n' : '';
+}
+
 const filesOf = async (root) => (await readdir(root, { withFileTypes: true, recursive: true })).filter((e) => e.isFile()).map((e) => relative(root, join(e.parentPath, e.name)).split('\\').join('/')).sort();
 
 // A template line becomes a regex whose groups are its markers; the same line, filled in, yields the marker values.
@@ -202,7 +221,7 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
     // private values that are also everyday text of the templates: the word alone cannot tell the name from the template text
     const plain = Object.values(templates).join('\n').replace(/\{\{[\w.]+\}\}/g, '\0');
     const common = new Set(PRIVATE.filter((n) => values[n]?.length >= 3 && new RegExp(bounded(values[n]), 'u').test(plain)));
-    const files = [], missing = [], flagged = [];
+    const files = [], missing = [], flagged = [], broken = [];
     const stage = async (pkgRel, a, b) => { // the patch is written against the package root: a/<path> and b/<path>
       for (const [side, text] of [['a', a], ['b', b]]) {
         await mkdir(dirname(join(work, side, pkgRel)), { recursive: true });
@@ -213,6 +232,8 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
     for (const [rel, tText] of Object.entries(templates)) {
       let pText;
       try { pText = collapse(await readText(join(projectDir, rel))); } catch { missing.push(rel); continue; }
+      pText = unlearn(rel, pText);
+      if (pText === null) { broken.push(rel); continue; }
       if (pText === R[rel]) continue;
       const [tl, pl] = [split(tText), split(pText)];
       const out = [];
@@ -244,7 +265,7 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
     const patch = files.length ? git(['diff', '--no-index', '--no-color', '--no-prefix', '--', 'a', 'b'], work) : '';
     const leaks = findLeaks(patch, inferred, ['developer', 'developerUi', 'critic', 'tester', 'aux'].map((r) => values[r]), [...common].map((n) => values[n]), projectDir);
     for (const f of flagged) if (!leaks.some((l) => l.file === f.file && l.line === f.line)) leaks.push(f);
-    return { patch, files, missing, leaks };
+    return { patch, files, missing, leaks, broken };
   } finally {
     await rm(work, { recursive: true, force: true });
   }
@@ -254,7 +275,7 @@ const PKG = fileURLToPath(new URL('../', import.meta.url));
 const USAGE = `usage: node sync.mjs --project <folder of the generated project> [--package <forge folder>] [--answers <file.json>] [--out <patch file>]
        Prints a patch that git apply accepts at the root of <package> (run it there, after the user says yes): the templates and the copied scripts.
        Also lists, on stderr, the entries of learnings/ with SCOPE: package (the section "learnings (scope package):").
-       Nothing is applied and neither folder is modified. Exit 0: patch ready (or nothing to sync); 3: the patch may carry project data; 2: error.`;
+       Nothing is applied and neither folder is modified. Exit 0: patch ready (or nothing to sync); 3: the patch may carry project data, or a Learned rules block of CLAUDE.md/AGENTS.md has a marker without its pair (no patch); 2: error.`;
 
 export async function main(argv, write = (s) => process.stdout.write(s), warn = console.error) {
   let v;
@@ -268,7 +289,11 @@ export async function main(argv, write = (s) => process.stdout.write(s), warn = 
   try {
     const answers = v.answers ? JSON.parse(await readFile(v.answers, 'utf8')) : undefined;
     const [project, pkg] = [resolve(v.project), resolve(v.package ?? PKG)];
-    const { patch, files, missing, leaks } = await sync(project, pkg, { answers });
+    const { patch, files, missing, leaks, broken } = await sync(project, pkg, { answers });
+    if (broken.length) { // a marker of the Learned rules block without its pair: what the block holds is unknown, so no patch at all
+      for (const f of broken) warn(`${f}: the Learned rules block has a start or end marker without its pair (${LEARNED.start} ... ${LEARNED.end}); fix the markers and run the sync again, no patch written`);
+      return 3;
+    }
     warn(`forge sync: ${files.length} file(s) differ from the templates${files.length ? `: ${files.join(', ')}` : ''}`);
     if (missing.length) warn(`not in the project (skipped): ${missing.join(', ')}`);
     const lessons = await packageLessons(project, pkg);
