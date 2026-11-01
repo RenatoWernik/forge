@@ -126,6 +126,21 @@ async function chk(name, f) {
     await chk('Spec-Kit: .specify/ and the /speckit-* skills installed', () => has('.specify/memory/constitution.md') && ['constitution', 'specify', 'clarify', 'plan', 'tasks', 'analyze', 'converge'].every(n => has('.claude/skills/speckit-' + n, 'SKILL.md')))
     await chk('Matt Pocock: /setup done (docs/agents/ and an "## Agent skills" block in CLAUDE.md)', () => has('docs/agents/issue-tracker.md') && fs.readFileSync('CLAUDE.md', 'utf8').includes('## Agent skills'))
     await chk('Graphify: post-commit and post-checkout hooks installed', () => { const s = out('graphify', ['hook', 'status']); return s.includes('post-commit: installed') && s.includes('post-checkout: installed') })
+    // freshness: the commit the graph was built at is the head of the seal graph.mjs writes after each graphify update (forge-fresh.json) or, without a seal, built_at_commit of graph.json (graphify leaves graph.json untouched when the code did not change); only an exact match with HEAD is fresh. This line never rebuilds the graph.
+    let fresh = ''
+    {
+      const r = sh('git', ['rev-parse', '--verify', '-q', 'HEAD']), head = r.status === 0 ? r.stdout.trim() : ''
+      let built, readable = true
+      let seal = ''
+      try { const s = JSON.parse(fs.readFileSync(path.join('graphify-out', 'forge-fresh.json'), 'utf8').replace(/^\uFEFF/, '')); if (s && typeof s.head === 'string') seal = s.head } catch (e) {} // a missing or unreadable seal falls back to built_at_commit
+      if (!has('graphify-out', 'graph.json')) fresh = '(missing: run node .claude/graph.mjs update)'
+      else {
+        try { const g = JSON.parse(fs.readFileSync(path.join('graphify-out', 'graph.json'), 'utf8').replace(/^﻿/, '')); if (!g || typeof g !== 'object' || Array.isArray(g)) throw new Error('not an object'); built = typeof g.built_at_commit === 'string' ? g.built_at_commit : '' } catch (e) { readable = false }
+        const at = seal || built
+        fresh = !readable ? '(unreadable)' : !head ? '(no commit yet)' : at === head ? '' : '(stale: built at ' + (at || 'no commit') + ', HEAD is ' + head + '; run node .claude/graph.mjs update)'
+      }
+      await chk('Graphify: graph.json built at HEAD' + (fresh ? ' ' + fresh : ''), () => !fresh || fresh === '(no commit yet)')
+    }
     await chk('git: repository and .gitignore with .gauntlet/ and graphify-out/', () => { const g = fs.readFileSync('.gitignore', 'utf8').split(/\r?\n/); return has('.git') && g.includes('.gauntlet/') && g.includes('graphify-out/') })
     // protection hooks: "installed" means an entry of the script is in the project's .claude/settings.json (not only in the answers); the script file must be there too
     const HOOKS = { killByName: 'forge-matar-por-nome.mjs', backgroundTests: 'forge-testes-em-primeiro-plano.mjs', idleWatch: 'forge-vigia-de-agentes.mjs' }
