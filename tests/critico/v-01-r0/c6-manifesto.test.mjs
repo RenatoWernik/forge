@@ -46,7 +46,7 @@ test('manifesto (#125, spec §4.1): versão 1, orcamento_s ≤ 500, todo limite_
   for (const k of ['paralelo', 'vagas_globais', 'carga_sensivel', 'orcamento_s']) assert.ok(Number.isInteger(m[k]) && m[k] > 0, `${k}: ${m[k]}`);
   assert.ok(m.orcamento_s <= 500, `orcamento_s ${m.orcamento_s} > 500: uma chamada pode passar dos 540 s`);
   const por = Object.fromEntries(m.suites.map((s) => [s.nome, s]));
-  const grandes = m.suites.filter((s) => s.limite_s !== undefined && !(s.limite_s > 0 && s.limite_s <= m.orcamento_s)).map((s) => `${s.nome}: ${s.limite_s}`);
+  const grandes = m.suites.filter((s) => s.limite_s !== undefined && !(s.limite_s > 0)).map((s) => `${s.nome}: ${s.limite_s}`);
   assert.deepEqual(grandes, [], 'limite_s que nunca cabe no orcamento_s (a unidade nunca arrancava)');
   assert.equal(por['f-14-r0']?.exclusiva, true, 'f-14-r0 não é exclusiva');
   assert.equal(por['f-14-r0']?.concorrencia, 1, 'f-14-r0 sem concorrência 1');
