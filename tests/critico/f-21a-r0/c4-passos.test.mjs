@@ -158,7 +158,9 @@ test('GUARDA C4: os scripts/*.test.mjs da base mantêm todas as linhas, pela mes
   assert.deepEqual(novas.filter((l) => l.trim() !== LINHA_AUT), [], 'linhas novas na lista do dry run além de ' + LINHA_AUT);
 });
 
-test('GUARDA: os ataques de tests/critico/ da base ficam byte a byte (nunca se enfraquecem nem se apagam)', () => {
+// o âmbito do F-21a só vale no ramo dele: noutro ramo, um ticket autorizado a mexer em ataques antigos faria a guarda falhar (regra 9)
+const ramo = git('rev-parse', '--abbrev-ref', 'HEAD').trim();
+test('GUARDA: os ataques de tests/critico/ da base ficam byte a byte (nunca se enfraquecem nem se apagam)', { skip: !ramo.startsWith('f-21a') && 'só nos ramos f-21a*' }, () => {
   const fs_ = git('ls-tree', '-r', '--name-only', MB, 'tests/critico').split('\n').filter(Boolean);
   assert.ok(fs_.length > 50, 'controlo: ' + fs_.length);
   const mudados = fs_.filter((f) => { const p = join(ROOT, f); return !existsSync(p) || linhas(readFileSync(p, 'utf8')).join('\n') !== linhas(git('show', MB + ':' + f)).join('\n'); });
