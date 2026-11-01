@@ -63,6 +63,24 @@ test('estadoSuite: o pior das unidades; «em_curso» enquanto faltar alguma por 
   assert.equal(estadoSuite(['pass', 'erro'], false), 'erro');
 });
 
+// um bloco que não cobre um teste do ficheiro deixa-o por correr sem ninguém ver (risco 1 da spec): todo `test('título'` estático do ficheiro
+// com blocos tem de casar com algum bloco. O --test-name-pattern casa com o nome do teste e dos pais (a raiz tem nome vazio), por isso
+// um padrão negativo `^(?!...)` casaria tudo e não serve de «resto»: os blocos enumeram-se.
+test('blocos do manifesto: todo o teste do ficheiro casa com algum bloco, e cada bloco casa com algum teste', () => {
+  const raiz = fileURLToPath(new URL('..', import.meta.url));
+  const comBlocos = JSON.parse(readFileSync(join(raiz, 'scripts/suites.json'), 'utf8')).suites.filter((s) => s.blocos);
+  assert.ok(comBlocos.length > 0);
+  for (const s of comBlocos) {
+    for (const [f, blocos] of Object.entries(s.blocos)) {
+      const titulos = [...readFileSync(join(raiz, f), 'utf8').matchAll(/^test\((['"`])(.*?)\1/gm)].map((m) => m[2]);
+      assert.ok(titulos.length > 0, `${f}: nenhum test('...') estático`);
+      const res = blocos.map((b) => new RegExp(b));
+      assert.deepEqual(titulos.filter((t) => !res.some((r) => r.test(t))), [], `${f}: testes fora de todos os blocos`);
+      assert.deepEqual(blocos.filter((b, i) => !titulos.some((t) => res[i].test(t))), [], `${f}: blocos que não casam com nenhum teste`);
+    }
+  }
+});
+
 const executor = (raiz, ...args) => {
   const t = tmp();
   return spawnSync(process.execPath, [EXECUTOR, ...args, '--raiz', raiz], { cwd: raiz, encoding: 'utf8', timeout: 120000, env: { ...process.env, TEMP: t, TMP: t, TMPDIR: t } });
