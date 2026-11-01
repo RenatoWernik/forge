@@ -178,7 +178,7 @@ function lerManifesto(raiz) {
 // a duração (s) de cada unidade no último resultado com o mesmo manifesto; as unidades sem medida contam pelo limite_s (o pior caso)
 function duracoesAnteriores(pasta, hash) {
   let melhor = null;
-  const recentes = (existsSync(pasta) ? readdirSync(pasta) : []).filter((n) => n.endsWith('.json'))
+  const recentes = (existsSync(pasta) ? readdirSync(pasta) : []).filter((n) => n.endsWith('.json') || n.endsWith('.json.ant')) // .ant: o resultado que uma corrida nova da mesma árvore substituiu
     .map((n) => ({ n, t: statSync(join(pasta, n)).mtimeMs })).sort((a, b) => b.t - a.t).slice(0, 5); // só os 5 mais recentes: a pasta cresce com cada sha
   for (const { n } of recentes) {
     const r = lerJsonSeguro(join(pasta, n));
@@ -257,7 +257,7 @@ async function chamada(argv, saida) {
     try {
       motor = motorVivo(motorFicheiro);
       if (!motor) {
-        if (!o.continuar) rm(c.ficheiro); // uma corrida nova não herda o resultado antigo
+        if (!o.continuar) { try { renameSync(c.ficheiro, `${c.ficheiro}.ant`); } catch { /* ainda não havia */ } } // uma corrida nova não herda o resultado antigo, mas o motor aproveita as durações dele
         const log = openSync(join(c.motorDir, `${marca}.log`), 'a');
         // o cwd do motor é a pasta deste script: uma pasta de teste apagada pelo utilizador nunca fica presa ao processo
         const p = spawn(process.execPath, [fileURLToPath(import.meta.url), ...argv, '--raiz', raiz, '--motor-interno', c.arvore], {
