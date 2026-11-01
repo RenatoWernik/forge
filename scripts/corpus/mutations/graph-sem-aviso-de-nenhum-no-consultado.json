@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "if (GRAPH && !seen.length) log(",
+  "replace": "if (false && !seen.length) log(",
+  "line": "graph: build: each result has graphNodes, the union of the rounds without repeats (a missing graphNodes counts as [], also for a piece blocked by the Round -1), the schema requires an array of strings, the critic never gets them, and with args.graph a round without a node logs WARNING <id> r<N>: the developer consulted no graph node (none without args.graph)"
+}

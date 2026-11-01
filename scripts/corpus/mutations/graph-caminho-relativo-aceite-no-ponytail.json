@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-ponytail.js",
+  "find": "typeof GRAPH === 'string' && /^(?:[A-Za-z]:[\\\\/]|\\/)/.test(GRAPH)",
+  "replace": "typeof GRAPH === 'string'",
+  "line": "graph: with args.graph (an absolute path of graph.json) a piece of gauntlet-build and gauntlet-attacks or a unit of gauntlet-ponytail without affected {nodes: [strings], files: [strings]} is refused with incomplete args naming it and affected, and so is a relative args.graph, before any agent; without args.graph nothing is refused"
+}

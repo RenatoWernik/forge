@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-ponytail.js",
+  "find": ": 'No graph for this run.'",
+  "replace": ": ''",
+  "line": "graph: with args.graph the prompts of the developer and critic of gauntlet-build, of the Round -1 critic and of the developer and critic of gauntlet-ponytail carry --graph \"<args.graph>\" and the nodes and files of the piece; without args.graph they say No graph for this run."
+}

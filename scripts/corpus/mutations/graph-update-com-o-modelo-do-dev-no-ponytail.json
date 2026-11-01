@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-ponytail.js",
+  "find": "label: 'graph:update', phase: 'Panel', model: R.aux.model, effort: R.aux.effort",
+  "replace": "label: 'graph:update', phase: 'Panel', model: R.developer.model, effort: R.developer.effort",
+  "line": "graph: gauntlet-build, gauntlet-batch and gauntlet-ponytail make one graph:update agent() per run, the first call, with the aux model and effort and node \"<root>/.claude/graph.mjs\" update, run in the foreground with the last line as the answer; gauntlet-attacks makes none"
+}
