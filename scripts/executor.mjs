@@ -219,7 +219,8 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
   const grava = (f, dados) => { writeFileSync(`${f}.tmp`, JSON.stringify(dados, null, 2)); renameSync(`${f}.tmp`, f); };
   const escreve = (completo) => grava(ficheiro, monta(completo));
   // o resultado da fase 1 que os doLote da fase 2 leem: fica como estava quando a fase 1 acabou, sem a fase 2 a mexer-lhe
-  const fase1 = join(pasta, `${marca}.fase1.json`);
+  // (fora de .forge/resultados/: ali só fica um JSON por passe)
+  const fase1 = join(raiz, '.forge', 'lote', `${marca}.fase1.json`);
 
   const vagas = new Vagas(m.vagas_globais, m.carga_sensivel);
   const raizTmp = mkdtempSync(join(tmpdir(), 'forge-exec-'));
@@ -313,7 +314,7 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
   await roda(fila);
   // fase 2 (spec §4.4): com a fase 1 inteira feita, os testes que saltaram com o motivo do lote voltam a correr, sozinhos, a ler o resultado dela
   if (plano.every((u) => feitas.has(u.chave))) {
-    if (!(o.continuar && existsSync(fase1) && JSON.parse(readFileSync(fase1, 'utf8')).sha === sha)) grava(fase1, monta(true));
+    if (!(o.continuar && existsSync(fase1))) { mkdirSync(join(raiz, '.forge', 'lote'), { recursive: true }); grava(fase1, monta(true)); }
     await roda(pendentesF2().map((u, i) => {
       const f = feitas.get(u.chave), nomes = f.skips.filter((s) => s.motivo === MOTIVO_LOTE).map((s) => s.teste.replaceAll('\\#', '#'));
       return { suite: { ...u.suite, sensivel_ao_tempo: false, exclusiva: false, limite_s: Math.min(u.suite.limite_s, FASE2_LIMITE_S) },
