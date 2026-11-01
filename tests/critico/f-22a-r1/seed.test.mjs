@@ -9,6 +9,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { applySeed } from '../../../scripts/corpus-seed.mjs';
 import { scaffold } from '../../../scripts/scaffold.mjs';
+import { translatePt } from '../f-22a-r0/helpers.mjs';
+const PROSE = ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', '.checkpoints/README.md'];
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const MUTATIONS = join(ROOT, 'scripts/corpus/mutations');
@@ -77,17 +79,40 @@ test('seed mal formado é recusado (files vazio, conteúdo que não é texto, co
   }
 });
 
-test('sem seed nada muda: applySeed(undefined) é um no-op, e as mutações antigas continuam byte a byte sem o campo', () => {
+// o comportamento, não o histórico git: vale na main e em qualquer ramo
+const arvore = (d, rel = '') => readdirSync(join(d, rel), { withFileTypes: true }).flatMap((e) => {
+  const p = rel ? rel + '/' + e.name : e.name;
+  return e.isDirectory() ? (e.name === '.git' ? [[p + '/', '']] : arvore(d, p)) : [[p, readFileSync(join(d, p), 'utf8')]];
+}).sort(([a], [b]) => (a < b ? -1 : 1));
+
+test('sem seed nada muda: applySeed(undefined) é um no-op, e cada mutação sem seed dá o mesmo conteúdo que o find/replace simples', async () => {
   const d = fresh();
   applySeed(d, undefined);
   assert.deepEqual(readdirSync(d), []);
-  const base = git(ROOT, 'merge-base', 'HEAD', 'origin/main').stdout.trim();
-  const old = git(ROOT, 'ls-tree', '--name-only', base, 'scripts/corpus/mutations/').stdout.split('\n').filter(Boolean);
-  assert.ok(old.length >= 40, 'mutações antigas: ' + old.length);
-  for (const f of old) {
-    const antes = git(ROOT, 'show', base + ':' + f).stdout;
-    assert.equal(readFileSync(join(ROOT, f), 'utf8'), antes, f);
-    assert.equal('seed' in JSON.parse(antes.replace(/^﻿/, '')), false, f);
+  const semSeed = readdirSync(MUTATIONS).filter((f) => f.endsWith('.json'))
+    .map((f) => ({ f, ...JSON.parse(readFileSync(join(MUTATIONS, f), 'utf8').replace(/^﻿/, '')) })).filter((m) => !('seed' in m));
+  assert.ok(semSeed.length >= 40, 'mutações sem seed: ' + semSeed.length);
+  const bases = new Map(); // um projeto gerado por base
+  for (const m of semSeed) {
+    if (!bases.has(m.base)) {
+      const proj = join(WORK, 'base-' + m.base);
+      await scaffold(JSON.parse(readFileSync(join(ROOT, 'scripts/corpus/answers', m.base + '.json'), 'utf8').replace(/^﻿/, '')), { dest: proj });
+      if (/^pt/i.test(JSON.parse(readFileSync(join(proj, '.claude/forge.json'), 'utf8')).langTag)) { // o mesmo passo de tradução do corpus.test.mjs
+        for (const rel of [...PROSE, ...readdirSync(join(proj, '.claude/briefs')).map((b) => '.claude/briefs/' + b)]) writeFileSync(join(proj, rel), translatePt(readFileSync(join(proj, rel), 'utf8')));
+      }
+      bases.set(m.base, proj);
+    }
+    const simples = join(WORK, 'simples-' + m.f), runner = join(WORK, 'runner-' + m.f);
+    cpSync(bases.get(m.base), simples, { recursive: true });
+    cpSync(bases.get(m.base), runner, { recursive: true });
+    const antes = readFileSync(join(simples, m.file), 'utf8');
+    assert.ok(antes.includes(m.find), `${m.f}: o texto a procurar não existe em ${m.file}`);
+    writeFileSync(join(simples, m.file), antes.replaceAll(m.find, m.replace)); // o replaceIn antigo
+    applySeed(runner, m.seed); // o passo novo do runner, antes do find/replace
+    writeFileSync(join(runner, m.file), readFileSync(join(runner, m.file), 'utf8').replaceAll(m.find, m.replace));
+    assert.deepEqual(arvore(runner), arvore(simples), `${m.f}: o runner novo deixou a cópia diferente do find/replace simples`);
+    rmSync(simples, { recursive: true, force: true });
+    rmSync(runner, { recursive: true, force: true });
   }
 });
 
