@@ -30,7 +30,7 @@ This project runs on a fixed framework: the ticket as the contract, gauntlet loo
 
 ## User global rules
 
-The user's `~/.claude/CLAUDE.md` still applies; where it conflicts with this file, this file wins in this project. A global rule the user switches off for this project is recorded here, with the ai-memory page of the decision. Lessons, rules and decisions go to ai-memory (only the orchestrator writes there).
+The user's `~/.claude/CLAUDE.md` still applies; where it conflicts with this file, this file wins in this project. A global rule the user switches off for this project is recorded here, with the ai-memory page of the decision. Lessons go to `learnings/` (via `/forge:learn`, which asks the user's yes for any new rule); decisions go to ai-memory (only the orchestrator writes there).
 
 Code navigation, by question: relations and callers, `graphify query` and `graphify affected` (when `graphify-out/` exists); a known excerpt, Read with offset and limit; symbols and exact text, Grep.
 
