@@ -3,7 +3,7 @@
 // o início e o fim em .sonda/); cada cenário tem um TEMP privado, por isso as vagas da máquina ficam intactas. Reutiliza o arnês dos ataques.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FIXTURES, correr, esperaAte, eventos, gitOk, inicios, intervalos, lerJson, limpa, mataArvore, registaPid, resultados, saida, sobreposicaoMax,
   tempPrivado, tmp, umResultado, validaResultado, vivo } from '../tests/critico/v-01-r0/helpers.mjs';
@@ -114,6 +114,18 @@ test('C10: um motor por árvore: duas chamadas --todas em simultâneo dão um s�
   assert.ok(!existsSync(join(d, '.forge', 'motor', `${resultados(d)[0].nome.replace('.json', '')}.lock`)), 'o lock ficou para trás');
   for (const u of feitas(d)) assert.equal(inicios(d, u.ficheiro).length, 1, `${u.ficheiro} correu mais de uma vez`);
   assert.equal(new Set(feitas(d).map((u) => u.estado)).size, 1);
+});
+
+test('o motor sai sozinho e mata a sua árvore quando o ficheiro dele desaparece (pasta apagada)', { timeout: 60000 }, async () => {
+  const d = montar('orfao', { paralelo: 2, orcamento_s: 6, suites: [{ nome: 'q', limite_s: 120 }] }, { 'q-1': 100, 'q-2': 100 });
+  const r = await correr(d, ['--todas'], { env: tempPrivado(), limite_ms: 30000 });
+  const [motor] = motores(d);
+  assert.equal(r.status, 3, saida(r));
+  assert.ok(vivo(motor.pid));
+  const unidades = inicios(d).map((e) => e.ppid);
+  assert.equal(unidades.length, 2);
+  rmSync(join(d, '.forge', 'motor'), { recursive: true, force: true });
+  assert.ok(await esperaAte(() => !vivo(motor.pid) && unidades.every((p) => !vivo(p)), 20000), 'o motor ou as unidades dele ficaram vivos');
 });
 
 test('classe EPERM: 3 executores a tomar e largar vagas em ciclo não têm erro fatal nem passam de vagas_globais', { timeout: 150000 }, async () => {
