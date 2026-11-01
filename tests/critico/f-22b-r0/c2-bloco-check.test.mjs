@@ -4,9 +4,9 @@
 // Oráculos: mudar à mão uma linha do bloco dá FAIL e repor com o readout dá ok; o registo que avança sem readout dá FAIL; sem alarme falso.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, appendFileSync, readdirSync, readFileSync } from 'node:fs';
+import { writeFileSync, appendFileSync, readdirSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, projeto, check, apaga, ficheiro, out10, registo, learn, ler, esperaOk, esperaLinha, blocoDe, L_BLOCO, INI, FIM, CAB, ROD, SECAO } from './helpers.mjs';
+import { ROOT, projeto, check, linha, apaga, ficheiro, out10, registo, learn, ler, esperaOk, esperaLinha, blocoDe, L_BLOCO, INI, FIM, CAB, ROD, SECAO } from './helpers.mjs';
 import { R3, G3, EXTRA } from './registos.mjs';
 
 let P;
@@ -28,6 +28,23 @@ test('C2 [ataque]: só com o learnings/README.md e sem bloco, a linha fica ok', 
   esperaOk(check(P), L_BLOCO);
 });
 
+// RESPOSTA 6554223028, ponto 2: a linha só se aplica a projetos com .claude/learn.mjs; nesses, regras ativas sem bloco dão FAIL; sem learn.mjs, ok com «n/a»
+test('C2 [ataque]: com .claude/learn.mjs, um registo com regras ativas e sem bloco em nenhum dos dois ficheiros dá FAIL', () => {
+  limpo(R3);
+  assert.ok(existsSync(join(P, '.claude/learn.mjs')), 'o projeto gerado não tem .claude/learn.mjs');
+  esperaLinha(check(P), L_BLOCO, 'FAIL');
+});
+
+test('C2 [ataque]: sem .claude/learn.mjs (um projeto de antes do F-22b), o mesmo registo sem bloco dá ok com «n/a»', async () => {
+  const Q = await projeto();
+  try {
+    registo(Q, R3);
+    rmSync(join(Q, '.claude/learn.mjs'), { force: true });
+    const r = check(Q);
+    esperaLinha(r, L_BLOCO, 'ok');
+    assert.ok(linha(r, L_BLOCO).includes('n/a'), 'a linha não diz «n/a»:\n' + linha(r, L_BLOCO));
+  } finally { apaga(Q); }
+});
 test('C2 [ataque]: mudar à mão uma linha do bloco (nos dois ficheiros) dá FAIL; repor com o readout dá ok', () => {
   limpo(R3);
   readout();

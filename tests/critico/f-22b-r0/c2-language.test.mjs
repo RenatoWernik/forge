@@ -2,8 +2,8 @@
 // RESPOSTA 6552729846 (prevalece sobre o corpo): o oráculo é uma mutação do PROJETO, não do check.cjs, com dois casos:
 //   (a) caso limpo: texto em PT dentro do bloco gerado de learnings, num projeto EN, dá ok na linha `language`;
 //   (b) mutação: o mesmo texto PT logo fora do bloco dá FAIL nessa linha.
-// «Logo fora» aqui é lido nas duas posições que estão fora do bloco em qualquer leitura (fora dos marcadores E fora da secção): imediatamente antes
-// do cabeçalho `## Learned rules` e numa secção nova imediatamente depois do marcador de fim. O texto PT tem mais de 30 palavras, para ser pontuado.
+// «Logo fora» (RESPOSTA 6554223028, ponto 3: o salto é delimitado pelos marcadores): imediatamente antes do cabeçalho `## Learned rules`, numa
+// secção nova logo depois do marcador de fim e logo depois do marcador de fim sem cabeçalho novo. O texto PT tem mais de 30 palavras, para ser pontuado.
 // (b) fica verde já na base (sem salto nenhum o PT falha sempre): é a guarda de que o salto não engole o que está à volta.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -65,4 +65,10 @@ test('C2 (b) GUARDA: o mesmo PT numa secção logo DEPOIS do marcador de fim dá
   registo(P, REG);
   for (const f of ['CLAUDE.md', 'AGENTS.md']) writeFileSync(join(P, f), ORIG[f].replace(/\s+$/, '') + '\n\n' + BLOCO + (f === 'AGENTS.md' ? '\n## Notas\n\n' + PROSA + '\n' : ''));
   langFail(check(P), 'AGENTS.md');
+});
+// RESPOSTA 6554223028, ponto 3: o salto é delimitado pelos marcadores, não pelo cabeçalho
+test('C2 (b) [ataque]: o mesmo PT logo DEPOIS do marcador de fim, sem cabeçalho novo (ainda na secção `## Learned rules`), dá FAIL (CLAUDE.md)', () => {
+  registo(P, REG);
+  for (const f of ['CLAUDE.md', 'AGENTS.md']) writeFileSync(join(P, f), ORIG[f].replace(/\s+$/, '') + '\n\n' + BLOCO + (f === 'CLAUDE.md' ? '\n' + PROSA + '\n' : ''));
+  langFail(check(P), 'CLAUDE.md');
 });

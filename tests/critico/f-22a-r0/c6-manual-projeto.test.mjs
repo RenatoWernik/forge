@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { builtinModules } from 'node:module';
+import { soNoTicket } from '../_comum/ambito.mjs';
 import { ROOT, BASE, MODULO, BLOCO, L_FORMA, L_CRESCE, SEM_ENTRADAS, SEM_HISTORIA, FORCA, loadScaffold, translatePt, tmp, apaga, check, linha, texto } from './helpers.mjs';
 
 const lixo = [];
@@ -115,7 +116,8 @@ test('C6 o dry run do scaffold lista .claude/learnings.cjs e learnings/README.md
 // GUARDAS
 const gitR = (...a) => { const r = spawnSync('git', a, { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); if (r.status !== 0) throw new Error('git ' + a.join(' ') + ': ' + r.stderr); return r.stdout; };
 const linhas = (s) => LF(s).split('\n');
-test('GUARDA C6: scripts/scaffold.test.mjs mantém todas as linhas da base pela mesma ordem, e as únicas novas são as duas da lista do dry run', () => {
+test('ÂMBITO: GUARDA C6: scripts/scaffold.test.mjs mantém todas as linhas da base pela mesma ordem, e as únicas novas são as duas da lista do dry run', (t) => {
+  if (soNoTicket(t, 'f-22a')) return; // regra 9 (autorizado na #76, 6554223028)
   const antes = linhas(gitR('show', gitR('merge-base', 'HEAD', 'origin/main').trim() + ':scripts/scaffold.test.mjs')); // a main atual, não a BASE: o F-25 já lá pôs a linha do painel-gravar
   const agora = linhas(readFileSync(join(ROOT, 'scripts/scaffold.test.mjs'), 'utf8'));
   let j = 0;

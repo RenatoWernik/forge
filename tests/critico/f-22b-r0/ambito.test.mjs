@@ -27,7 +27,9 @@ test('ÂMBITO: nenhum ataque de outro ticket (tests/critico/* fora de f-22b-r0) 
   if (soNoTicket(t, 'f-22b')) return;
   const b = base();
   if (!b) return t.skip('sem origin/main');
-  const mudou = gitRoot('diff', '--name-only', b, '--', 'tests/critico').split(/\r?\n/).filter(Boolean).filter((f) => !f.startsWith('tests/critico/f-22b-r0/'));
+  // a única exceção autorizada (#76, 6554223028): o skip da regra 9 na guarda de âmbito do F-22a
+  const AUTORIZADOS = ['tests/critico/f-22a-r0/c6-manual-projeto.test.mjs'];
+  const mudou = gitRoot('diff', '--name-only', b, '--', 'tests/critico').split(/\r?\n/).filter(Boolean).filter((f) => !f.startsWith('tests/critico/f-22b-r0/') && !AUTORIZADOS.includes(f));
   assert.deepEqual(mudou, [], 'ataques antigos alterados');
 });
 
