@@ -1,0 +1,162 @@
+// Ronda −1 do F-22a (#75): utilitários partilhados pelos ataques. Só biblioteca padrão.
+// Nunca toca na config real: HOME, USERPROFILE, CLAUDE_CONFIG_DIR, LOCALAPPDATA, APPDATA e XDG_* vão para pastas temporárias, e o git
+// corre sem config de sistema nem global (GIT_CONFIG_NOSYSTEM, GIT_CONFIG_GLOBAL num ficheiro vazio). Sem rede e sem sessões claude.
+//
+// LEITURA DO CONTRATO (corpo da #75, sem comentários à data, 2026-10-31): os textos abaixo são LITERAIS, copiados do corpo da issue.
+// O relógio é sempre fixado com --today (C5), para que os prazos (REVIEW-BY) sejam deterministas; na base o --today é ignorado.
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import assert from 'node:assert/strict';
+import { ROOT, generate, ANSWERS, loadScaffold, translatePt, lineNames } from '../f-01-r0/helpers.mjs';
+
+export { ROOT, generate, ANSWERS, loadScaffold, translatePt, lineNames };
+export const BASE = '@@SHA_F22A@@'; // a main antes do F-22a
+export const MODULO = join(ROOT, 'templates/.claude/learnings.cjs');
+
+// C1 e C4: os nomes das duas linhas novas; C1 e C4: os detalhes do ok
+export const L_FORMA = 'learnings: every entry of learnings/ is well formed';
+export const L_CRESCE = 'learnings: learnings/ only grows (only STATUS lines change)';
+export const SEM_ENTRADAS = '(no entries)';
+export const SEM_HISTORIA = '(no history)';
+// C3: a mensagem da subida
+export const SUBIDA = (id, classe, anterior, camada) => `${id} PREVENTION: class ${classe} recurred (${anterior} had ${camada}), the prevention must climb a layer`;
+// C5: a linha do aviso (o hoje e a lista)
+export const AVISO = (hoje) => `warn  learnings: open entries past their REVIEW-BY (today ${hoje}): `;
+export const HOJE = '2026-10-31';
+
+// O formato canónico: campos por esta ordem (APPROVED só com PREVENTION: text) e os enums
+export const CAMPOS = ['DATE', 'TRIGGER', 'DETECTED-BY', 'SYMPTOM', 'CLASS', 'CAUSE', 'CAUSE-OWNER', 'FAILED-LAYER', 'MISSING-CONTEXT', 'PREVENTION', 'PREVENTION-PATH', 'FAILS', 'REGRESSION', 'CLEAN-CASE', 'AREA', 'SCOPE', 'REVIEW-BY', 'APPROVED', 'STATUS'];
+export const OBRIGATORIOS = CAMPOS.filter((c) => c !== 'APPROVED'); // os 18 sempre obrigatórios
+export const ENUMS = {
+  TRIGGER: ['user', 'critic-rejected', 'escape', 'noise', 'hook-blocked', 'incident'],
+  'CAUSE-OWNER': ['spec', 'instruction', 'harness', 'model', 'product'],
+  'FAILED-LAYER': ['contract', 'round-minus-1', 'tdd', 'critic', 'tester', 'check', 'hook', 'orchestrator'],
+  PREVENTION: ['test', 'hook', 'check', 'contract', 'text', 'memory'],
+  FAILS: ['open', 'closed'],
+  SCOPE: ['project', 'package'],
+  STATUS: ['open', 'prevented', 'recurred', 'escalated', 'moot', 'expired'],
+};
+export const FORCA = { test: 1, hook: 2, check: 2, contract: 3, text: 4, memory: 5 }; // 1 é a mais forte
+// C6: o bloco do formato, literal (vai uma só vez para o FRAMEWORK, numa cerca ```text)
+export const BLOCO = `## E-001
+- DATE: 2026-10-31
+- TRIGGER: user | critic-rejected | escape | noise | hook-blocked | incident
+- DETECTED-BY: <who and where, one line>
+- SYMPTOM: <one line>
+- CLASS: <kebab-case slug, the stable key>
+- CAUSE: <one line; look for ours first: spec, instruction, harness, model>
+- CAUSE-OWNER: spec | instruction | harness | model | product
+- FAILED-LAYER: contract | round-minus-1 | tdd | critic | tester | check | hook | orchestrator
+- MISSING-CONTEXT: <one line, or none>
+- PREVENTION: test | hook | check | contract | text | memory
+- PREVENTION-PATH: <path in the repository; for memory, ai-memory:<page path>>
+- FAILS: open | closed
+- REGRESSION: <path of the case that reproduces it, or none>
+- CLEAN-CASE: <path of a clean case the prevention must not flag, or none>
+- AREA: <glob>[, <glob>]
+- SCOPE: project | package
+- REVIEW-BY: 2026-11-14
+- APPROVED: yes, 2026-10-31T10:00:00Z
+- STATUS: open | prevented | recurred | escalated | moot | expired`;
+
+// A árvore de ficheiros falsa que as entradas apontam (criada em cada projeto de teste)
+export const ARVORE = {
+  testPath: 'tests/learn/porta.test.mjs', regress: 'tests/learn/porta-regressao.test.mjs', limpo: 'tests/learn/porta-limpo.test.mjs',
+  hookPath: '.claude/hooks/porta.mjs', checkPath: 'scripts/porta-check.mjs', contrato: 'docs/contrato-porta.md',
+};
+
+// Uma entrada válida por camada; `over` troca valores, FALTA tira o campo, `ordem` troca a ordem
+export const FALTA = Symbol('falta');
+const COMUM = {
+  DATE: '2026-10-20', TRIGGER: 'critic-rejected', 'DETECTED-BY': 'critic, round 2 of ticket 7', SYMPTOM: 'the test port collided with a running server',
+  CLASS: 'fixed-test-port', CAUSE: 'the harness picked a fixed port', 'CAUSE-OWNER': 'harness', 'FAILED-LAYER': 'tdd', 'MISSING-CONTEXT': 'none',
+  FAILS: 'closed', AREA: 'tests/**, src/net/*.js', SCOPE: 'project', 'REVIEW-BY': '2026-11-03', STATUS: 'prevented', // REVIEW-BY = DATE + 14
+};
+const CAMADA = {
+  test: { PREVENTION: 'test', 'PREVENTION-PATH': ARVORE.testPath, REGRESSION: ARVORE.regress, 'CLEAN-CASE': ARVORE.limpo },
+  hook: { PREVENTION: 'hook', 'PREVENTION-PATH': ARVORE.hookPath, REGRESSION: ARVORE.regress, 'CLEAN-CASE': ARVORE.limpo },
+  check: { PREVENTION: 'check', 'PREVENTION-PATH': ARVORE.checkPath, REGRESSION: ARVORE.regress, 'CLEAN-CASE': ARVORE.limpo },
+  contract: { PREVENTION: 'contract', 'PREVENTION-PATH': ARVORE.contrato, REGRESSION: 'none', 'CLEAN-CASE': 'none' },
+  text: { PREVENTION: 'text', 'PREVENTION-PATH': 'CLAUDE.md', REGRESSION: 'none', 'CLEAN-CASE': 'none', APPROVED: 'yes, 2026-10-20T10:00:00Z' },
+  memory: { PREVENTION: 'memory', 'PREVENTION-PATH': 'ai-memory:gotchas/fixed-test-port.md', REGRESSION: 'none', 'CLEAN-CASE': 'none' },
+};
+export const id = (n) => 'E-' + String(n).padStart(3, '0');
+export const valores = (camada = 'test', over = {}) => ({ ...COMUM, ...CAMADA[camada], ...over });
+export const entrada = (n, camada = 'test', over = {}, ordem = CAMPOS) => {
+  const v = valores(camada, over);
+  return ['## ' + (typeof n === 'string' ? n : id(n)), ...ordem.filter((c) => c in v && v[c] !== FALTA).map((c) => `- ${c}: ${v[c]}`)].join('\n') + '\n';
+};
+export const ficheiro = (mes, entradas) => `# Learnings ${mes}\n\n` + entradas.join('\n');
+
+export const tmp = (p = 'critico-f22a-') => mkdtempSync(join(tmpdir(), p));
+export const apaga = (p) => { try { rmSync(p, { recursive: true, force: true }); } catch {} };
+export const escreve = (base, rel, texto) => { const f = join(base, rel); mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, texto); return f; };
+
+// O ambiente dos processos filhos: pastas pessoais temporárias, git sem config de sistema nem global, sem NODE_TEST_CONTEXT
+const SB = tmp('critico-f22a-sb-');
+for (const p of ['home', 'localappdata', 'appdata', 'xdgc', 'xdgd', 'cfg']) mkdirSync(join(SB, p), { recursive: true });
+writeFileSync(join(SB, 'gitconfig'), '');
+export const SANDBOX = SB;
+process.on('exit', () => apaga(SB));
+export const ambiente = (extra = {}) => {
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (['NODE_TEST_CONTEXT', 'NODE_OPTIONS'].includes(k.toUpperCase())) delete env[k];
+  return {
+    ...env, HOME: join(SB, 'home'), USERPROFILE: join(SB, 'home'), CLAUDE_CONFIG_DIR: join(SB, 'cfg'), LOCALAPPDATA: join(SB, 'localappdata'), APPDATA: join(SB, 'appdata'),
+    XDG_CONFIG_HOME: join(SB, 'xdgc'), XDG_DATA_HOME: join(SB, 'xdgd'), DISABLE_AUTOUPDATER: '1', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(SB, 'gitconfig'),
+    AI_MEMORY_URL: 'http://127.0.0.1:9', ...extra,
+  };
+};
+
+// Um projeto gerado (inglês, respostas do F-01) com a árvore falsa
+export const projeto = async (over = {}) => {
+  const d = await generate(over);
+  for (const rel of Object.values(ARVORE)) escreve(d, rel, '// critico f-22a: ficheiro da árvore falsa\n');
+  return d;
+};
+export const check = (proj, args = ['--today', HOJE]) => {
+  const r = spawnSync(process.execPath, ['.claude/check.cjs', ...args], { cwd: proj, encoding: 'utf8', env: ambiente(), timeout: 240000 });
+  const out = (r.stdout || '') + (r.stderr || '');
+  return { status: r.status, out, linhas: out.split(/\r?\n/) };
+};
+// Um cenário: learnings/ passa a ter só os ficheiros dados ({ 'AAAA-MM.md': texto }); null apaga a pasta
+export const caso = (proj, ficheiros, args) => {
+  apaga(join(proj, 'learnings'));
+  if (ficheiros) { mkdirSync(join(proj, 'learnings'), { recursive: true }); for (const [n, t] of Object.entries(ficheiros)) escreve(join(proj, 'learnings'), n, t); }
+  return check(proj, args);
+};
+export const git = (cwd, ...a) => {
+  const r = spawnSync('git', ['-c', 'user.name=critico', '-c', 'user.email=critico@example.invalid', '-c', 'commit.gpgsign=false', ...a], { cwd, encoding: 'utf8', env: ambiente() });
+  if (r.status !== 0) throw new Error('git ' + a.join(' ') + ': ' + r.stderr);
+  return r.stdout;
+};
+
+// a linha do check (ok ou FAIL) cujo nome começa pelo prefixo dado
+export const linha = (r, nome) => r.linhas.find((l) => /^(ok {4}|FAIL {2})/.test(l) && l.slice(6).startsWith(nome));
+const fim = (r) => '\n--- saída (fim) ---\n' + r.out.slice(-1800);
+export const esperaFail = (r, nome, ...trechos) => {
+  const l = linha(r, nome);
+  assert.ok(l, `não há a linha «${nome}» no check` + fim(r));
+  assert.ok(l.startsWith('FAIL  '), `a linha «${nome}» devia ser FAIL:\n${l}`);
+  for (const t of trechos) assert.ok(typeof t === 'string' ? l.includes(t) : t.test(l), `o detalhe não nomeia «${t}»:\n${l}`);
+  assert.equal(r.status, 1, 'um FAIL tem de sair com 1' + fim(r));
+};
+// FAIL numa das linhas learnings (C2 e C3 não dizem qual; sem git a linha do C4 fica ok, por isso o FAIL só pode vir da validação)
+export const esperaFailLearnings = (r, ...trechos) => {
+  const ls = r.linhas.filter((l) => /^FAIL {2}learnings: /.test(l));
+  assert.ok(ls.length, 'nenhuma linha «FAIL  learnings: ...» no check' + fim(r));
+  for (const t of trechos) assert.ok(ls.some((l) => (typeof t === 'string' ? l.includes(t) : t.test(l))), `nenhuma linha FAIL learnings nomeia «${t}»:\n${ls.join('\n')}`);
+  assert.equal(r.status, 1, 'um FAIL tem de sair com 1' + fim(r));
+};
+export const esperaOk = (r, nome, exato) => {
+  const l = linha(r, nome);
+  assert.ok(l, `não há a linha «${nome}» no check` + fim(r));
+  if (exato !== undefined) assert.equal(l, 'ok    ' + exato);
+  else assert.ok(l.startsWith('ok    '), `a linha «${nome}» devia ser ok (alarme falso):\n${l}`);
+  assert.deepEqual(r.linhas.filter((x) => /^FAIL {2}/.test(x)), [], 'há FAIL num caso válido' + fim(r));
+  assert.equal(r.status, 0, fim(r));
+  assert.match(r.out, /All ok\./);
+};
+export const texto = (p) => readFileSync(p, 'utf8');
