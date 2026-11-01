@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FIXTURES, correr, esperaAte, eventos, gitOk, inicios, intervalos, lerJson, limpa, mataArvore, registaPid, resultados, saida, sobreposicaoMax,
-  tempPrivado, tmp, umResultado, validaResultado, vivo } from '../tests/critico/v-01-r0/helpers.mjs';
+  tempPrivado, tmp, umResultado, validaResultado, vivo } from './helpers.mjs';
 
 after(limpa);
 
