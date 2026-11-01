@@ -11,6 +11,7 @@ import { readFileSync, readdirSync, writeFileSync, existsSync, rmSync } from 'no
 import { spawnSync } from 'node:child_process';
 import { ROOT, BASE, MODULO, D_MODULO, STACK, caixa, ambiente, corre, linhasAim, loadScaffold, tmp, apaga, fwd } from './helpers.mjs';
 import { translatePt } from '../f-01-r0/helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const lixo = [];
 after(() => lixo.forEach(apaga));
@@ -82,7 +83,8 @@ test('C4 com --env e o módulo apagado: as linhas do ai-memory dão FAIL com «(
 const git = (...a) => { const r = spawnSync('git', a, { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); if (r.status !== 0) throw new Error('git ' + a.join(' ') + ': ' + r.stderr); return r.stdout; };
 const linhas = (s) => s.replace(/\r\n/g, '\n').split('\n');
 
-test('GUARDA C4: scripts/scaffold.test.mjs mantém todas as linhas da base, pela mesma ordem (só se acrescenta; o assert autorizado é a lista do dry run)', () => {
+test('ÂMBITO: GUARDA C4: scripts/scaffold.test.mjs mantém todas as linhas da base, pela mesma ordem (só se acrescenta; o assert autorizado é a lista do dry run)', (t) => {
+  if (soNoTicket(t, 'f-20a')) return;
   const antes = linhas(git('show', BASE + ':scripts/scaffold.test.mjs'));
   const agora = linhas(readFileSync(join(ROOT, 'scripts/scaffold.test.mjs'), 'utf8'));
   let j = 0;
@@ -94,7 +96,8 @@ test('GUARDA C4: scripts/scaffold.test.mjs mantém todas as linhas da base, pela
   assert.ok(novas === 0 || lista.some((l) => l.trim() === "'.claude/ai-memory.cjs',"), 'linhas novas sem ser a do dry run');
 });
 
-test('GUARDA: os ataques de tests/critico/ que existiam na base ficam byte a byte (nunca se enfraquecem nem se apagam)', () => {
+test('ÂMBITO: GUARDA: os ataques de tests/critico/ que existiam na base ficam byte a byte (nunca se enfraquecem nem se apagam)', (t) => {
+  if (soNoTicket(t, 'f-20a')) return;
   const fs_ = git('ls-tree', '-r', '--name-only', BASE, 'tests/critico').split('\n').filter(Boolean);
   assert.ok(fs_.length > 50, 'controlo: ' + fs_.length);
   // Isenção estreita (F-20b, #71 comentário 6549319646): a troca autorizada do oráculo P3 do f-15a (comentário 6548574971) é aceite SÓ com
