@@ -23,7 +23,7 @@ test('regressão [guarda] (build): em 40 cenários ao acaso, o resultado de cada
     assert.equal(ref.err, undefined, `controlo ${i}: a BASE falhou: ` + why(ref));
     const run = await runWf(srcNow('build'), args, fake(f));
     assert.equal(run.err, undefined, `cenário ${i}: a execução parou: ` + why(run));
-    for (const id of ['pa', 'pb'].slice(0, n)) assert.deepEqual(omit(resultOf(run, id), 'graphNodes'), resultOf(ref, id), `cenário ${i} (${mode}, winAt ${f.winAt}, graph ${JSON.stringify(f.graph)?.slice(0, 30)}), peça ${id}`);
+    for (const id of ['pa', 'pb'].slice(0, n)) assert.deepEqual(omit(resultOf(run, id), 'graphNodes'), omit(resultOf(ref, id), 'graphNodes'),`cenário ${i} (${mode}, winAt ${f.winAt}, graph ${JSON.stringify(f.graph)?.slice(0, 30)}), peça ${id}`);
   }
 });
 
