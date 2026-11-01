@@ -83,9 +83,14 @@ class Vagas {
   }
   toma(dir, info) {
     for (let t = 0; t < 2; t++) {
-      try { mkdirSync(dir); writeFileSync(join(dir, 'info.json'), JSON.stringify(info)); this.minhas.add(dir); return true; }
-      catch (e) {
+      try {
+        mkdirSync(dir);
+        try { writeFileSync(join(dir, 'info.json'), JSON.stringify(info)); } catch { rm(dir); return false; } // a pasta desapareceu a meio: tenta-se outra vez
+        this.minhas.add(dir);
+        return true;
+      } catch (e) {
         if (['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) return false; // Windows: a pasta de outro executor está a ser apagada
+        if (e.code === 'ENOENT') { mkdirSync(this.dir, { recursive: true }); continue; }
         if (e.code !== 'EEXIST') throw e;
         if (ocupada(dir)) return false;
         this.recupera(dir);
@@ -285,7 +290,8 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
         if (u.xTomado) vagas.larga([...u.dirs, vagas.slot('x')]);
         continue;
       }
-      const vaga = vagas.tenta(u);
+      let vaga = null;
+      try { vaga = vagas.tenta(u); } catch { /* o sistema de ficheiros das vagas falhou neste passo: um erro a meio da corrida não deita abaixo as unidades que correm */ }
       if (vaga) lanca(u, vaga);
       else if (u.suite.exclusiva) break;
     }
