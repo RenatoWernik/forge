@@ -174,7 +174,7 @@ export async function avancar(argv) {
       sha = ver('mergeCommit').mergeCommit?.oid ?? null;
       if (!sha) spawnSync(process.execPath, ['-e', 'setTimeout(() => {}, 1000)']);
     }
-    if (!sha) throw new Error('o gh não diz o commit squash do merge');
+    if (!SHA.test(sha ?? '')) throw new Error(`o gh não diz o commit squash do merge (${sha})`);
     const { verde, resumo } = posMerge(sha);
     if (!verde) {
       const corpo = `O PR #${o.pr} (https://github.com/${o.repo}/pull/${o.pr}) foi feito merge na ${pr.baseRefName} no commit ${sha} e o pós-merge ficou vermelho.\n\n`
