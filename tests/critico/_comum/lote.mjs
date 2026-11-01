@@ -35,7 +35,7 @@ function falhasDe(unidades) {
 }
 
 // { erro } com o motivo, ou { r } com o resultado agregado das suítes-alvo
-function avalia(dados, suites) {
+function avalia(dados, suites, min) {
   const rev = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: RAIZ, encoding: 'utf8' });
   const sha = rev.status === 0 ? rev.stdout.trim() : null;
   if (dados?.versao !== 1 || !Array.isArray(dados.unidades)) return { erro: 'resultado ilegível (versao 1 com unidades[] esperada)' };
@@ -58,32 +58,35 @@ function avalia(dados, suites) {
   const mas = unidades.filter((u) => u.estado !== 'pass' || u.fail > 0);
   const out = `TAP version 13\n# tests ${pass + fail}\n# pass ${pass}\n# fail ${mas.length ? Math.max(fail, 1) : fail}\n# skipped ${skip}\n`
     + (mas.length ? `${mas.map((u) => `not ok - ${u.ficheiro}: ${u.estado}, fail ${u.fail}`).join('\n')}\n${falhasDe(mas)}\n` : '');
-  if (mas.length) return { erro: `a suíte-alvo falhou no lote:\n${out}`, r: null };
-  return { r: { status: 0, pass, fail, skip, out, stdout: out, stderr: '' } };
+  if (mas.length) return { erro: `a suíte-alvo falhou no lote:\n${out}` };
+  if (pass < min) return { erro: `a suíte-alvo tem ${pass} testes ok, menos do que os ${min} exigidos` };
+  // ms: a soma das durações das unidades, que nunca fica abaixo do relógio de um filho com 2 workers (o f-06 mede o f-02 com ela)
+  return { r: { status: 0, signal: null, pass, fail, skip, ms: Math.round(unidades.reduce((a, u) => a + u.duracao_s, 0) * 1000), out, stdout: out, stderr: '' } };
 }
 
 // o resultado de .forge/resultados/ do mesmo sha e da mesma árvore que cobre as suítes-alvo, ou null
-function reaproveita(suites) {
+function reaproveita(suites, min) {
   const pasta = join(RAIZ, '.forge', 'resultados');
   if (!existsSync(pasta)) return null;
   for (const n of readdirSync(pasta).filter((x) => /-p\d+\.json$/.test(x))) {
-    try { const a = avalia(lerJson(join(pasta, n)), suites); if (a.r) return a.r; } catch { /* ilegível: não serve */ }
+    try { const a = avalia(lerJson(join(pasta, n)), suites, min); if (a.r) return a.r; } catch { /* ilegível: não serve */ }
   }
   return null;
 }
 
-export function doLote(t, alvo, { corre } = {}) {
+// `min`: o mínimo de testes ok da suíte-alvo, para os testes cujo assert de `pass ≥ N` vive num helper que `corre` chama (f-05 a/b/c)
+export function doLote(t, alvo, { corre, min = 0 } = {}) {
   if (process.env.FORGE_LOTE_FASE === '1') { t.skip(MOTIVO); return null; }
   const suites = [alvo].flat();
   const ficheiro = process.env.FORGE_LOTE_RESULTADOS;
   if (ficheiro !== undefined) {
     let dados = null;
     try { dados = lerJson(ficheiro); } catch (e) { throw new Error(`lote: o resultado ${ficheiro} não se lê (${e.code ?? e.message})`); }
-    const a = avalia(dados, suites);
+    const a = avalia(dados, suites, min);
     if (!a.r) throw new Error(`lote: ${a.erro}`);
     return a.r;
   }
-  const r = reaproveita(suites);
+  const r = reaproveita(suites, min);
   if (r) return r;
   if (!corre) throw new Error('lote: sem resultados do lote e sem corre() para correr o filho');
   return corre();

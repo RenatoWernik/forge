@@ -20,6 +20,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT, sandboxEnv, REAL_ENV } from './helpers.mjs';
+import { doLote } from '../_comum/lote.mjs';
 
 // Número de test() de topo por ficheiro em e083b6a
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
@@ -48,8 +49,9 @@ test('regressão: nenhum ficheiro de teste do pacote perde testes', () => {
   }
 });
 
-test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os 139 testes de e083b6a', () => {
-  const r = runTests(['scripts/*.test.mjs']);
+test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os 139 testes de e083b6a', (t) => {
+  const r = doLote(t, 'scripts', { corre: () => runTests(['scripts/*.test.mjs']) });
+  if (!r) return;
   assert.equal(r.status, 0, failures(r));
   assert.equal(r.fail, 0, failures(r));
   assert.ok(r.pass >= 139, 'passaram ' + r.pass);
@@ -81,7 +83,8 @@ test('regressão: as pastas dos ataques já fundidos (f-01, f-02, f-03, f-10) ex
 for (const d of prior()) {
   test(`regressão: ${d} continua verde${d === 'f-02-r0' ? ` e corre em menos de ${F02_S} s` : ''}`, { skip: NESTED_SKIP }, (t) => {
     // o f-12-r0 abre o Chrome e gere o próprio ambiente: não se sobrepõem HOME, USERPROFILE nem TMP
-    const r = runTests([`--test-skip-pattern=${NESTED}`, `tests/critico/${d}/*.test.mjs`], 530000, d === 'f-12-r0' ? REAL_ENV : undefined);
+    const r = doLote(t, d, { corre: () => runTests([`--test-skip-pattern=${NESTED}`, `tests/critico/${d}/*.test.mjs`], 530000, d === 'f-12-r0' ? REAL_ENV : undefined) });
+    if (!r) return;
     t.diagnostic(`${d}: ${Math.round(r.ms / 1000)} s`);
     assert.equal(r.status, 0, failures(r));
     assert.equal(r.fail, 0, failures(r));

@@ -6,6 +6,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, extname, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT, BASE, sandboxEnv, git, api } from './helpers.mjs';
+import { doLote } from '../_comum/lote.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em 4d437e8
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 27, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
@@ -17,9 +18,10 @@ test('regressão: nenhum ficheiro de teste existente perde testes', () => {
   }
 });
 
-test('regressão: existe scripts/mod-painel.test.mjs, e node --test "scripts/*.test.mjs" passa com mais testes do que os 133 de 4d437e8', () => {
+test('regressão: existe scripts/mod-painel.test.mjs, e node --test "scripts/*.test.mjs" passa com mais testes do que os 133 de 4d437e8', (t) => {
   assert.ok(existsSync(join(ROOT, 'scripts/mod-painel.test.mjs')), 'falta scripts/mod-painel.test.mjs (verificação dos critérios 2 a 6)');
-  const r = spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'scripts/*.test.mjs'], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout: 480000 });
+  const r = doLote(t, 'scripts', { corre: () => spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'scripts/*.test.mjs'], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout: 480000 }) });
+  if (!r) return;
   const out = (r.stdout || '') + (r.stderr || '');
   assert.equal(r.status, 0, out.split(/\r?\n/).filter((l) => /^\s*not ok/.test(l)).join('\n') || out.slice(-3000));
   const pass = +(out.match(/^# pass (\d+)/m) || [])[1];
