@@ -33,6 +33,7 @@ function parse(text, file) {
       titled = true
       if (month ? l.trimEnd() === '# Learnings ' + month : /^# Learnings /.test(l)) return
       problems.push(at + 'the first line must be "# Learnings ' + (month || 'YYYY-MM') + '"')
+      if (/^# /.test(l)) return // a wrong title is one problem
     }
     const h = l.match(/^## (E-\d+)\s*$/), f = l.match(/^- ([A-Z][A-Z-]*):[ \t]*(.*?)\s*$/)
     if (h) entries.push(cur = { id: h[1], n: parseInt(h[1].slice(2), 10), file, line: i + 1, fields: [] })

@@ -21,7 +21,7 @@
     "ai-memory": {
       "verifiedWith": "3.2.10",
       "source": "https://github.com/akitaonrails/ai-memory/tree/v3.2.10",
-      "surface": { "skills": [], "commands": ["ai-memory backup", "ai-memory hook", "ai-memory install-mcp", "ai-memory pending-writes", "ai-memory read-page", "ai-memory status"] },
+      "surface": { "skills": [], "commands": ["ai-memory backup", "ai-memory hook", "ai-memory init", "ai-memory install-mcp", "ai-memory mcp-bridge", "ai-memory pending-writes", "ai-memory read-page", "ai-memory serve", "ai-memory status"] },
       "notes": {
         "3.0.0": {
           "requiresBackup": true,

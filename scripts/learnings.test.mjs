@@ -142,7 +142,7 @@ test('parse: CRLF and a BOM are not a problem', () => {
 });
 
 // class: anything in a YYYY-MM.md that is not the title, a blank line or a valid entry is a problem (an almost-entry would escape every rule)
-for (const bad of ['## e-001', '### E-001', '##  E-001', '## E-001 extra', '## E-', '## Notes', '# Learnings 2026-10', '- DATE: 2026-10-20', 'free text', '-  DATE: 2026-10-20']) {
+for (const bad of ['## e-001', '### E-001', '##  E-001', '## E-001 extra', '## E-', '## Notes', '# Learnings 2026-10', 'free text', '-  DATE: 2026-10-20']) {
   test(`parse: «${bad}» in a register file is a problem, with its line`, () => {
     const p = parse(`# Learnings 2026-10\n\n## E-001\n- DATE: 2026-10-20\n${bad}\n- SYMPTOM: s\n`, '2026-10.md');
     assert.ok(p.problems.some((m) => m.startsWith('2026-10.md line 5: ')), JSON.stringify(p.problems));

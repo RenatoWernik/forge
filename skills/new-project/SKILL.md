@@ -32,7 +32,7 @@ Show the user a short table (component, installed, latest, status). For every `m
 
 - Components that `requires` another (Spec Kit and Graphify need `uv`) go after it.
 - A plugin or skill installed now may only be visible after the session restarts. That is fine for this skill: files are generated now, and step 5 of the bootstrap restarts the session anyway.
-- The `ai-memory` MCP registration and the ai-memory hooks are machine-level and done once; do not run `ai-memory init` or `install-instructions`.
+- The data directory, the capture hooks and the MCP server of ai-memory belong to each project and are set up in step 5 by `memoria.mjs`; never run `ai-memory init`, `install-hooks`, `install-mcp` or `install-instructions` by hand (the first three would embed or leave a token in a file of the project).
 - If the user declines a component, note it and go on; the bootstrap will stop at the step that needs it.
 
 ## 2. Interview
@@ -120,6 +120,22 @@ Skip this when the language is English (any variant). Otherwise `.claude/forge.j
 ### Check
 
 Run `node .claude/check.cjs`. Its `language` line reads the language from `.claude/forge.json` and measures the words of each document's prose (code blocks, backtick spans and links left out): it fails while a document still reads as English (or, for Portuguese, not yet as Portuguese), whatever its headings say, so an untranslated project never passes. If it fails, it names the documents: finish translating the prose of those files (never just rename headings) and run it again. It must end with `All ok.`; if any other line fails, stop and show the failing lines. Add the user's switched-off global rules (question 7) under `## User global rules` in CLAUDE.md, in the project language.
+
+### Set up the ai-memory of the project
+
+The memory of this project gets its own data directory and its own port, so another project (or the user's own ai-memory) can never mix with it. Run the script from the scripts folder of this plugin (`cd "${CLAUDE_PLUGIN_ROOT}/scripts"`), with the absolute path of the project as `--dest`. First read the plan; it writes nothing:
+
+```bash
+node memoria.mjs --plan --dest "<project folder>"
+```
+
+It prints JSON. Show the user what `outside` lists (it lands outside the project: the data directory, a line in its `config.toml`, a hidden server) and what `inside` lists (only files git ignores: `.ai-memory.local.toml`, `.claude/settings.local.json`, `.mcp.json`). If the plan fails with `ai-memory not found`, go back to step 1 and install ai-memory first. Otherwise ask the yes of the user, and only after it:
+
+```bash
+node memoria.mjs --apply --dest "<project folder>"
+```
+
+It creates the data directory with `ai-memory init` (only when it does not exist, never with `--force`), joins the hooks and the MCP server to the files above keeping everything the user already has there, adds the three files to `.gitignore`, and starts the server hidden. It never reads or prints the token of ai-memory. Exit `1` is an error to show (a refused path, a file that is not valid JSON: nothing was written); exit `2` is another server on the port: tell the user and run `node .claude/check.cjs --env`. Running it again changes nothing.
 
 ## 6. Publish and seed the panel
 

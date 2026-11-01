@@ -6,6 +6,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { ROOT, BASE, MODULO, D_MODULO, STACK, caixa, ambiente, corre, linhasAim, loadScaffold, tmp, apaga, fwd } from './helpers.mjs';
@@ -96,6 +97,14 @@ test('GUARDA C4: scripts/scaffold.test.mjs mantém todas as linhas da base, pela
 test('GUARDA: os ataques de tests/critico/ que existiam na base ficam byte a byte (nunca se enfraquecem nem se apagam)', () => {
   const fs_ = git('ls-tree', '-r', '--name-only', BASE, 'tests/critico').split('\n').filter(Boolean);
   assert.ok(fs_.length > 50, 'controlo: ' + fs_.length);
-  const mudados = fs_.filter((f) => { const p = join(ROOT, f); return !existsSync(p) || linhas(readFileSync(p, 'utf8')).join('\n') !== linhas(git('show', BASE + ':' + f)).join('\n'); });
+  // Isenção estreita (F-20b, #71 comentário 6549319646): a troca autorizada do oráculo P3 do f-15a (comentário 6548574971) é aceite SÓ com
+  // este conteúdo exato (sha256 do texto com \n); qualquer outra diferença nesse ficheiro, ou em qualquer outro ataque, continua a falhar.
+  const AUTORIZADOS = { 'tests/critico/f-15a-r0/c1-superficie.test.mjs': '0e34dd866f966fd6ae44bb2bc5ccc552826a62dbd3efc51464b53a0257428820' };
+  const mudados = fs_.filter((f) => {
+    const p = join(ROOT, f);
+    if (!existsSync(p)) return true;
+    const agora = linhas(readFileSync(p, 'utf8')).join('\n');
+    return agora !== linhas(git('show', BASE + ':' + f)).join('\n') && createHash('sha256').update(agora).digest('hex') !== AUTORIZADOS[f];
+  });
   assert.deepEqual(mudados, []);
 });
