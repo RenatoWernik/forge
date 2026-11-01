@@ -191,7 +191,10 @@ export function lintL4(ficheiros, propria, outras) {
   const v = [];
   for (const a of analisados) {
     if (propria === '_comum' && a.rel === 'lote.mjs') continue;
+    // the fallback of a lone run (`corre`) is the code the test had before, and lives inside the doLote call
+    const noLote = (g) => { for (let p = g.parent; p; p = p.parent) if (p.open === '(' && a.toks[p.from - 1]?.v === 'doLote') return true; return false; };
     for (const g of a.todos) {
+      if (noLote(g)) continue;
       const callee = g.open === '(' ? a.toks[g.from - 1] : null;
       const strs = (de, ate) => a.toks.slice(de, ate + 1).filter((tk) => tk.t === 's').map((tk) => tk.v);
       const direto = g.strs.includes('--test') && g.strs.some((s) => proibidoL4(s, propria, outras));
