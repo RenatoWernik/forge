@@ -1,0 +1,5 @@
+orchestrator: .checkpoints/orchestrator.md saved 3 min ago
+wake: dev-b (ticket T2): 10 min since .checkpoints/dev-b.md; SendMessage to dev-b, or relaunch it from that file
+wake: tester-c (ticket T3): no checkpoint file yet; SendMessage to tester-c, or relaunch it from that file
+wake: crit ico-e x (ticket T5): 31 min since .checkpoints/critico-e.md; SendMessage to crit ico-e x, or relaunch it from that file
+escalate: crit ico-e x passed minutesWithoutProgress (30 min): pass it in args.vida
