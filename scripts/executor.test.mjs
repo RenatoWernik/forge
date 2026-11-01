@@ -74,9 +74,9 @@ test('blocos do manifesto: todo o teste do ficheiro casa com algum bloco, e cada
     for (const [f, blocos] of Object.entries(s.blocos)) {
       const titulos = [...readFileSync(join(raiz, f), 'utf8').matchAll(/^test\((['"`])(.*?)\1/gm)].map((m) => m[2]);
       assert.ok(titulos.length > 0, `${f}: nenhum test('...') estático`);
-      const res = blocos.map((b) => new RegExp(b));
+      const padroes = blocos.map((b) => b.padrao ?? b), res = padroes.map((b) => new RegExp(b));
       assert.deepEqual(titulos.filter((t) => !res.some((r) => r.test(t))), [], `${f}: testes fora de todos os blocos`);
-      assert.deepEqual(blocos.filter((b, i) => !titulos.some((t) => res[i].test(t))), [], `${f}: blocos que não casam com nenhum teste`);
+      assert.deepEqual(padroes.filter((b, i) => !titulos.some((t) => res[i].test(t))), [], `${f}: blocos que não casam com nenhum teste`);
     }
   }
 });
@@ -107,4 +107,19 @@ test('blocos: cada padrão do manifesto é uma unidade com --test-name-pattern, 
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const res = JSON.parse(readFileSync(join(d, '.forge/resultados', readdirSync(join(d, '.forge/resultados')).find((n) => n.endsWith('.json'))), 'utf8'));
   assert.deepEqual(res.unidades.map((u) => [u.bloco, u.estado, u.pass]).sort(), [['^alfa', 'pass', 1], ['^beta', 'pass', 1]]);
+});
+
+test('limite_s de um bloco ({padrao, limite_s}) substitui o da suíte, e o limite_s não tem de caber no orcamento_s (é só o kill)', () => {
+  const d = tmp();
+  mkdirSync(join(d, 'scripts')); mkdirSync(join(d, 't'));
+  writeFileSync(join(d, 't/x.test.mjs'), "import { test } from 'node:test';\ntest('lento um', async () => { await new Promise((r) => setTimeout(r, 4000)); });\ntest('rapido dois', () => {});\n");
+  writeFileSync(join(d, 'scripts/suites.json'), JSON.stringify({ versao: 1, paralelo: 2, vagas_globais: 2, carga_sensivel: 2, orcamento_s: 30,
+    suites: [{ nome: 's', tipo: 'node-test', ficheiros: ['t/*.test.mjs'], limite_s: 2, blocos: { 't/x.test.mjs': [{ padrao: '^lento', limite_s: 900 }, '^rapido'] } }] }));
+  writeFileSync(join(d, '.gitignore'), '.forge/\n');
+  const g = (...a) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...a], { cwd: d, encoding: 'utf8' });
+  g('init', '-q'); g('add', '-A'); g('commit', '-q', '-m', 'x');
+  const r = executor(d, '--todas');
+  assert.equal(r.status, 0, r.stdout + r.stderr); // o bloco lento (4 s) passa o limite_s 2 da suíte porque o dele é 900
+  const res = JSON.parse(readFileSync(join(d, '.forge/resultados', readdirSync(join(d, '.forge/resultados')).find((n) => n.endsWith('.json'))), 'utf8'));
+  assert.deepEqual(res.unidades.map((u) => [u.bloco, u.estado]).sort(), [['^lento', 'pass'], ['^rapido', 'pass']]);
 });

@@ -3,12 +3,15 @@
 // num filho `node --test` com home e tmp próprios, limite de tempo que mata só a árvore do PID lançado, vagas partilhadas por todos os
 // executores da máquina e resultados ligados ao sha e à árvore em .forge/resultados/. Só biblioteca padrão.
 //   node scripts/executor.mjs (--todas | --suites a,b) [--passe 1|2] [--continuar] [--paralelo N] [--raiz <dir>]
-// Saída: 0 tudo verde; 1 falha, limite ou erro; 2 erro de uso; 3 incompleto (o orçamento_s não chega: repetir com --continuar).
+// Um MOTOR destacado (o próprio script com --motor-interno; PID em .forge/motor/<sha>-<árvore>-p<passe>.json) corre a fila inteira até ao fim e
+// grava cada unidade logo que acaba. A chamada só espera pelo motor até orcamento_s e nunca mata unidades; --continuar volta a ligar-se ao
+// motor vivo ou, se ele morreu, lança outro só com as unidades sem estado final. O limite_s é só o kill de uma unidade.
+// Saída: 0 tudo verde; 1 falha, limite ou erro; 2 erro de uso; 3 incompleto (o motor ainda corre ou morreu: repetir com --continuar).
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const LIMITE_PADRAO_S = 240; // unidade de uma suíte sem limite_s
@@ -140,7 +143,7 @@ function mataArvore(pid) {
 }
 
 function lerArgs(argv) {
-  const o = { suites: null, passe: 1, continuar: false, paralelo: null, raiz: process.cwd() };
+  const o = { suites: null, passe: 1, continuar: false, paralelo: null, raiz: process.cwd(), arvoreMotor: null };
   const valor = (i, nome) => { if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) throw new Uso(`${nome} precisa de um valor`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -150,6 +153,7 @@ function lerArgs(argv) {
     else if (a === '--continuar') o.continuar = true;
     else if (a === '--paralelo') { o.paralelo = +valor(i++, a); if (!Number.isInteger(o.paralelo) || o.paralelo < 1) throw new Uso('--paralelo: inteiro ≥ 1'); }
     else if (a === '--raiz') o.raiz = resolve(valor(i++, a));
+    else if (a === '--motor-interno') o.arvoreMotor = valor(i++, a); // só a chamada o passa ao motor: a árvore com que a chamada decidiu
     else if (a === '--afetadas') throw new Uso('--afetadas ainda não existe (V-02)');
     else throw new Uso(`argumento desconhecido: ${a}`);
   }
@@ -160,75 +164,168 @@ function lerArgs(argv) {
 function lerManifesto(raiz) {
   const f = join(raiz, 'scripts', 'suites.json');
   if (!existsSync(f)) throw new Uso(`falta ${f}`);
-  const m = JSON.parse(readFileSync(f, 'utf8'));
+  const texto = readFileSync(f, 'utf8'), m = JSON.parse(texto);
   if (m.versao !== 1 || !Array.isArray(m.suites)) throw new Uso('suites.json: versao 1 com suites[] esperada');
   for (const k of ['paralelo', 'vagas_globais', 'carga_sensivel', 'orcamento_s']) if (!(m[k] > 0)) throw new Uso(`suites.json: ${k} inválido`);
   for (const s of m.suites) {
     if (s.tipo !== 'node-test') throw new Uso(`suite ${s.nome}: tipo ${s.tipo} não suportado (só node-test)`);
     s.limite_s ??= LIMITE_PADRAO_S;
-    if (s.limite_s > m.orcamento_s) throw new Uso(`suite ${s.nome}: limite_s ${s.limite_s} > orcamento_s ${m.orcamento_s}: nunca arrancaria`);
   }
+  m.hash = createHash('sha256').update(texto).digest('hex');
   return m;
 }
 
-// as unidades por correr, pela ordem do agendamento: as exclusivas primeiro (com a máquina vazia correm seguidas, numa só chamada; no fim, cada
-// uma esperava pelas outras e só cabia uma por chamada), depois as normais e por fim as sensíveis ao tempo (cada uma prende a carga global a
-// carga_sensivel enquanto corre); dentro de cada classe, as de limite maior primeiro (enchem o paralelo)
-function planeia(m, escolha, raiz) {
+// a duração (s) de cada unidade no último resultado com o mesmo manifesto; as unidades sem medida contam pelo limite_s (o pior caso)
+function duracoesAnteriores(pasta, hash) {
+  let melhor = null;
+  const recentes = (existsSync(pasta) ? readdirSync(pasta) : []).filter((n) => n.endsWith('.json'))
+    .map((n) => ({ n, t: statSync(join(pasta, n)).mtimeMs })).sort((a, b) => b.t - a.t).slice(0, 5); // só os 5 mais recentes: a pasta cresce com cada sha
+  for (const { n } of recentes) {
+    const r = lerJsonSeguro(join(pasta, n));
+    if (r?.manifesto === hash && (!melhor || Date.parse(r.fim) > Date.parse(melhor.fim))) melhor = r;
+  }
+  return new Map((melhor?.unidades ?? []).filter((u) => u.estado === 'pass').map((u) => [`${u.ficheiro}\0${u.bloco ?? ''}`, u.duracao_s]));
+}
+
+// as unidades por correr, pela ordem do agendamento: as exclusivas primeiro (com a máquina vazia correm seguidas; no fim, cada uma esperava
+// pelas outras), depois as normais e por fim as sensíveis ao tempo (cada uma prende a carga global a carga_sensivel enquanto corre); dentro
+// de cada classe, as mais longas primeiro (a duração medida, ou o limite_s), para encurtar o fim do passe
+function planeia(m, escolha, raiz, medidas) {
   const nomes = m.suites.map((s) => s.nome);
   if (escolha !== '*') { const f = escolha.filter((n) => !nomes.includes(n)); if (f.length) throw new Uso(`suites desconhecidas: ${f.join(', ')}`); }
   const us = [];
   for (const s of m.suites.filter((x) => escolha === '*' || escolha.includes(x.nome))) {
     const ficheiros = [...new Set(s.ficheiros.flatMap((g) => globSync(g, { cwd: raiz }).map((f) => f.replaceAll('\\', '/'))))].sort();
     if (!ficheiros.length) throw new Uso(`suite ${s.nome}: nenhum ficheiro casa`);
-    for (const ficheiro of ficheiros) for (const bloco of s.blocos?.[ficheiro] ?? [null]) us.push({ suite: s, ficheiro, bloco, chave: `${ficheiro}\0${bloco ?? ''}` });
+    // um bloco é o padrão (texto) ou {padrao, limite_s}: o limite_s do bloco, se houver, substitui o da suíte
+    for (const ficheiro of ficheiros) for (const b of s.blocos?.[ficheiro] ?? [null]) {
+      const bloco = b === null || typeof b === 'string' ? b : b.padrao, limite_s = b?.limite_s ?? s.limite_s, chave = `${ficheiro}\0${bloco ?? ''}`;
+      us.push({ suite: s, ficheiro, bloco, chave, limite_s, peso: medidas.get(chave) ?? limite_s });
+    }
   }
   us.forEach((u, i) => { u.ordem = i; });
   const classe = (u) => (u.suite.exclusiva ? 0 : u.suite.sensivel_ao_tempo ? 2 : 1);
-  return us.toSorted((a, b) => classe(a) - classe(b) || b.suite.limite_s - a.suite.limite_s || a.ordem - b.ordem);
+  return us.toSorted((a, b) => classe(a) - classe(b) || b.peso - a.peso || a.ordem - b.ordem);
 }
 
-export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
+const lerJsonSeguro = (f) => { try { return JSON.parse(readFileSync(f, 'utf8')); } catch { return null; } };
+const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// o que a chamada e o motor partilham: manifesto, sha, árvore, plano e os caminhos do passe
+function prepara(argv) {
   const o = lerArgs(argv), raiz = o.raiz, m = lerManifesto(raiz);
   const rev = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: raiz, encoding: 'utf8' });
   if (rev.status !== 0) throw new Uso(`${raiz} não é um repositório git`);
-  const sha = rev.stdout.trim(), arvore = arvoreDe(raiz);
-  const plano = planeia(m, o.suites, raiz);
+  const sha = rev.stdout.trim(), arvore = o.arvoreMotor ?? arvoreDe(raiz);
   const pasta = join(raiz, '.forge', 'resultados');
-  mkdirSync(join(pasta, 'logs'), { recursive: true });
+  const plano = planeia(m, o.suites, raiz, duracoesAnteriores(pasta, m.hash));
   const marca = `${sha}-${arvore === 'limpa' ? 'limpa' : arvore.replace(':', '-')}-p${o.passe}`;
-  const ficheiro = join(pasta, `${marca}.json`);
+  return { o, raiz, m, sha, arvore, plano, pasta, marca, ficheiro: join(pasta, `${marca}.json`), motorDir: join(raiz, '.forge', 'motor') };
+}
+
+// as unidades do ficheiro de resultados com estado final (só as deste sha e desta árvore)
+function lerFeitas(c) {
+  const feitas = new Map();
+  const antigo = existsSync(c.ficheiro) ? lerJsonSeguro(c.ficheiro) : null;
+  if (antigo?.sha !== c.sha || antigo?.arvore !== c.arvore) return { feitas, inicio: null };
+  for (const u of antigo.unidades) if (FINAIS.includes(u.estado)) feitas.set(`${u.ficheiro}\0${u.bloco ?? ''}`, u);
+  return { feitas, inicio: antigo.inicio };
+}
+
+// --- a chamada: liga-se ao motor (ou lança-o), espera até orcamento_s e devolve o código; nunca mata unidades ---
+// shortcut: o motor está vivo se o ficheiro dele não tem `fim` e o PID existe (sem confirmar o inicio do processo: um PID reutilizado depois de um kill duro engana)
+const motorVivo = (f) => { const j = lerJsonSeguro(f); return j && !j.fim && j.pid > 0 && vivoPid(j.pid) ? j : null; };
+const cobre = (motor, pedido) => motor === '*' || (pedido !== '*' && pedido.every((n) => motor.includes(n)));
+
+async function chamada(argv, saida) {
+  const c = prepara(argv), { o, raiz, m, plano, marca } = c, t0 = Date.now();
+  const motorFicheiro = join(c.motorDir, `${marca}.json`), lock = join(c.motorDir, `${marca}.lock`);
+  mkdirSync(join(c.pasta, 'logs'), { recursive: true });
+  mkdirSync(c.motorDir, { recursive: true });
+  const faltam = () => { const { feitas } = lerFeitas(c); return plano.filter((u) => !feitas.has(u.chave)).length; };
+
+  // um só motor por sha, árvore e passe: quem toma o lock (mkdir atómico) decide e lança; os outros esperam e ligam-se ao que ele deixou
+  let motor = null;
+  for (let i = 0; !motor && i < 300; i++) {
+    motor = motorVivo(motorFicheiro);
+    if (motor || (o.continuar && !faltam())) break;
+    try { mkdirSync(lock); } catch {
+      try { if (Date.now() - statSync(lock).mtimeMs > 10000) rm(lock); } catch { /* o dono acabou de a apagar */ }
+      await dorme(100);
+      continue;
+    }
+    try {
+      motor = motorVivo(motorFicheiro);
+      if (!motor) {
+        if (!o.continuar) rm(c.ficheiro); // uma corrida nova não herda o resultado antigo
+        const log = openSync(join(c.motorDir, `${marca}.log`), 'a');
+        // o cwd do motor é a pasta deste script: uma pasta de teste apagada pelo utilizador nunca fica presa ao processo
+        const p = spawn(process.execPath, [fileURLToPath(import.meta.url), ...argv, '--raiz', raiz, '--motor-interno', c.arvore], {
+          cwd: dirname(fileURLToPath(import.meta.url)), stdio: ['ignore', log, log], windowsHide: true, detached: true });
+        p.unref();
+        closeSync(log);
+        motor = { pid: p.pid, sha: c.sha, arvore: c.arvore, passe: o.passe, suites: o.suites, inicio: new Date().toISOString() };
+        writeFileSync(motorFicheiro, JSON.stringify(motor));
+      }
+    } finally { rm(lock); }
+  }
+
+  if (motor && !cobre(motor.suites, o.suites)) saida(`executor: o motor ${motor.pid} corre outra seleção de suítes; a esperar por ele`);
+  while (motorVivo(motorFicheiro) && Date.now() - t0 < m.orcamento_s * 1000) await dorme(250);
+  const vivo = !!motorVivo(motorFicheiro);
+
+  const { feitas } = lerFeitas(c);
+  const sel = plano.map((u) => feitas.get(u.chave)).filter(Boolean), mau = sel.filter((u) => u.estado !== 'pass');
+  const resto = plano.length - sel.length, seg = Math.round((Date.now() - t0) / 1000);
+  if (resto) {
+    saida(`executor: ${sel.length}/${plano.length} unidades, ${mau.length} com falha, limite ou erro, ${resto} por acabar em ${seg} s`
+      + (vivo ? `; o motor ${motor.pid} continua a correr: repita com --continuar` : '; o motor morreu antes de acabar: repita com --continuar para relançar o resto'));
+    if (!vivo && existsSync(join(c.motorDir, `${marca}.log`))) saida(readFileSync(join(c.motorDir, `${marca}.log`), 'utf8').split(/\r?\n/).slice(-6).join('\n'));
+    return 3;
+  }
+  saida(`executor: ${sel.length}/${plano.length} unidades, ${sel.length - mau.length} pass, ${mau.length} com falha, limite ou erro em ${seg} s → ${c.ficheiro}`);
+  return mau.length ? 1 : 0;
+}
+
+// --- o motor: corre a fila inteira e sai sozinho; mata só a árvore das unidades que lançou ---
+async function motorCorre(argv, saida) {
+  const c = prepara(argv), { o, raiz, m, plano, marca, ficheiro } = c;
+  const motorFicheiro = join(c.motorDir, `${marca}.json`);
+  mkdirSync(join(c.pasta, 'logs'), { recursive: true });
 
   // retoma: as unidades com estado final deste mesmo sha e árvore não voltam a correr
-  const feitas = new Map();
-  let inicio = new Date().toISOString();
-  if (o.continuar && existsSync(ficheiro)) {
-    const antigo = JSON.parse(readFileSync(ficheiro, 'utf8'));
-    if (antigo.sha === sha && antigo.arvore === arvore) {
-      inicio = antigo.inicio;
-      for (const u of antigo.unidades) if (FINAIS.includes(u.estado)) feitas.set(`${u.ficheiro}\0${u.bloco ?? ''}`, u);
-    }
-  }
+  const { feitas, inicio: inicioAntigo } = o.continuar ? lerFeitas(c) : { feitas: new Map(), inicio: null };
+  const inicio = inicioAntigo ?? new Date().toISOString();
   const fila = plano.filter((u) => !feitas.has(u.chave));
   const ordemChave = new Map(plano.toSorted((a, b) => a.ordem - b.ordem).map((u, i) => [u.chave, i]));
+  const correm = new Set();
+  const tapDe = (u) => `.forge/resultados/logs/${marca}-${u.suite.nome}-${u.ficheiro.replaceAll('/', '_')}${u.bloco ? `-b${plano.indexOf(u)}` : ''}.tap`;
+  const emCurso = (r) => ({ suite: r.u.suite.nome, ficheiro: r.u.ficheiro, bloco: r.u.bloco, estado: 'em_curso', pass: 0, fail: 0, skip: 0, todo: 0, skips: [],
+    duracoes: {}, duracao_s: 0, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap: tapDe(r.u) });
 
   const escreve = (completo) => {
-    const unidades = [...feitas.values()].sort((a, b) => (ordemChave.get(`${a.ficheiro}\0${a.bloco ?? ''}`) ?? 1e9) - (ordemChave.get(`${b.ficheiro}\0${b.bloco ?? ''}`) ?? 1e9));
+    const unidades = [...feitas.values(), ...[...correm].map(emCurso)].sort((a, b) => (ordemChave.get(`${a.ficheiro}\0${a.bloco ?? ''}`) ?? 1e9) - (ordemChave.get(`${b.ficheiro}\0${b.bloco ?? ''}`) ?? 1e9));
     const suites = {};
     for (const nome of new Set(unidades.map((u) => u.suite))) {
       const us = unidades.filter((u) => u.suite === nome), soma = (k) => us.reduce((a, u) => a + u[k], 0);
-      const faltam = plano.some((p) => p.suite.nome === nome && !feitas.has(p.chave));
-      suites[nome] = { estado: estadoSuite(us.map((u) => u.estado), faltam), pass: soma('pass'), fail: soma('fail'), skip: soma('skip') };
+      const falta = plano.some((p) => p.suite.nome === nome && !feitas.has(p.chave));
+      suites[nome] = { estado: estadoSuite(us.map((u) => u.estado), falta), pass: soma('pass'), fail: soma('fail'), skip: soma('skip') };
     }
-    const dados = { versao: 1, sha, arvore, node: process.version, comando: `node scripts/executor.mjs ${argv.join(' ')}`.trim(), inicio, fim: new Date().toISOString(), completo, unidades, suites };
+    const cmd = argv.slice(0, argv.indexOf('--motor-interno')).join(' ');
+    const dados = { versao: 1, sha: c.sha, arvore: c.arvore, node: process.version, comando: `node scripts/executor.mjs ${cmd}`.trim(), manifesto: m.hash,
+      inicio, fim: new Date().toISOString(), completo, unidades, suites };
     writeFileSync(`${ficheiro}.tmp`, JSON.stringify(dados, null, 2));
     renameSync(`${ficheiro}.tmp`, ficheiro);
   };
 
   const vagas = new Vagas(m.vagas_globais, m.carga_sensivel);
   const raizTmp = mkdtempSync(join(tmpdir(), 'forge-exec-'));
-  const correm = new Set();
-  const limpa = () => { for (const r of correm) mataArvore(r.pid); vagas.largaTudo(); rm(raizTmp); };
+  const limpa = () => {
+    for (const r of correm) mataArvore(r.pid);
+    vagas.largaTudo(); rm(raizTmp);
+    const j = lerJsonSeguro(motorFicheiro);
+    if (j?.pid === process.pid) { try { writeFileSync(motorFicheiro, JSON.stringify({ ...j, fim: new Date().toISOString() })); } catch { /* a pasta desapareceu */ } }
+  };
   process.once('exit', limpa);
   for (const sinal of ['SIGINT', 'SIGTERM']) process.once(sinal, () => process.exit(130));
 
@@ -252,7 +349,7 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
     r.pid = p.pid;
     p.stdout.on('data', (b) => { r.out += b; });
     p.stderr.on('data', (b) => { r.err += b; });
-    r.relogio = setTimeout(() => { r.limite = true; mataArvore(p.pid); }, u.suite.limite_s * 1000);
+    r.relogio = setTimeout(() => { r.limite = true; mataArvore(p.pid); }, u.limite_s * 1000);
     r.fim = new Promise((resolver) => {
       let feito = false;
       const acaba = () => { if (!feito) { feito = true; clearTimeout(r.relogio); p.stdout.destroy(); p.stderr.destroy(); resolver(); } };
@@ -261,51 +358,47 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
       p.on('error', (e) => { r.err += String(e); acaba(); });
     });
     correm.add(r);
+    escreve(false);
     r.fim.then(() => termina(r));
   };
 
   const termina = (r) => {
     correm.delete(r);
     vagas.larga(r.vaga.dirs);
-    const c = lerTap(r.out), { u } = r;
-    const estado = r.limite ? 'limite' : r.status === null || r.status === undefined ? 'erro' : estadoDe(r.status, c);
-    const tap = `.forge/resultados/logs/${marca}-${u.suite.nome}-${u.ficheiro.replaceAll('/', '_')}${u.bloco ? `-b${plano.indexOf(u)}` : ''}.tap`;
+    const cont = lerTap(r.out), { u } = r;
+    const estado = r.limite ? 'limite' : r.status === null || r.status === undefined ? 'erro' : estadoDe(r.status, cont);
+    const tap = tapDe(u);
     writeFileSync(join(raiz, tap), r.out);
     if (r.err) writeFileSync(join(raiz, `${tap}.err`), r.err);
-    feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado, pass: c.pass ?? 0, fail: c.fail ?? 0, skip: c.skip ?? 0, todo: c.todo ?? 0,
-      skips: c.skips, duracoes: c.duracoes, duracao_s: Math.round((Date.now() - r.inicio) / 100) / 10, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap });
+    feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado, pass: cont.pass ?? 0, fail: cont.fail ?? 0, skip: cont.skip ?? 0, todo: cont.todo ?? 0,
+      skips: cont.skips, duracoes: cont.duracoes, duracao_s: Math.round((Date.now() - r.inicio) / 100) / 10, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap });
     escreve(false);
-    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''} (${c.pass ?? 0} pass, ${c.fail ?? 0} fail) → ${tap}`);
+    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''} (${cont.pass ?? 0} pass, ${cont.fail ?? 0} fail) → ${tap}`);
   };
 
-  // o agendador: lança o que cabe no orçamento e nas vagas; a carga global de cada unidade que corre é medida a cada passo
-  const naoCabem = new Set();
-  const porLancar = () => fila.filter((u) => !feitas.has(u.chave) && !naoCabem.has(u) && ![...correm].some((r) => r.u === u));
+  // o agendador: lança o que cabe nas vagas e nas faixas (o limite_s não entra); a carga global de cada unidade que corre é medida a cada passo
+  const porLancar = () => fila.filter((u) => !feitas.has(u.chave) && ![...correm].some((r) => r.u === u));
   while (porLancar().length || correm.size) {
-    const decorrido = (Date.now() - t0) / 1000;
+    // o ficheiro do motor desapareceu (a pasta foi apagada): sai e mata a sua árvore; os primeiros 5 s dão tempo à chamada que o lançou de o gravar
+    if (Date.now() - t0 > 5000 && !existsSync(motorFicheiro)) process.exit(1);
     for (const u of porLancar()) {
       if (correm.size >= paralelo) break;
-      if (decorrido + u.suite.limite_s > m.orcamento_s) {
-        naoCabem.add(u);
-        if (u.xTomado) vagas.larga([...u.dirs, vagas.slot('x')]);
-        continue;
-      }
       let vaga = null;
       try { vaga = vagas.tenta(u); } catch { /* o sistema de ficheiros das vagas falhou neste passo: um erro a meio da corrida não deita abaixo as unidades que correm */ }
       if (vaga) lanca(u, vaga);
       else if (u.suite.exclusiva) break;
     }
     if (correm.size) { const { carga } = vagas.estado(); for (const r of correm) r.cmax = Math.max(r.cmax, carga); }
-    await new Promise((r) => setTimeout(r, PASSO_MS + Math.floor(Math.random() * PASSO_MS)));
+    await dorme(PASSO_MS + Math.floor(Math.random() * PASSO_MS));
   }
 
-  const completo = plano.every((u) => feitas.has(u.chave));
-  escreve(completo);
-  const sel = plano.map((u) => feitas.get(u.chave)).filter(Boolean);
-  const mau = sel.filter((u) => u.estado !== 'pass');
-  saida(`executor: ${sel.length}/${plano.length} unidades, ${sel.length - mau.length} pass, ${mau.length} com falha, limite ou erro, ${plano.length - sel.length} por correr`
-    + ` em ${Math.round((Date.now() - t0) / 1000)} s → ${ficheiro}`);
-  return mau.length ? 1 : completo ? 0 : 3;
+  escreve(plano.every((u) => feitas.has(u.chave)));
+  saida(`motor ${process.pid}: ${plano.length} unidades em ${Math.round((Date.now() - t0) / 1000)} s`);
+  return 0;
+}
+
+export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
+  return argv.includes('--motor-interno') ? motorCorre(argv, saida) : chamada(argv, saida);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

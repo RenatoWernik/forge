@@ -6,7 +6,7 @@
     { "nome": "f-02-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-02-r0/*.test.mjs"], "limite_s": 495, "sensivel_ao_tempo": true },
     { "nome": "f-03-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-03-r0/*.test.mjs"], "limite_s": 495 },
     { "nome": "f-04-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-04-r0/*.test.mjs"], "limite_s": 495,
-      "blocos": { "tests/critico/f-04-r0/regressao.test.mjs": ["^regressão: os ataques da Ronda", "^regressão: (nenhum|existe|node --test)|^âmbito|^reprova sempre"] } },
+      "blocos": { "tests/critico/f-04-r0/regressao.test.mjs": [{ "padrao": "^regressão: os ataques da Ronda", "limite_s": 900 }, "^regressão: (nenhum|existe|node --test)|^âmbito|^reprova sempre"] } },
     { "nome": "f-05-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-05-r0/*.test.mjs"], "limite_s": 400 },
     { "nome": "f-06-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-06-r0/*.test.mjs"], "limite_s": 495, "sensivel_ao_tempo": true },
     { "nome": "f-07-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-07-r0/*.test.mjs"], "limite_s": 400 },
@@ -40,5 +40,6 @@
     { "nome": "f-25-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-25-r0/*.test.mjs"], "limite_s": 120 },
     { "nome": "f-26-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-26-r0/*.test.mjs"], "limite_s": 120 },
     { "nome": "f-27-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-27-r0/*.test.mjs"], "limite_s": 60 },
+    { "nome": "f-30-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-30-r0/*.test.mjs"], "limite_s": 120 },
     { "nome": "v-01-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-01-r0/*.test.mjs"], "limite_s": 480, "sensivel_ao_tempo": true, "env": {"USERPROFILE": "@real"} }
   ] }
