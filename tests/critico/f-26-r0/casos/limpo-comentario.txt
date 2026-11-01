@@ -1,0 +1,14 @@
+// caso limpo: os shas só aparecem em comentários; o git recebe o merge-base calculado
+// antes esta guarda comparava com @@SHA_F22A@@ e partiu quando a main avançou
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+
+// const BASE = '@@SHA_CURTO@@';
+/* spawnSync('git', ['diff', '--stat', '@@SHA_OUTRO@@']) */
+test('C9 GUARDA: o compat.json fica como no merge-base', (t) => {
+  const mb = spawnSync('git', ['merge-base', 'HEAD', 'origin/main'], { encoding: 'utf8' });
+  if (mb.status !== 0) return t.skip('sem origin/main');
+  const r = spawnSync('git', ['diff', '--stat', mb.stdout.trim(), '--', 'compat.json'], { encoding: 'utf8' }); // nunca @@SHA_CURTO@@
+  assert.equal(r.stdout.trim(), '');
+});

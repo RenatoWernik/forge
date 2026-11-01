@@ -132,12 +132,13 @@ Assemble `pieces` from `tasks.md` (each one already has its contract issue, sect
  "dashboardUrl":"{{DASHBOARD_URL}}",
  "language":"{{LANGUAGE}}",
  "memory":{"workspace":"{{MEM_WORKSPACE}}","project":"{{MEM_PROJECT}}"},
+ "graph":"<absolute path of graphify-out/graph.json>",
  "models":{{MODELS_JSON}},
  "mode":"<rigorous or accelerated, copied from .claude/forge.json>",
  "escalation":"<the escalation key of .claude/forge.json, copied as it is>",
  "context":"specs/001-name/{spec,plan,tasks}.md; CONTEXT.md; test: <command from plan.md>",
  "pieces":[{"id":"config","title":"Load configuration","goal":"T003 to T005 (FR-002): read and validate the configuration; seam: Config.load","bar":"<bar approved in section 4.2>","owns":["src/config.py","tests/test_config.py"],"tdd":true,
-   "issue":12,"objective":"<the objective, copied from issue 12>","input":"<branch, HEAD and files of the ticket>",
+   "issue":12,"affected":{"nodes":["Config.load","Config.validate"],"files":["src/config.py"]},"objective":"<the objective, copied from issue 12>","input":"<branch, HEAD and files of the ticket>",
    "criteria":[{"text":"Config.load returns the 3 keys of the sample file","oracle":"corpus","command":"pytest tests/test_config.py"},{"text":"A missing key fails with a message that names it","command":"pytest tests/test_config.py -k missing"}],
    "fails":"<what fails the ticket>","outOfScope":"<what the ticket does not do>","env":"<environment and commands>","output":"<where the result goes>"}],
  "attacks":[{"id":"config","attacks":[{"id":"config-a1","file":"tests/critico/config-r0/a1.test.py","passesOnBase":false},{"id":"config-g1","file":"tests/critico/config-r0/g1.test.py","guard":true,"passesOnBase":true}],"failingOnBase":true,"gaps":[]}]}
@@ -155,6 +156,8 @@ Format rules:
 - Args without `root`, `dashboardUrl`, `models` or `pieces`, or a piece without `id`, `title`, `goal`, `bar` or `owns`, bring the workflow down before any agent is spent.
 - Optional fields of a piece: `ui: true` runs its developer with `models.developerUi` (any other piece with `models.developer`); `redesigns` (an integer, 0 or more, that you raise each time you write a `REDESIGN` comment for the piece); `central: true` on a criterion of `criteria`, for the criteria that stay blocking in round 2 of `accelerated`.
 - `vida` (optional): `{<agent or piece id>: {minutos, vida}}`, the minutes without progress that you read with the panel reader from the checkpoint files. The workflow only reads it; a number that an agent declares about itself is never used. Pieces are matched by `id` or by the agent ids `b-{N}-{piece}-r{R}` and `c-{N}-{piece}-r{R}`.
+
+The graph is optional (without `graph` the prompts say `No graph for this run.` and nothing is refused). With it, run `graphify affected` (or `graphify query`) once per piece, before the Round −1, and paste the nodes and files it returns in the contract (the issue, section 10.2) and in `affected` of the piece. `graph` is then an absolute path (a Windows drive path, with `\` or `/`, or a path that starts with `/`) and every piece, and every ponytail unit, needs `affected` with a list of `nodes` and a list of `files` (strings, possibly empty), or the workflow is refused before any agent. The agents get `--graph "<graph>"` for `graphify query`, `graphify affected` and `graphify explain`, and the developer returns in `graphNodes` the nodes it consulted (the result of the piece has their union). Every run of `gauntlet-build`, `gauntlet-batch` and `gauntlet-ponytail` starts with one `graph:update` agent (the aux model) that runs `node .claude/graph.mjs update`; if it answers anything but `graph: ...`, `log()` warns and the run goes on.
 
 The workflow repeats developer and critic per piece, in at most 3 rounds (`rigorous`) or 2 (`accelerated`), until `won:true`: ours chosen blind, tests passing in the critic's run and no blocking failure. The critic lists each blocking failure with the criterion (`C<n>`, the position in `criteria`), the materiality (1 always fails, 2 the goal of the criterion fails, 3 the oracle fails in a real case) and the repro; from round 2 it also gets the failures that the previous critic listed (never anything the developer wrote). While it runs:
 
@@ -314,7 +317,7 @@ An open criterion ("never leaks", "always repeats") makes the critic find one mo
 Every contract has these parts, and an issue without them is not ready:
 
 - **Objective**: one sentence.
-- **Exact input**: the issue, the branch, the HEAD, the worktree and the files.
+- **Exact input**: the issue, the branch, the HEAD, the worktree, the files, and the nodes and files affected (the output of `graphify affected` that you paste, section 5).
 - **Criteria**: each one with its oracle and the command that checks it. A criterion with never, always, any or all gets a closed oracle before the code: a versioned corpus of cases, a property test with its generator and number of cases, a named reference implementation, or a measured threshold with the command that measures it.
 - **What fails and what is a gap**: the always-fails list (a leaked secret or personal data, a security hole, lost or corrupted data, a false alarm or charge, a regression, a criterion failed or without evidence).
 - **Scope**: what the agent leaves as it is.

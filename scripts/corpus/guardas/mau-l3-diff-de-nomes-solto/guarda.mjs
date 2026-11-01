@@ -1,0 +1,10 @@
+// caso mau L3: «só estes ficheiros mudaram» com git diff fora de um teste de âmbito e sem o helper do merge-base
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+
+test('C9 GUARDA: só scripts/ e tests/ mudaram', () => {
+  const r = spawnSync('git', ['diff', '--name-only', 'origin/main...HEAD'], { encoding: 'utf8' });
+  const fora = r.stdout.split('\n').filter(Boolean).filter((f) => !f.startsWith('scripts/') && !f.startsWith('tests/'));
+  assert.deepEqual(fora, []);
+});

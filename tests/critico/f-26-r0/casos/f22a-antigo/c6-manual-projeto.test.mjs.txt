@@ -1,0 +1,133 @@
+// F-22a critério 6: o manual e o projeto gerado.
+// - templates/FRAMEWORK.md ganha `## 11. Learning from errors`, com o bloco do formato uma só vez numa cerca ```text, a força das camadas e a
+//   regra da subida;
+// - a regra 3 da tradução (skills/new-project/SKILL.md) inclui os blocos `text` entre os que nunca se traduzem;
+// - templates/CLAUDE.md ganha a linha `Error register (format: FRAMEWORK.md section 11)` na tabela «Where things are», a apontar para learnings/;
+// - o scaffold copia .claude/learnings.cjs e escreve learnings/README.md com uma linha que aponta para o §11;
+// - o CLAUDE.md fica com menos de 80 linhas até `## Generated blocks`.
+// Oráculos: todos os conjuntos de scripts/corpus/answers/ dão «All ok.» com a linha learnings ok `(no entries)`; o bloco 1× no FRAMEWORK, em
+// inglês e no projeto em português; e o único assert novo de scripts/scaffold.test.mjs é a lista do dry run com os dois ficheiros.
+// LACUNA DA BARRA: «a força das camadas», «a regra da subida» e «uma linha que aponta para o §11» são prosa sem texto fixo; lê-se o mínimo
+// que o contrato fixa (os nomes e os números das camadas no §11, e FRAMEWORK.md mais 11 numa linha do README).
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { join } from 'node:path';
+import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { builtinModules } from 'node:module';
+import { ROOT, BASE, MODULO, BLOCO, L_FORMA, L_CRESCE, SEM_ENTRADAS, SEM_HISTORIA, FORCA, loadScaffold, translatePt, tmp, apaga, check, linha, texto } from './helpers.mjs';
+
+const lixo = [];
+after(() => lixo.forEach(apaga));
+const LF = (s) => s.replace(/\r\n/g, '\n');
+const conta = (s, sub) => LF(s).split(sub).length - 1;
+const cercasText = (s) => [...LF(s).matchAll(/^```text\n([\s\S]*?)\n```$/gm)].map((m) => m[1]);
+// o §11: do título «## 11. » ao título seguinte de nível 1 ou 2 fora das cercas (o bloco do formato tem um «## E-001» lá dentro)
+const secao11 = (s) => { let cerca = false, dentro = false; const out = []; for (const l of LF(s).split('\n')) { if (/^\s*```/.test(l)) cerca = !cerca; else if (!cerca && /^#{1,2} /.test(l)) dentro = /^## 11\. /.test(l); if (dentro) out.push(l); } return out.join('\n'); };
+
+// O manual
+const FW = join(ROOT, 'templates/FRAMEWORK.md');
+test('C6 templates/FRAMEWORK.md tem o título «## 11. Learning from errors»', () => {
+  assert.ok(LF(texto(FW)).split('\n').includes('## 11. Learning from errors'));
+});
+test('C6 o bloco do formato aparece 1× no templates/FRAMEWORK.md, dentro de uma cerca ```text e no §11', () => {
+  const fw = texto(FW);
+  assert.equal(conta(fw, BLOCO), 1, 'o bloco literal do formato aparece ' + conta(fw, BLOCO) + ' vezes');
+  assert.equal(cercasText(fw).filter((c) => c.includes(BLOCO)).length, 1, 'o bloco não está numa cerca ```text');
+  assert.equal(conta(secao11(fw), BLOCO), 1, 'o bloco não está no §11');
+});
+test('C6 o §11 dá a força das camadas (test 1, hook 2, check 2, contract 3, text 4, memory 5) e a regra da subida', () => {
+  const s = secao11(texto(FW)).replace(/^```text\n[\s\S]*?\n```$/gm, ' ');
+  assert.ok(s, 'não há §11');
+  for (const [c, n] of Object.entries(FORCA)) assert.match(s, new RegExp('`' + c + '`[^\\n]{0,12}\\b' + n + '\\b|\\b' + n + '\\b[^\\n]{0,12}`' + c + '`'), `a força de \`${c}\` (${n}) não está no §11 fora do bloco`);
+  assert.match(s, /climb|stronger/i, 'a regra da subida (climb / stronger) não está no §11');
+});
+test('C6 a regra 3 da tradução em skills/new-project/SKILL.md inclui os blocos `text` com os `json`, `toml` e `bash`', () => {
+  const r3 = LF(texto(join(ROOT, 'skills/new-project/SKILL.md'))).split('\n').find((l) => l.startsWith('3. Never translate'));
+  assert.ok(r3, 'não há a regra 3 da tradução');
+  for (const b of ['json', 'toml', 'bash']) assert.ok(r3.includes('`' + b + '`'), 'a regra 3 perdeu os blocos `' + b + '`');
+  assert.match(r3, /`text`[^.]{0,40}\bblocks?\b|\bblocks?\b[^.]{0,60}`text`/, 'os blocos `text` não estão entre os que nunca se traduzem:\n' + r3);
+});
+test('C6 templates/CLAUDE.md tem na tabela «Where things are» a linha «Error register (format: FRAMEWORK.md section 11)» a apontar para learnings/', () => {
+  const t = LF(texto(join(ROOT, 'templates/CLAUDE.md')));
+  const tab = t.slice(t.indexOf('## Where things are'), t.indexOf('\n## ', t.indexOf('## Where things are') + 3));
+  const row = tab.split('\n').find((l) => /^\|\s*Error register \(format: FRAMEWORK\.md section 11\)\s*\|/.test(l));
+  assert.ok(row, 'não há a linha na tabela:\n' + tab);
+  assert.match(row.split('|')[2] || '', /learnings\//, row);
+});
+
+// O módulo partilhado
+test('C6 templates/.claude/learnings.cjs existe, é CommonJS só com a biblioteca padrão e exporta parse e validate', () => {
+  assert.ok(existsSync(MODULO), 'não existe templates/.claude/learnings.cjs');
+  const src = texto(MODULO);
+  assert.doesNotMatch(src, /^\s*(import|export)\s/m, 'não é CommonJS');
+  const reqs = [...src.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
+  assert.deepEqual(reqs.filter((r) => !r.startsWith('node:') && !builtinModules.includes(r)), [], 'require fora da biblioteca padrão');
+  const r = spawnSync(process.execPath, ['-e', `const m = require(${JSON.stringify(MODULO)}); process.stdout.write(typeof m.parse + ',' + typeof m.validate)`], { encoding: 'utf8' });
+  assert.equal(r.stdout, 'function,function', r.stderr);
+});
+
+// O projeto gerado: todos os conjuntos de respostas
+const CORPUS = join(ROOT, 'scripts/corpus/answers');
+const SETS = readdirSync(CORPUS).filter((n) => n.endsWith('.json')).sort();
+const PROSE = ['CLAUDE.md', 'AGENTS.md', 'FRAMEWORK.md', 'BOOTSTRAP.md', '.checkpoints/README.md'];
+const gera = async (set) => {
+  const { scaffold } = await loadScaffold();
+  const pai = tmp('critico-f22a-corpus-'), dest = join(pai, 'p');
+  lixo.push(pai);
+  await scaffold(JSON.parse(readFileSync(join(CORPUS, set), 'utf8').replace(/^\uFEFF/, '')), { dest });
+  const forge = JSON.parse(readFileSync(join(dest, '.claude/forge.json'), 'utf8').replace(/^\uFEFF/, ''));
+  if (/^pt/i.test(forge.langTag)) for (const rel of [...PROSE, ...readdirSync(join(dest, '.claude/briefs')).map((f) => '.claude/briefs/' + f)]) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
+  return { dest, pt: /^pt/i.test(forge.langTag) };
+};
+test('C6 o corpus tem os 8 conjuntos de respostas, em inglês e em português (controlo do oráculo)', () => {
+  assert.ok(SETS.length >= 8 && SETS.some((s) => s.startsWith('pt')) && SETS.some((s) => s.startsWith('en')), SETS.join(', '));
+});
+for (const set of SETS) {
+  test(`C6 ${set}: «All ok.», a linha learnings ok «(no entries)», .claude/learnings.cjs copiado, learnings/README.md aponta para o §11, o bloco 1× no FRAMEWORK e o CLAUDE.md < 80 linhas até «## Generated blocks»`, async () => {
+    const { dest } = await gera(set);
+    const r = check(dest, []);
+    assert.equal(r.status, 0, r.out.slice(-1500));
+    assert.match(r.out, /All ok\./);
+    assert.equal(linha(r, L_FORMA), 'ok    ' + L_FORMA + ' ' + SEM_ENTRADAS, 'a linha learnings do C1 num projeto acabado de gerar');
+    assert.equal(linha(r, L_CRESCE), 'ok    ' + L_CRESCE + ' ' + SEM_HISTORIA, 'a linha learnings do C4 num projeto acabado de gerar (sem git)');
+    const copia = join(dest, '.claude/learnings.cjs');
+    assert.ok(existsSync(copia) && readFileSync(copia).equals(readFileSync(MODULO)), 'o projeto não tem .claude/learnings.cjs igual, byte a byte, a templates/.claude/learnings.cjs');
+    const rd = join(dest, 'learnings/README.md');
+    assert.ok(existsSync(rd), 'o projeto não tem learnings/README.md');
+    assert.ok(LF(texto(rd)).split('\n').some((l) => /FRAMEWORK\.md/.test(l) && /(section|§|secção|seção)\s*11\b/i.test(l)), 'learnings/README.md sem uma linha que aponte para o §11 do FRAMEWORK.md:\n' + texto(rd));
+    const fw = texto(join(dest, 'FRAMEWORK.md'));
+    assert.equal(conta(fw, BLOCO), 1, 'o bloco do formato aparece ' + conta(fw, BLOCO) + ' vezes no FRAMEWORK.md gerado');
+    assert.equal(cercasText(fw).filter((c) => c.includes(BLOCO)).length, 1, 'o bloco não está numa cerca ```text no FRAMEWORK.md gerado');
+    // acabado de gerar, nenhum instalador acrescentou blocos: o ficheiro inteiro vai até ao fim da secção «## Generated blocks» (em português o título é do tradutor)
+    const cl = LF(texto(join(dest, 'CLAUDE.md'))).replace(/\n+$/, '').split('\n');
+    assert.ok(cl.length < 80, 'o CLAUDE.md gerado tem ' + cl.length + ' linhas até ao fim da secção «## Generated blocks»');
+  });
+}
+test('C6 o dry run do scaffold lista .claude/learnings.cjs e learnings/README.md', async () => {
+  const { scaffold } = await loadScaffold();
+  const dest = tmp('critico-f22a-dry-');
+  lixo.push(dest);
+  const { files } = await scaffold(JSON.parse(readFileSync(join(CORPUS, SETS[0]), 'utf8').replace(/^\uFEFF/, '')), { dest, dryRun: true });
+  for (const f of ['.claude/learnings.cjs', 'learnings/README.md']) assert.ok([...files].includes(f), f + ' não está no dry run: ' + [...files].join(', '));
+});
+
+// GUARDAS
+const gitR = (...a) => { const r = spawnSync('git', a, { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); if (r.status !== 0) throw new Error('git ' + a.join(' ') + ': ' + r.stderr); return r.stdout; };
+const linhas = (s) => LF(s).split('\n');
+test('GUARDA C6: scripts/scaffold.test.mjs mantém todas as linhas da base pela mesma ordem, e as únicas novas são as duas da lista do dry run', () => {
+  const antes = linhas(gitR('show', BASE + ':scripts/scaffold.test.mjs'));
+  const agora = linhas(readFileSync(join(ROOT, 'scripts/scaffold.test.mjs'), 'utf8'));
+  let j = 0;
+  const perdidas = [], novas = [];
+  for (const l of antes) { const k = agora.indexOf(l, j); if (k < 0) perdidas.push(l); else { novas.push(...agora.slice(j, k)); j = k + 1; } }
+  novas.push(...agora.slice(j));
+  assert.deepEqual(perdidas, [], 'linhas da base alteradas ou apagadas em scripts/scaffold.test.mjs');
+  assert.deepEqual(novas.map((l) => l.trim()).filter((l) => !["'.claude/learnings.cjs',", "'learnings/README.md',"].includes(l)), [], 'linhas novas além das duas do dry run');
+});
+test('GUARDA: os ataques de tests/critico/ que existiam na base ficam byte a byte (nunca se enfraquecem nem se apagam)', () => {
+  const fs_ = gitR('ls-tree', '-r', '@@NOME_SO@@', BASE, 'tests/critico').split('\n').filter(Boolean);
+  assert.ok(fs_.length > 50, 'controlo: ' + fs_.length);
+  const mudados = fs_.filter((f) => { const p = join(ROOT, f); return !existsSync(p) || linhas(readFileSync(p, 'utf8')).join('\n') !== linhas(gitR('show', BASE + ':' + f)).join('\n'); });
+  assert.deepEqual(mudados, []);
+});
