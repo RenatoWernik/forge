@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.forge.ai-memory.{{W}}.{{P}}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{BIN}}</string>
+    <string>--data-dir</string>
+    <string>{{DATADIR}}</string>
+    <string>serve</string>
+    <string>--transport</string>
+    <string>http</string>
+    <string>--bind</string>
+    <string>127.0.0.1:{{PORT}}</string>
+    <string>--workspace</string>
+    <string>{{W}}</string>
+    <string>--project</string>
+    <string>{{P}}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>

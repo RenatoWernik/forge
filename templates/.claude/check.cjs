@@ -96,7 +96,8 @@ async function chk(name, f) {
     let aim = null // shortcut: any load error reads as missing; upgrade: tell a broken module from an absent one
     try { aim = require('./ai-memory.cjs') } catch (e) {}
     const L_CAP = 'ai-memory: .ai-memory.toml admits capture in this project', L_PAGE = 'ai-memory: page _rules/framework.md seeded'
-    if (!aim) for (const n of ['ai-memory: binary', "ai-memory: server answers and is this project's", L_CAP, L_PAGE]) await chk(n + ' (.claude/ai-memory.cjs missing)', () => false)
+    const L_AUTO = 'ai-memory: autostart', L_CP = 'ai-memory: one page checkpoints/cp-N.md per cp-N tag'
+    if (!aim) for (const n of ['ai-memory: binary', "ai-memory: server answers and is this project's", L_CAP, L_PAGE, L_AUTO, L_CP]) await chk(n + ' (.claude/ai-memory.cjs missing)', () => false)
     else {
       const cfg = aim.readConfig('.'), { bin, version } = aim.resolveBin({ env: process.env, home: H, run: aim.run }), ready = !!(bin && cfg.serverUrl && cfg.dataDir)
       await chk(bin ? 'ai-memory: binary ' + bin + ' (' + version + ')' : 'ai-memory: binary not found (looked in: AI_MEMORY_BIN, PATH, %LOCALAPPDATA%/ai-memory/ai-memory.exe, ~/Applications/ai-memory/ai-memory, ~/.local/bin/ai-memory)', () => !!bin)
@@ -115,10 +116,31 @@ async function chk(name, f) {
           && bind.length === 1 && bind[0] === 'bind="' + new URL(cfg.serverUrl).host + '"' && ['.claude/settings.local.json', '.mcp.json', '.ai-memory.local.toml'].every(r => aim.isIgnored(g, r))
       })
       await chk(L_PAGE, () => ready && cfg.workspace && cfg.project && aim.run(bin, [...base, 'read-page', '--path', '_rules/framework.md', '--workspace', cfg.workspace, '--project', cfg.project], { env: { ...process.env, AI_MEMORY_SERVER_URL: cfg.serverUrl } }).code === 0)
+      const au = aim.autostartState({ cfg, bin, platform: process.platform, env: process.env, home: H })
+      await chk(L_AUTO + (au.detail ? ' ' + au.detail : ''), () => au.ok)
+      // A5: every cp-N tag has its page checkpoints/cp-N.md in this project's memory (the tags are git's own, never the files of .git/refs/tags)
+      const tags = (aim.run('git', ['tag', '--list', 'cp-*']).stdout || '').split(/\r?\n/).map(t => t.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+      const noPage = ready && cfg.workspace && cfg.project ? tags.filter(t => aim.run(bin, [...base, 'read-page', '--path', 'checkpoints/' + t + '.md', '--workspace', cfg.workspace, '--project', cfg.project], { env: { ...process.env, AI_MEMORY_SERVER_URL: cfg.serverUrl } }).code !== 0) : tags
+      await chk(L_CP + (!tags.length ? ' (no cp-* tags)' : noPage.length ? ' (missing: ' + noPage.join(', ') + ')' : ''), () => !noPage.length)
     }
     await chk('Spec-Kit: .specify/ and the /speckit-* skills installed', () => has('.specify/memory/constitution.md') && ['constitution', 'specify', 'clarify', 'plan', 'tasks', 'analyze', 'converge'].every(n => has('.claude/skills/speckit-' + n, 'SKILL.md')))
     await chk('Matt Pocock: /setup done (docs/agents/ and an "## Agent skills" block in CLAUDE.md)', () => has('docs/agents/issue-tracker.md') && fs.readFileSync('CLAUDE.md', 'utf8').includes('## Agent skills'))
     await chk('Graphify: post-commit and post-checkout hooks installed', () => { const s = out('graphify', ['hook', 'status']); return s.includes('post-commit: installed') && s.includes('post-checkout: installed') })
+    // freshness: the commit the graph was built at is the head of the seal graph.mjs writes after each graphify update (forge-fresh.json) or, without a seal, built_at_commit of graph.json (graphify leaves graph.json untouched when the code did not change); only an exact match with HEAD is fresh. This line never rebuilds the graph.
+    let fresh = ''
+    {
+      const r = sh('git', ['rev-parse', '--verify', '-q', 'HEAD']), head = r.status === 0 ? r.stdout.trim() : ''
+      let built, readable = true
+      let seal = ''
+      try { const s = JSON.parse(fs.readFileSync(path.join('graphify-out', 'forge-fresh.json'), 'utf8').replace(/^\uFEFF/, '')); if (s && typeof s.head === 'string') seal = s.head } catch (e) {} // a missing or unreadable seal falls back to built_at_commit
+      if (!has('graphify-out', 'graph.json')) fresh = '(missing: run node .claude/graph.mjs update)'
+      else {
+        try { const g = JSON.parse(fs.readFileSync(path.join('graphify-out', 'graph.json'), 'utf8').replace(/^﻿/, '')); if (!g || typeof g !== 'object' || Array.isArray(g)) throw new Error('not an object'); built = typeof g.built_at_commit === 'string' ? g.built_at_commit : '' } catch (e) { readable = false }
+        const at = seal || built
+        fresh = !readable ? '(unreadable)' : !head ? '(no commit yet)' : at === head ? '' : '(stale: built at ' + (at || 'no commit') + ', HEAD is ' + head + '; run node .claude/graph.mjs update)'
+      }
+      await chk('Graphify: graph.json built at HEAD' + (fresh ? ' ' + fresh : ''), () => !fresh || fresh === '(no commit yet)')
+    }
     await chk('git: repository and .gitignore with .gauntlet/ and graphify-out/', () => { const g = fs.readFileSync('.gitignore', 'utf8').split(/\r?\n/); return has('.git') && g.includes('.gauntlet/') && g.includes('graphify-out/') })
     // protection hooks: "installed" means an entry of the script is in the project's .claude/settings.json (not only in the answers); the script file must be there too
     const HOOKS = { killByName: 'forge-matar-por-nome.mjs', backgroundTests: 'forge-testes-em-primeiro-plano.mjs', idleWatch: 'forge-vigia-de-agentes.mjs' }
@@ -178,7 +200,8 @@ async function chk(name, f) {
     }
     return got
   }
-  const itemOk = (b, i) => en ? b.includes('Verifies:') && b.replace(/^\d+\. \*\*/, '').startsWith(TITLES[i]) : pt ? /(?<!\p{L})Verifica:/u.test(b) : /`[^`\n]+`/.test(b)
+  const SPAN_9 = '`ai-memory: one page checkpoints/cp-N.md per cp-N tag`' // item 9 names the --env line that verifies the pages; the span is not translated
+  const itemOk = (b, i) => (i !== 8 || b.includes(SPAN_9)) && (en ? b.includes('Verifies:') && b.replace(/^\d+\. \*\*/, '').startsWith(TITLES[i]) : pt ? /(?<!\p{L})Verifica:/u.test(b) : /`[^`\n]+`/.test(b))
   if (has('CLAUDE.md')) { // the documents are only absent in the nested --render copy, which holds just .claude
     const noInv = ['CLAUDE.md', 'AGENTS.md'].filter(f => { const it = items(f); return it.length !== TITLES.length || !it.every(itemOk) })
     await chk('invariants: CLAUDE.md and AGENTS.md have the 12 numbered invariants, each with its Verifies: line' + (noInv.length ? ' (not ok: ' + noInv.join(', ') + ')' : ''), () => !noInv.length)
