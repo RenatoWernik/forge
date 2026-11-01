@@ -116,6 +116,8 @@ test('executor --afetadas: corre só as suítes do diff contra a base; um diff v
     git('checkout', '-q', '-b', 'ramo');
     const vazio = sh(process.execPath, 'scripts/executor.mjs', '--afetadas', '--base', 'main');
     assert.equal(vazio.status, 2, vazio.stdout + vazio.stderr);
+    assert.equal(sh(process.execPath, 'scripts/executor.mjs', '--afetadas', '--base', 'nao-existe').status, 2); // uma base que não existe não é «nada afetado»
+    assert.equal(sh(process.execPath, 'scripts/afetadas.mjs', '--base', 'nao-existe').status, 2);
     writeFileSync(join(d, 'lib/x.mjs'), 'export const x = 2;\n'); git('commit', '-q', '-am', 'muda lib');
     const r = sh(process.execPath, 'scripts/executor.mjs', '--afetadas', '--base', 'main');
     assert.equal(r.status, 0, r.stdout + r.stderr);
