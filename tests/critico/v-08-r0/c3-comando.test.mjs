@@ -45,3 +45,17 @@ test('C3: o check-ticket do projeto (--ambito ** --base main) dá um código for
   assert.equal(res.suites?.vermelha?.estado, 'fail', 'a vermelha não correu no passo 4: ' + JSON.stringify(res.suites));
   assert.equal(res.suites?.verde?.estado, 'pass', 'a verde não correu no passo 4: ' + JSON.stringify(res.suites));
 });
+// RESPOSTA 2 (#132, 6563556283): o `tipo: comando` aceita `formato: codigo` (o estado vem do código de saída) e `limite_s` (o kill da unidade)
+const cmd = (nome, codigo, extra = {}) => ({ nome, tipo: 'comando', comando: [process.execPath, '-e', codigo], formato: 'codigo', ...extra });
+test('C3 (mecanismo): `formato: codigo` dá pass com saída 0 e fail com saída 4; uma suíte `comando` que passa o `limite_s` de 3 s fica `limite`; o executor dá 1', async () => {
+  const P = await gerar(await conjunto('en-plain-published'));
+  preCondicao(P);
+  comSuites(P, [cmd('zero', 'process.exit(0)'), cmd('quatro', 'process.exit(4)'), cmd('presa', 'setInterval(() => {}, 1e3)', { limite_s: 3 })]);
+  const sha = repo(P);
+  const t0 = Date.now();
+  const r = correAteFim(P, 'executor.mjs', ['--todas']);
+  assert.equal(r.status, 1, `código ${r.status} ao fim de ${r.chamadas} chamada(s)` + fim(r));
+  const res = resultado(P, sha);
+  assert.deepEqual(['zero', 'quatro', 'presa'].map((s) => res.suites?.[s]?.estado), ['pass', 'fail', 'limite'], 'estados: ' + JSON.stringify(res.suites));
+  assert.ok(Date.now() - t0 < 120000, 'a suíte presa não foi parada perto do limite_s: ' + (Date.now() - t0) + ' ms');
+});
