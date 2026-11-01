@@ -66,19 +66,33 @@ test('estadoSuite: o pior das unidades; «em_curso» enquanto faltar alguma por 
 // um bloco que não cobre um teste do ficheiro deixa-o por correr sem ninguém ver (risco 1 da spec): todo `test('título'` estático do ficheiro
 // com blocos tem de casar com algum bloco. O --test-name-pattern casa com o nome do teste e dos pais (a raiz tem nome vazio), por isso
 // um padrão negativo `^(?!...)` casaria tudo e não serve de «resto»: os blocos enumeram-se.
-test('blocos do manifesto: todo o teste do ficheiro casa com algum bloco, e cada bloco casa com algum teste', () => {
-  const raiz = fileURLToPath(new URL('..', import.meta.url));
-  const comBlocos = JSON.parse(readFileSync(join(raiz, 'scripts/suites.json'), 'utf8')).suites.filter((s) => s.blocos);
-  assert.ok(comBlocos.length > 0);
-  for (const s of comBlocos) {
+// Os problemas dos blocos de um manifesto lido de `raiz`: [texto]. O manifesto real já não tem blocos (o lote do V-03 tirou-os), por isso a regra
+// prova-se também sobre um manifesto de fixture.
+const problemasDeBlocos = (raiz, manifesto) => {
+  const out = [];
+  for (const s of manifesto.suites.filter((x) => x.blocos)) {
     for (const [f, blocos] of Object.entries(s.blocos)) {
       const titulos = [...readFileSync(join(raiz, f), 'utf8').matchAll(/^test\((['"`])(.*?)\1/gm)].map((m) => m[2]);
-      assert.ok(titulos.length > 0, `${f}: nenhum test('...') estático`);
+      if (!titulos.length) out.push(`${f}: nenhum test('...') estático`);
       const padroes = blocos.map((b) => b.padrao ?? b), res = padroes.map((b) => new RegExp(b));
-      assert.deepEqual(titulos.filter((t) => !res.some((r) => r.test(t))), [], `${f}: testes fora de todos os blocos`);
-      assert.deepEqual(padroes.filter((b, i) => !titulos.some((t) => res[i].test(t))), [], `${f}: blocos que não casam com nenhum teste`);
+      out.push(...titulos.filter((t) => !res.some((r) => r.test(t))).map((t) => `${f}: teste fora de todos os blocos: ${t}`));
+      out.push(...padroes.filter((b, i) => !titulos.some((t) => res[i].test(t))).map((b) => `${f}: bloco que não casa com nenhum teste: ${b}`));
     }
   }
+  return out;
+};
+test('blocos do manifesto: todo o teste do ficheiro casa com algum bloco, e cada bloco casa com algum teste', () => {
+  const raiz = fileURLToPath(new URL('..', import.meta.url));
+  assert.deepEqual(problemasDeBlocos(raiz, JSON.parse(readFileSync(join(raiz, 'scripts/suites.json'), 'utf8'))), []);
+});
+test('blocos de um manifesto de fixture: apanha o teste fora dos blocos e o bloco que não casa com nada', () => {
+  const raiz = tmp();
+  mkdirSync(join(raiz, 't'));
+  writeFileSync(join(raiz, 't', 'x.test.mjs'), "test('alfa um', () => {});\ntest('beta dois', () => {});\n");
+  const manifesto = (blocos) => ({ suites: [{ nome: 's', ficheiros: ['t/*.test.mjs'], blocos: { 't/x.test.mjs': blocos } }] });
+  assert.deepEqual(problemasDeBlocos(raiz, manifesto(['^alfa', { padrao: '^beta', limite_s: 5 }])), []);
+  assert.deepEqual(problemasDeBlocos(raiz, manifesto(['^alfa'])), ['t/x.test.mjs: teste fora de todos os blocos: beta dois']);
+  assert.deepEqual(problemasDeBlocos(raiz, manifesto(['^alfa', '^beta', '^gama'])), ['t/x.test.mjs: bloco que não casa com nenhum teste: ^gama']);
 });
 
 const executor = (raiz, ...args) => {

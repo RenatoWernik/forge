@@ -23,7 +23,33 @@ const lancaProcSync = (cmd, args, o) => { processos++; return spawnSync(cmd, arg
 const LIMITE_PADRAO_S = 240; // unidade de uma suíte sem limite_s
 const PASSO_MS = 100; // varredura do agendador e da carga global
 const FINAIS = ['pass', 'fail', 'limite', 'erro'];
+const MOTIVO_LOTE = 'lote: satisfeito na fase 2'; // o skip dos testes que usam doLote (tests/critico/_comum/lote.mjs) na fase 1
+const FASE2_LIMITE_S = 90; // a fase 2 só lê o resultado: uma unidade dela nunca precisa de mais
 class Uso extends Error {}
+
+// por correr na fase 2: uma unidade com estado final e testes que saltaram com o motivo do lote, ainda sem a fase 2 fundida
+const pendenteF2 = (u) => FINAIS.includes(u.estado) && !u.tap_fase2 && !!u.skips?.some((s) => s.motivo === MOTIVO_LOTE);
+
+export const escapaRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// o TAP do node escreve `\`, `#` e os controlos nos nomes (tap.js › tapEscape); isto desfaz-o
+const TAP_ESC = { b: '\b', f: '\f', t: '\t', n: '\n', r: '\r', v: '\v', '\\': '\\', '#': '#' };
+export const desfazTap = (s) => s.replace(/\\([bftnrv\\#])/g, (_, c) => TAP_ESC[c]);
+
+// os testes de um TAP: [{ nome (completo, os grupos unidos por « > »), folha (o nome do próprio teste), estado: pass|fail|skip|todo, motivo }].
+// Um grupo abre com `# Subtest: x` ao nível da indentação (4 espaços por nível) e fecha com o seu `ok N - x`, depois dos filhos.
+export function testesDoTap(texto) {
+  const pilha = [], testes = [];
+  for (const l of texto.split(/\r?\n/)) {
+    const h = /^( *)# Subtest: (.*)$/.exec(l);
+    if (h) { pilha[h[1].length >> 2] = desfazTap(h[2]); pilha.length = (h[1].length >> 2) + 1; continue; }
+    const ok = /^( *)(not )?ok \d+ - (.*?)(?: # (SKIP|TODO)\b ?(.*))?$/.exec(l);
+    if (!ok || ok[1].length % 4) continue;
+    const nivel = ok[1].length >> 2, folha = desfazTap(ok[3]);
+    testes.push({ nome: [...pilha.slice(0, nivel), folha].join(' > '), folha, estado: ok[4] === 'SKIP' ? 'skip' : ok[4] === 'TODO' ? 'todo' : ok[2] ? 'fail' : 'pass', motivo: ok[5] ?? '' });
+    pilha.length = nivel;
+  }
+  return testes;
+}
 
 // --- TAP do node --test: contagens das linhas `# pass|fail|skipped|todo` (a última de cada), motivos de `# SKIP`, duration_ms por teste ---
 export function lerTap(texto) {
@@ -306,7 +332,8 @@ async function chamada(argv, saida) {
   const motorFicheiro = join(c.motorDir, `${marca}.json`), lock = join(c.motorDir, `${marca}.lock`);
   mkdirSync(join(c.pasta, 'logs'), { recursive: true });
   mkdirSync(c.motorDir, { recursive: true });
-  const faltam = () => { const { feitas } = lerFeitas(c); return plano.filter((u) => !feitas.has(u.chave)).length; };
+  // por acabar: as unidades sem estado final e as que ainda esperam pela fase 2 do lote
+  const faltam = () => { const { feitas } = lerFeitas(c); return plano.filter((u) => !feitas.has(u.chave) || pendenteF2(feitas.get(u.chave))).length; };
 
   // um só motor por sha, árvore e passe: quem toma o lock (mkdir atómico) decide e lança; os outros esperam e ligam-se ao que ele deixou
   let motor = null;
@@ -352,7 +379,7 @@ async function chamada(argv, saida) {
   }
   const { feitas } = lerFeitas(c);
   const sel = plano.map((u) => feitas.get(u.chave)).filter(Boolean), mau = sel.filter((u) => u.estado !== 'pass');
-  const resto = plano.length - sel.length, seg = Math.round((Date.now() - t0) / 1000);
+  const resto = plano.length - sel.length + sel.filter(pendenteF2).length, seg = Math.round((Date.now() - t0) / 1000);
   if (resto) {
     saida(`executor: ${sel.length}/${plano.length} unidades, ${mau.length} com falha, limite ou erro, ${resto} por acabar em ${seg} s`
       + (vivo ? `; o motor ${motor.pid} continua a correr: repita com --continuar` : '; o motor morreu antes de acabar: repita com --continuar para relançar o resto'));
@@ -376,7 +403,7 @@ async function motorCorre(argv, saida) {
   const fila = plano.filter((u) => !feitas.has(u.chave));
   const ordemChave = new Map(plano.toSorted((a, b) => a.ordem - b.ordem).map((u, i) => [u.chave, i]));
   const correm = new Set();
-  const tapDe = (u) => `.forge/resultados/logs/${marca}-${u.suite.nome}-${u.ficheiro.replaceAll('/', '_')}${u.bloco ? `-b${plano.indexOf(u)}` : ''}.tap`;
+  const tapDe = (u) => `.forge/resultados/logs/${marca}-${u.suite.nome}-${u.ficheiro.replaceAll('/', '_')}${u.bloco ? `-b${plano.indexOf(u)}` : ''}${u.fase === 2 ? '-f2' : ''}.tap`;
   const emCurso = (r) => ({ suite: r.u.suite.nome, ficheiro: r.u.ficheiro, bloco: r.u.bloco, estado: 'em_curso', pass: 0, fail: 0, skip: 0, todo: 0, skips: [],
     duracoes: {}, duracao_s: 0, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap: tapDe(r.u) });
 
@@ -402,7 +429,8 @@ async function motorCorre(argv, saida) {
   };
 
   const escreve = (completo) => {
-    const unidades = [...feitas.values(), ...[...correm].map(emCurso)].sort((a, b) => (ordemChave.get(`${a.ficheiro}\0${a.bloco ?? ''}`) ?? 1e9) - (ordemChave.get(`${b.ficheiro}\0${b.bloco ?? ''}`) ?? 1e9));
+    // uma unidade na fase 2 já está em `feitas` com o resultado da fase 1: não se acrescenta um segundo «em_curso» para o mesmo ficheiro
+    const unidades = [...feitas.values(), ...[...correm].filter((r) => r.u.fase !== 2).map(emCurso)].sort((a, b) => (ordemChave.get(`${a.ficheiro}\0${a.bloco ?? ''}`) ?? 1e9) - (ordemChave.get(`${b.ficheiro}\0${b.bloco ?? ''}`) ?? 1e9));
     const suites = {};
     for (const nome of new Set(unidades.map((u) => u.suite))) {
       const us = unidades.filter((u) => u.suite === nome), soma = (k) => us.reduce((a, u) => a + u[k], 0);
@@ -411,7 +439,8 @@ async function motorCorre(argv, saida) {
     }
     const cmd = argv.slice(0, argv.indexOf('--motor-interno')).join(' ');
     const dados = { versao: 1, sha: c.sha, arvore: c.arvore, node: process.version, comando: `node scripts/executor.mjs ${cmd}`.trim(), manifesto: m.hash,
-      inicio, fim: new Date().toISOString(), completo: completo && !invalido, ...(invalido ? { valido: false, motivo: invalido } : {}), processos, unidades, suites };
+      inicio, fim: new Date().toISOString(), completo: completo && !invalido, fase1_completa: plano.every((u) => feitas.has(u.chave)),
+      ...(invalido ? { valido: false, motivo: invalido } : {}), processos, unidades, suites };
     // Windows: renomear sobre um ficheiro que um leitor (a chamada, uma ferramenta) tem aberto dá EPERM/EBUSY/EACCES; tenta-se algumas vezes e,
     // se continuar preso, o próximo escreve grava o estado todo, por isso um leitor nunca deita o motor abaixo
     for (let i = 0; i < 20; i++) {
@@ -444,9 +473,13 @@ async function motorCorre(argv, saida) {
       else if (process.env[k] === undefined) delete env[k];
       else env[k] = process.env[k];
     }
+    delete env.FORGE_LOTE_FASE; delete env.FORGE_LOTE_RESULTADOS;
+    // fase 1: os testes com doLote saltam; fase 2: só eles correm, a ler este ficheiro de resultados (que a fase 2 vai completando)
+    if (u.fase === 2) env.FORGE_LOTE_RESULTADOS = ficheiro; else env.FORGE_LOTE_FASE = '1';
     const args = ['--test', '--test-reporter=tap'];
     if (u.suite.concorrencia) args.push(`--test-concurrency=${u.suite.concorrencia}`);
-    if (u.bloco) args.push(`--test-name-pattern=${u.bloco}`);
+    if (u.fase === 2) args.push(`--test-name-pattern=^(?:${u.nomes.map(escapaRegex).join('|')})$`);
+    else if (u.bloco) args.push(`--test-name-pattern=${u.bloco}`);
     args.push(u.ficheiro);
     const r = { u, vaga, cmax: vaga.carga, inicio: new Date(), limite: false, out: '', err: '' };
     const p = lancaProc(process.execPath, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
@@ -476,38 +509,67 @@ async function motorCorre(argv, saida) {
     const tap = tapDe(u);
     writeFileSync(join(raiz, tap), r.out);
     if (r.err) writeFileSync(join(raiz, `${tap}.err`), r.err);
-    feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado, pass: cont.pass ?? 0, fail: cont.fail ?? 0, skip: cont.skip ?? 0, todo: cont.todo ?? 0,
-      skips: cont.skips, duracoes: cont.duracoes, duracao_s: Math.round((Date.now() - r.inicio) / 100) / 10, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(),
-      fim: new Date().toISOString(), nonce_motor: o.nonce, tap });
+    acabadas.add(u.chave);
+    if (u.fase === 2) { // a fase 2 junta-se à unidade da fase 1: os skips do lote dão lugar ao que correu
+      const a = feitas.get(u.base), lote = a.skips.filter((s) => s.motivo === MOTIVO_LOTE).length;
+      const ainda = cont.skips.some((s) => s.motivo === MOTIVO_LOTE); // um teste que continua a saltar na fase 2 não foi provado
+      // cada teste esperado tem de aparecer no TAP, ok ou not ok (pelo nome exato): um padrão que não casa deixava o ficheiro «pass» sem o teste ter corrido
+      const vistos = testesDoTap(r.out).filter((t) => t.estado === 'pass' || t.estado === 'fail').map((t) => t.folha);
+      const naoExec = u.nomes.filter((n) => { const i = vistos.indexOf(n); if (i < 0) return true; vistos.splice(i, 1); return false; });
+      const estados = [a.estado, estado, ...(naoExec.length ? ['fail'] : []), ...(ainda && estado === 'pass' ? ['erro'] : [])];
+      feitas.set(u.base, { ...a, estado: estadoSuite(estados, false), pass: a.pass + (cont.pass ?? 0), fail: a.fail + (cont.fail ?? 0) + naoExec.length,
+        skip: a.skip - lote + (cont.skip ?? 0), todo: a.todo + (cont.todo ?? 0), skips: [...a.skips.filter((s) => s.motivo !== MOTIVO_LOTE), ...cont.skips],
+        duracoes: { ...a.duracoes, ...cont.duracoes }, duracao_s: Math.round((a.duracao_s + (Date.now() - r.inicio) / 1000) * 10) / 10, tap_fase2: tap,
+        fim: new Date().toISOString(), nonce_motor: o.nonce, // uma fase 2 que a morte do motor arrastou também reabre (reabreMortas)
+        ...(naoExec.length ? { nao_executados: naoExec } : {}) });
+      for (const n of naoExec) saida(`FAIL ${u.ficheiro} [fase 2]: não executado: ${JSON.stringify(n)}`);
+    } else {
+      feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado, pass: cont.pass ?? 0, fail: cont.fail ?? 0, skip: cont.skip ?? 0, todo: cont.todo ?? 0,
+        skips: cont.skips, duracoes: cont.duracoes, duracao_s: Math.round((Date.now() - r.inicio) / 100) / 10, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(),
+        fim: new Date().toISOString(), nonce_motor: o.nonce, tap });
+    }
     escreve(false);
-    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''} (${cont.pass ?? 0} pass, ${cont.fail ?? 0} fail) → ${tap}`);
+    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''}${u.fase === 2 ? ' [fase 2]' : ''} (${cont.pass ?? 0} pass, ${cont.fail ?? 0} fail) → ${tap}`);
   };
 
   // o agendador: lança o que cabe nas vagas e nas faixas (o limite_s não entra); a carga global de cada unidade que corre é medida a cada passo
-  const porLancar = () => (invalido ? [] : fila.filter((u) => !feitas.has(u.chave) && ![...correm].some((r) => r.u === u)));
+  const acabadas = new Set();
   let ultimoBatimento = 0;
-  while (!fatal && (porLancar().length || correm.size)) {
-    // o batimento (1 s) diz até quando o motor viveu: uma unidade que falhou nos últimos 5 s antes dele é arrasto da morte do motor (ver reabreMortas)
-    if (Date.now() - ultimoBatimento >= 1000) {
-      // o batimento vai num ficheiro só do motor (PID e nonce dele): quem forja o PID do ficheiro do motor não o herda
-      try { writeFileSync(`${motorFicheiro}.bat`, JSON.stringify({ pid: process.pid, nonce: o.nonce, t: Date.now() })); ultimoBatimento = Date.now(); } catch { /* um leitor tem-no aberto: o próximo batimento */ }
+  const roda = async (fila) => {
+    const porLancar = () => (invalido ? [] : fila.filter((u) => !feitas.has(u.chave) && !acabadas.has(u.chave) && ![...correm].some((r) => r.u === u)));
+    while (!fatal && (porLancar().length || correm.size)) {
+      // o batimento (1 s) diz até quando o motor viveu: uma unidade que falhou nos últimos 5 s antes dele é arrasto da morte do motor (ver reabreMortas)
+      if (Date.now() - ultimoBatimento >= 1000) {
+        // o batimento vai num ficheiro só do motor (PID e nonce dele): quem forja o PID do ficheiro do motor não o herda
+        try { writeFileSync(`${motorFicheiro}.bat`, JSON.stringify({ pid: process.pid, nonce: o.nonce, t: Date.now() })); ultimoBatimento = Date.now(); } catch { /* um leitor tem-no aberto: o próximo batimento */ }
+      }
+      // a raiz ou o ficheiro do motor desapareceram (a pasta foi apagada): sai e mata a sua árvore; os primeiros 5 s dão tempo à chamada que o lançou de o gravar
+      if (!raizViva() || (Date.now() - t0 > 5000 && !existsSync(motorFicheiro) && (Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500), !existsSync(motorFicheiro)))) process.exit(1); // duas leituras: o rename do batimento não conta
+      for (const u of porLancar()) {
+        if (correm.size >= paralelo) break;
+        let vaga = null;
+        try { vaga = vagas.tenta(u); } catch { /* o sistema de ficheiros das vagas falhou neste passo: um erro a meio da corrida não deita abaixo as unidades que correm */ }
+        if (!vaga) { if (u.suite.exclusiva) break; continue; }
+        if (!confere()) { vagas.larga(vaga.dirs); break; } // o HEAD ou a árvore mudaram: não se lança mais nada (o git só corre quando há vaga para lançar)
+        lanca(u, vaga);
+      }
+      if (correm.size) { const { ativas } = vagas.estado(); for (const r of correm) r.cmax = Math.max(r.cmax, ativas); }
+      await dorme(PASSO_MS + Math.floor(Math.random() * PASSO_MS));
     }
-    // a raiz ou o ficheiro do motor desapareceram (a pasta foi apagada): sai e mata a sua árvore; os primeiros 5 s dão tempo à chamada que o lançou de o gravar
-    if (!raizViva() || (Date.now() - t0 > 5000 && !existsSync(motorFicheiro) && (Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500), !existsSync(motorFicheiro)))) process.exit(1); // duas leituras: o rename do batimento não conta
-    for (const u of porLancar()) {
-      if (correm.size >= paralelo) break;
-      let vaga = null;
-      try { vaga = vagas.tenta(u); } catch { /* o sistema de ficheiros das vagas falhou neste passo: um erro a meio da corrida não deita abaixo as unidades que correm */ }
-      if (!vaga) { if (u.suite.exclusiva) break; continue; }
-      if (!confere()) { vagas.larga(vaga.dirs); break; } // o HEAD ou a árvore mudaram: não se lança mais nada (o git só corre quando há vaga para lançar)
-      lanca(u, vaga);
-    }
-    if (correm.size) { const { ativas } = vagas.estado(); for (const r of correm) r.cmax = Math.max(r.cmax, ativas); }
-    await dorme(PASSO_MS + Math.floor(Math.random() * PASSO_MS));
+  };
+
+  await roda(fila);
+  // fase 2 (spec §4.4): com a fase 1 inteira feita, os testes que saltaram com o motivo do lote voltam a correr, sozinhos, a ler o resultado
+  // (o ficheiro de resultados, que a fase 2 vai completando: o estado final de um teste do lote é o da fase 2)
+  if (!fatal && !invalido && plano.every((u) => feitas.has(u.chave))) {
+    escreve(false);
+    await roda(plano.filter((u) => pendenteF2(feitas.get(u.chave))).map((u, i) => ({
+      suite: { ...u.suite, sensivel_ao_tempo: false, exclusiva: false }, ficheiro: u.ficheiro, bloco: null, chave: `${u.chave}\0fase2`, base: u.chave, fase: 2,
+      limite_s: Math.min(u.limite_s, FASE2_LIMITE_S), nomes: feitas.get(u.chave).skips.filter((s) => s.motivo === MOTIVO_LOTE).map((s) => desfazTap(s.teste)), ordem: plano.length + i })));
   }
 
   if (fatal) { for (const r of correm) mataArvore(r.pid); try { escreve(false); } catch { /* a raiz desapareceu */ } }
-  else escreve(plano.every((u) => feitas.has(u.chave)));
+  else escreve(plano.every((u) => feitas.has(u.chave)) && !plano.some((u) => pendenteF2(feitas.get(u.chave))));
   saida(`motor ${process.pid}: ${plano.length} unidades em ${Math.round((Date.now() - t0) / 1000)} s${invalido ? ` (invalidado: ${invalido})` : ''}`);
   return invalido ? 2 : 0;
 }
