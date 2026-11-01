@@ -23,7 +23,8 @@ Every role except the orchestrator is its own `agent()`, with a separate context
 
 | Job | The one tool |
 |---|---|
-| Decision, behaviour rule or durable lesson; checkpoint summary | ai-memory `memory_write_page` (section 7) |
+| Decision or behaviour rule; checkpoint summary | ai-memory `memory_write_page` (section 7) |
+| Lesson from an error | `/forge:learn` (`learnings/`, section 11); ai-memory only keeps the index page `gotchas/<class>.md` |
 | Baton between sessions | ai-memory `memory_handoff_begin` (the `/handoff` of Matt Pocock is for the human only) |
 | What was already done or tried | ai-memory `memory_query`, `memory_recent` (section 7); a page is a note from an earlier session: confirm exact facts at the source |
 | How the pieces connect (specs, modules, callers) | graphify `query`, `explain`, `path`, `affected`; it reflects the last `graphify update` |
@@ -141,6 +142,7 @@ Assemble `pieces` from `tasks.md` (each one already has its contract issue, sect
    "issue":12,"affected":{"nodes":["Config.load","Config.validate"],"files":["src/config.py"]},"objective":"<the objective, copied from issue 12>","input":"<branch, HEAD and files of the ticket>",
    "criteria":[{"text":"Config.load returns the 3 keys of the sample file","oracle":"corpus","command":"pytest tests/test_config.py"},{"text":"A missing key fails with a message that names it","command":"pytest tests/test_config.py -k missing"}],
    "fails":"<what fails the ticket>","outOfScope":"<what the ticket does not do>","env":"<environment and commands>","output":"<where the result goes>"}],
+ "knownClasses":[{"class":"stale-config-cache","entries":2,"strongest":"test"}],
  "attacks":[{"id":"config","attacks":[{"id":"config-a1","file":"tests/critico/config-r0/a1.test.py","passesOnBase":false},{"id":"config-g1","file":"tests/critico/config-r0/g1.test.py","guard":true,"passesOnBase":true}],"failingOnBase":true,"gaps":[]}]}
 ```
 
@@ -156,7 +158,7 @@ Format rules:
 - Args without `root`, `dashboardUrl`, `models` or `pieces`, or a piece without `id`, `title`, `goal`, `bar` or `owns`, bring the workflow down before any agent is spent.
 - Optional fields of a piece: `ui: true` runs its developer with `models.developerUi` (any other piece with `models.developer`); `redesigns` (an integer, 0 or more, that you raise each time you write a `REDESIGN` comment for the piece); `central: true` on a criterion of `criteria`, for the criteria that stay blocking in round 2 of `accelerated`.
 - `vida` (optional): `{<agent or piece id>: {minutos, vida}}`, the minutes without progress that you read with the panel reader from the checkpoint files. The workflow only reads it; a number that an agent declares about itself is never used. Pieces are matched by `id` or by the agent ids `b-{N}-{piece}-r{R}` and `c-{N}-{piece}-r{R}`.
-- `knownClasses` (optional, for both workflows): the output of `node .claude/learn.mjs classes --ref <integration branch>` (section 10.1), `[{class, entries, strongest}]`, each `class` kebab-case, otherwise the workflow refuses with `incomplete args: knownClasses: ...` before any agent. Only the class names reach the critics (the Round −1 critic attacks the known classes that apply first; the build critic gives each blocking failure a class, a known one or a new one), never the developer. Without it the critics are told `No known classes yet.`.
+- `knownClasses` (optional, but the orchestrator passes it to `gauntlet-attacks` and to `gauntlet-build`): the output of `node .claude/learn.mjs classes --ref <integration branch>`, never read from the worktree of a piece or from memory (section 10.1), `[{class, entries, strongest}]`, each `class` kebab-case, otherwise the workflow refuses with `incomplete args: knownClasses: ...` before any agent. Only the class names reach the critics (the Round −1 critic attacks the known classes that apply first; the build critic gives each blocking failure a class, a known one or a new one), never the developer. Without it the critics are told `No known classes yet.`.
 
 The graph is optional (without `graph` the prompts say `No graph for this run.` and nothing is refused). With it, run `graphify affected` (or `graphify query`) once per piece, before the Round −1, and paste the nodes and files it returns in the contract (the issue, section 10.2) and in `affected` of the piece. `graph` is then an absolute path (a Windows drive path, with `\` or `/`, or a path that starts with `/`) and every piece, and every ponytail unit, needs `affected` with a list of `nodes` and a list of `files` (strings, possibly empty), or the workflow is refused before any agent. The agents get `--graph "<graph>"` for `graphify query`, `graphify affected` and `graphify explain`, and the developer returns in `graphNodes` the nodes it consulted (the result of the piece has their union). Every run of `gauntlet-build`, `gauntlet-batch` and `gauntlet-ponytail` starts with one `graph:update` agent (the aux model) that runs `node .claude/graph.mjs update`; if it answers anything but `graph: ...`, `log()` warns and the run goes on.
 
@@ -204,7 +206,14 @@ Done when `graphify explain "<new symbol of the checkpoint>"` finds the node.
 In the ai-memory scope (section 7):
 
 - `memory_write_page {workspace:"{{MEM_WORKSPACE}}", project:"{{MEM_PROJECT}}", path:"checkpoints/cp-N.md", tier:"episodic", body}`, with the `body` starting with `# CP N: <title>` and carrying pieces with rounds and last gap, decisions (links), Ponytail (lines before and after, `ponytail:` debts), test command and result, open questions, tag.
-- One `decisions/<topic>.md` page per approved decision and `gotchas/<topic>.md` per durable lesson.
+- One `decisions/<topic>.md` page per approved decision.
+- Each lesson of the checkpoint runs `/forge:learn` (section 11) once per error: the lesson is the entry `E-NNN` of `learnings/`, and the page `gotchas/<class>.md` is only the index, with the body of `node .claude/learn.mjs gotcha <E-NNN>`, never the text of the lesson. The triggers of `/forge:learn`, with their sources in this checkpoint:
+  - `user`: the user says the agent got it wrong, or the "No" of Step 7;
+  - `critic-rejected`: a piece of `results[]` with `rounds > 1`, or a REJECTED verdict;
+  - `escape`: a `regressions` of the batch, or a bug after the APPROVED;
+  - `noise`: a `contested` that the orchestrator keeps, or `criticNotReproduced > 0`;
+  - `hook-blocked`: a hook of forge blocked an action;
+  - `incident`: any other incident.
 - `memory_feedback {path, signal}` (`helpful`, `not_helpful`, `stale`, `wrong`) for the pages you used.
 - `memory_handoff_begin {summary (2 or 3 short sentences), open_questions, next_steps, files_touched}`.
 
@@ -223,7 +232,7 @@ Done when the panel shows the CP as concluded, every piece under "Won" and the c
 Present in chat: pieces and rounds, Ponytail cuts (lines before and after), suite result, open questions. Ask: "Do you approve checkpoint N?". Record the question first as a `pergunta` note and the yes on it (section 6, step 5).
 
 - Yes: `git status`, `git add <paths>` (never `-A`; never `.gauntlet/`, `graphify-out/`, secrets), `git commit -m "cp-N: <title>"`, `git tag cp-N`, then `node .claude/graph.mjs update`, so that the graph is built at the new HEAD (the graphify hook also rebuilds it in the background).
-- No: record the note; create fix pieces with the reason in their `goal`; go back to step 2 for them only and repeat 3 to 7.
+- No: record the note; run `/forge:learn` with the trigger `user`; create fix pieces with the reason in their `goal`; go back to step 2 for them only and repeat 3 to 7.
 
 Done when `git tag --list "cp-*"` shows `cp-N`.
 
@@ -268,7 +277,7 @@ The orchestrator writes `meta/*`, `checkpoints/cp{N}` (creates `{n, title, statu
 **ai-memory**
 
 - `workspace:"{{MEM_WORKSPACE}}", project:"{{MEM_PROJECT}}"` in every `memory_*` call (static MCP client: omitting it may land in another project). Check the `scope` in `memory_status`.
-- Pages: `_rules/<topic>.md` (permanent rule; `tier:"procedural"`, `pinned:true`), `decisions/<topic>.md` (approved decision; `semantic`), `checkpoints/cp-N.md` (`episodic`), `gotchas/<topic>.md` (durable lesson; `semantic`).
+- Pages: `_rules/<topic>.md` (permanent rule; `tier:"procedural"`, `pinned:true`), `decisions/<topic>.md` (approved decision; `semantic`), `checkpoints/cp-N.md` (`episodic`), `gotchas/<class>.md` (index of a lesson of `learnings/`: it points to the entry and never holds its text; `semantic`).
 - The `body` starts with `# Title`, without the `title` argument; names in kebab-case without accents. A permanent fact goes in a page, never in a baton. `memory_lint` (report in `_lint/report.md`) may suggest copying `_rules/framework.md` into CLAUDE.md (`rule_suggestion`, info level): ignore it, the page is only a pointer and CLAUDE.md already points to FRAMEWORK.md.
 - `memory_query` before proposing a design. Without an LLM provider: `memory_consolidate`, `answer:true` and prose `memory_explore` do not work (the search is FTS).
 - Destructive commands (`purge-*`, `reset`, `restore`, `reindex`, `rename-project`, `move-*`): the user's OK and `ai-memory backup --to <file.tar.gz>` first. Never print the `token_pepper` of `config.toml`.
@@ -312,14 +321,14 @@ An open criterion ("never leaks", "always repeats") makes the critic find one mo
 - The contract is the body of the issue plus the comments of the orchestrator (`REDESIGN`, amendments and the answers to a `QUESTION:`); the comments of the critic are context only.
 - A doubt the contract does not settle becomes a `QUESTION:` comment on the issue, and the agent goes on with what does not depend on it.
 - Results go to the issue (the Round 0 comment of the developer, the verdict of the critic) and to the agent's checkpoint file, never to a document of the project.
-- The known failure classes for `knownClasses` (section 5, Step 2) are read by the orchestrator with `node .claude/learn.mjs classes --ref <integration branch>`, never from the worktree of a piece and never from memory.
+- The known failure classes for `knownClasses` (section 5, Step 2) are read by the orchestrator with `node .claude/learn.mjs classes --ref <integration branch>`, never from the worktree of a piece and never from memory. The open lessons of the zone of a piece go in its contract (section 10.2).
 
 ### 10.2 The contract and the modes
 
 Every contract has these parts, and an issue without them is not ready:
 
 - **Objective**: one sentence.
-- **Exact input**: the issue, the branch, the HEAD, the worktree, the files, and the nodes and files affected (the output of `graphify affected` that you paste, section 5).
+- **Exact input**: the issue, the branch, the HEAD, the worktree, the files, and the nodes and files affected (the output of `graphify affected` that you paste, section 5), and the open lessons of the zone: the output of `node .claude/learn.mjs for <the files of affected>`, pasted in the issue.
 - **Criteria**: each one with its oracle and the command that checks it. A criterion with never, always, any or all gets a closed oracle before the code: a versioned corpus of cases, a property test with its generator and number of cases, a named reference implementation, or a measured threshold with the command that measures it.
 - **What fails and what is a gap**: the always-fails list (a leaked secret or personal data, a security hole, lost or corrupted data, a false alarm or charge, a regression, a criterion failed or without evidence).
 - **Scope**: what the agent leaves as it is.

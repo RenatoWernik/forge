@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 
 // Project data that must never travel back into the public templates: always turned back into its marker.
 const PRIVATE = ['PROJECT_NAME', 'MEM_WORKSPACE', 'MEM_PROJECT', 'DASHBOARD_URL', 'REPO'];
@@ -162,6 +163,21 @@ function findLeaks(patch, answers, roles, skip, projectDir) {
   return leaks;
 }
 
+// The lessons of the project that belong to the package: one `E-NNN <class> -> <PREVENTION-PATH>` line per entry with SCOPE: package, read from
+// learnings/YYYY-MM.md only (README.md is not the register). The parser is the one of the package templates; it only reads.
+async function packageLessons(projectDir, packageDir) {
+  const lib = createRequire(import.meta.url)(join(packageDir, 'templates', '.claude', 'learnings.cjs'));
+  let names = [];
+  try { names = (await readdir(join(projectDir, 'learnings'), { withFileTypes: true })).filter((e) => e.isFile() && lib.isMonthFile(e.name)).map((e) => e.name).sort(); } catch { /* no learnings/ */ }
+  const lines = [];
+  for (const n of names) {
+    for (const e of lib.parse(await readText(join(projectDir, 'learnings', n)), n).entries) {
+      if (lib.val(e, 'SCOPE') === 'package' && lib.val(e, 'CLASS')) lines.push(`${e.id} ${lib.val(e, 'CLASS')} -> ${lib.val(e, 'PREVENTION-PATH') ?? 'none'}`);
+    }
+  }
+  return lines;
+}
+
 // The seam: project folder and package folder in, applicable patch (against <package>/templates) out. Nothing is written to either folder.
 export async function sync(projectDir, packageDir, { answers } = {}) {
   const tplRoot = join(packageDir, 'templates');
@@ -237,6 +253,7 @@ export async function sync(projectDir, packageDir, { answers } = {}) {
 const PKG = fileURLToPath(new URL('../', import.meta.url));
 const USAGE = `usage: node sync.mjs --project <folder of the generated project> [--package <forge folder>] [--answers <file.json>] [--out <patch file>]
        Prints a patch that git apply accepts at the root of <package> (run it there, after the user says yes): the templates and the copied scripts.
+       Also lists, on stderr, the entries of learnings/ with SCOPE: package (the section "learnings (scope package):").
        Nothing is applied and neither folder is modified. Exit 0: patch ready (or nothing to sync); 3: the patch may carry project data; 2: error.`;
 
 export async function main(argv, write = (s) => process.stdout.write(s), warn = console.error) {
@@ -250,9 +267,12 @@ export async function main(argv, write = (s) => process.stdout.write(s), warn = 
   }
   try {
     const answers = v.answers ? JSON.parse(await readFile(v.answers, 'utf8')) : undefined;
-    const { patch, files, missing, leaks } = await sync(resolve(v.project), resolve(v.package ?? PKG), { answers });
+    const [project, pkg] = [resolve(v.project), resolve(v.package ?? PKG)];
+    const { patch, files, missing, leaks } = await sync(project, pkg, { answers });
     warn(`forge sync: ${files.length} file(s) differ from the templates${files.length ? `: ${files.join(', ')}` : ''}`);
     if (missing.length) warn(`not in the project (skipped): ${missing.join(', ')}`);
+    const lessons = await packageLessons(project, pkg);
+    warn(`learnings (scope package):\n${lessons.length ? lessons.map((l) => `  ${l}`).join('\n') : '  none'}`);
     for (const l of leaks) warn(`WARNING possible project data in ${l.file}: ${l.line}`);
     if (leaks.length) warn('A flagged line holds project data, or a model/effort marker ({{developer}}, {{developerUi}}, {{critic}}, {{tester}}, {{aux}}) that the edit turned into a fixed value: restore the marker in the patch or revert the edit.');
     if (v.out) await writeFile(resolve(v.out), patch); else if (patch) write(patch);
