@@ -29,7 +29,7 @@ const badRoles = Object.keys(R).filter(r => !(typeof R[r].model === 'string' && 
 const GRAPH = A.graph
 const strs = x => Array.isArray(x) && x.every(s => typeof s === 'string')
 const graphProblems = (items, what) => [
-  ...(GRAPH == null || (typeof GRAPH === 'string' && /^(?:[A-Za-z]:[\\/]|\/)/.test(GRAPH)) ? [] : ['graph: an absolute path of graph.json (X:\\, X:/ or /), or leave it out']),
+  ...(GRAPH == null || (typeof GRAPH === 'string' && /^(?:[A-Za-z]:[\\/]|\/)/.test(GRAPH)) ? [] : ['graph: an absolute path of graph.json (a drive path, or a path that starts with /), or leave it out']),
   ...(GRAPH == null ? [] : items.filter(x => !(x.affected && typeof x.affected === 'object' && strs(x.affected.nodes) && strs(x.affected.files))).map(x => `${what} ${x.id}, affected: {nodes: [strings], files: [strings]}, from graphify affected`)),
 ]
 const graphNote = x => GRAPH ? `Graph of this run: ${GRAPH}. Pass --graph "${GRAPH}" to graphify query, graphify affected and graphify explain. Affected by this piece: nodes ${JSON.stringify(x.affected.nodes)}, files ${JSON.stringify(x.affected.files)}.` : 'No graph for this run.'
