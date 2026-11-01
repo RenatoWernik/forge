@@ -1,0 +1,20 @@
+{
+  "issue": 36,
+  "objective": "The id of a piece and of a failure class is kebab-case: lower case letters and digits, words joined by a single hyphen.",
+  "input": "branch main; file piece/kebab.mjs",
+  "criteria": [
+    {
+      "text": "Only lower case words joined by single hyphens are accepted",
+      "oracle": "corpus",
+      "command": "node --test proof.test.mjs"
+    },
+    {
+      "text": "Spaces, upper case, accents and edge hyphens are refused",
+      "command": "node --test proof.test.mjs"
+    }
+  ],
+  "fails": "a name with a space or an upper case letter accepted; a regression",
+  "outOfScope": "renaming existing ids",
+  "env": "Node 24 and the standard library; the proof runs with node --test in a copy of this folder",
+  "output": "the verdict of the critic on the issue"
+}

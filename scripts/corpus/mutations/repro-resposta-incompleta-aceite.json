@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "ids.every(id => said(id).length && ",
+  "replace": "ids.every(id => ",
+  "line": "build: a blocking failure that the repro did not reproduce leaves the blocking list for minor with notReproduced, keeps the id F<round>-<n> of the others and counts in metrics.criticNotReproduced; one of materiality 1 stays blocking, only unconfirmed and not counted; an invalid repro answer (not valid, not a list, one id missing, a non-boolean) keeps them all"
+}

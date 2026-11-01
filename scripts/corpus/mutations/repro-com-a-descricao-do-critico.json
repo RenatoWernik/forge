@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "finding: ids[i], repro: b.repro",
+  "replace": "finding: ids[i], repro: b.repro, description: b.description",
+  "line": "build: a verdict with blocking failures makes ONE repro:<id>:r<N> call, after the critic and before the panel records the verdict, with models.tester and a prompt of only the {finding, repro} pairs and the root (never the description, the reason of the developer, the summary, the gap or the reasoning), a schema with an object root and one array of {finding, reproduced: boolean, output}, and no call without blocking failures"
+}

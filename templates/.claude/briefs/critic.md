@@ -41,7 +41,7 @@ Post a comment on the issue with exactly this format, and end with a last messag
 ```
 VERDICT: APPROVED | REJECTED
 SHA: the commit you judged (git rev-parse HEAD)
-BLOCKING: (numbered, each with the materiality criterion 1, 2 or 3 and the repro) or "none"
+BLOCKING: (numbered, each with the materiality criterion 1, 2 or 3, the repro that another agent will run again before the ticket fails, and its failure class in kebab-case: a known class if one applies, otherwise a new one) or "none"
 MINOR (they do not block): ...
 QUESTIONS TO THE BAR: ...
 PRE-EXISTING: (each with the git blame line) or "none"

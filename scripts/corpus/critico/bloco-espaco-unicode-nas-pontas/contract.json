@@ -1,0 +1,20 @@
+{
+  "issue": 57,
+  "objective": "A test block of the batch is valid only when it is the test command, plus optional file filters separated by plain spaces or tabs.",
+  "input": "branch main; file piece/block.mjs",
+  "criteria": [
+    {
+      "text": "No block with a Unicode space (NBSP, line separator, BOM, carriage return) at either end is valid",
+      "oracle": "corpus",
+      "command": "node --test proof.test.mjs"
+    },
+    {
+      "text": "A block that is the test command plus a filter is valid",
+      "command": "node --test proof.test.mjs"
+    }
+  ],
+  "fails": "a block with a Unicode space at either end counts as valid; a regression",
+  "outOfScope": "blocks with spaces inside a path",
+  "env": "Node 24 and the standard library; the proof runs with node --test in a copy of this folder",
+  "output": "the verdict of the critic on the issue"
+}

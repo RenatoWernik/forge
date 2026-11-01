@@ -95,8 +95,9 @@ export const why = (run, id = 'pa') => JSON.stringify({ err: run.err && String(r
 export const devCalls = (run) => run.calls.filter(isDev);
 export const criticCalls = (run) => run.calls.filter((c) => roleOf(c.opts) === 'critic');
 export const labeled = (run, label) => run.calls.filter((c) => c.opts.label === label);
-// O desfecho de uma peça (o que um campo ausente nunca pode mudar)
-export const outcome = (r) => r && JSON.parse(JSON.stringify({ won: r.won, rounds: r.rounds, stopped: r.stopped ?? null, criterion: r.criterion ?? null, condition: r.condition ?? null, blocked: r.blocked ?? null, metrics: r.metrics ?? null }));
+// O desfecho de uma peça (o que um campo ausente nunca pode mudar). Do `metrics` só as 4 medidas de antes do F-23b (#78, resposta do orquestrador à Ronda −1, opção c)
+const OLD_METRICS = ['rounds', 'sameCriterionFailures', 'attacksRedOnDelivery', 'minutesWithoutProgress'];
+export const outcome = (r) => r && JSON.parse(JSON.stringify({ won: r.won, rounds: r.rounds, stopped: r.stopped ?? null, criterion: r.criterion ?? null, condition: r.condition ?? null, blocked: r.blocked ?? null, metrics: r.metrics ? Object.fromEntries(OLD_METRICS.map((k) => [k, r.metrics[k]])) : null }));
 
 // ---------- Contrato da peça (forma do F-07) e args ----------
 const CRIT_TEXT = ['The export returns 3 rows for the sample file', 'The header row matches the reference CSV byte for byte', 'An empty file exports only the header', 'The totals row sums the amount column'];

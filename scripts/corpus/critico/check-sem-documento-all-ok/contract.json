@@ -1,0 +1,20 @@
+{
+  "issue": 6,
+  "objective": "The check of a generated project fails when a document it verifies is missing, except in the nested copy of the render round trip.",
+  "input": "branch main; file piece/check.mjs",
+  "criteria": [
+    {
+      "text": "A deleted CLAUDE.md or FRAMEWORK.md gives a FAIL line, outside the nested copy",
+      "oracle": "corpus",
+      "command": "node --test proof.test.mjs"
+    },
+    {
+      "text": "The nested copy, which has only .claude, still passes",
+      "command": "node --test proof.test.mjs"
+    }
+  ],
+  "fails": "a deleted document ends with All ok.; a regression",
+  "outOfScope": "the other lines of the check",
+  "env": "Node 24 and the standard library; the proof runs with node --test in a copy of this folder",
+  "output": "the verdict of the critic on the issue"
+}

@@ -1,0 +1,20 @@
+{
+  "issue": 36,
+  "objective": "A criterion with an absolute word needs a closed oracle; the word must stand alone, in English or Portuguese.",
+  "input": "branch main; file piece/absolute.mjs",
+  "criteria": [
+    {
+      "text": "The absolute words are found as whole words, in either language",
+      "oracle": "corpus",
+      "command": "node --test proof.test.mjs"
+    },
+    {
+      "text": "A word that only contains one of them is not found",
+      "command": "node --test proof.test.mjs"
+    }
+  ],
+  "fails": "a criterion with an absolute word accepted without an oracle; a false alarm on a longer word; a regression",
+  "outOfScope": "other languages",
+  "env": "Node 24 and the standard library; the proof runs with node --test in a copy of this folder",
+  "output": "the verdict of the critic on the issue"
+}
