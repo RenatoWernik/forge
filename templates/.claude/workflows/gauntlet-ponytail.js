@@ -1,7 +1,7 @@
 export const meta = {
   name: 'gauntlet-ponytail',
   description: 'Checkpoint Ponytail gauntlet: own agents, {{developer}} cuts the excess with green tests and {{critic}} judges before vs after blind, looping until nothing is left to cut or the user stops',
-  whenToUse: 'Step 3 of every checkpoint, after gauntlet-build. args: {checkpoint:{n,title}, root, dashboardUrl, context, testCommand, models:{developer,critic,aux}, units:[{id,title,paths[]}], escalateAfter?, language?}',
+  whenToUse: 'Step 3 of every checkpoint, after gauntlet-build. args: {checkpoint:{n,title}, root, dashboardUrl, context, testCommand, models:{developer,critic,aux}, units:[{id,title,paths[],affected?}], graph? (the absolute path of graph.json; with it every unit needs affected:{nodes:[strings],files:[strings]}), escalateAfter?, language?}',
   phases: [
     { title: 'Panel', detail: 'registers the units and agents in the queue', model: '{{aux.model}}' },
     { title: 'Ponytail', detail: 'developer cuts, critic compares before and after blind' },

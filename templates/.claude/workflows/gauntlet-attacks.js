@@ -1,7 +1,7 @@
 export const meta = {
   name: 'gauntlet-attacks',
   description: 'Round -1 gauntlet: per piece, {{critic}} reads the contract and writes the attacks that fail on the base, before {{developer}} is launched',
-  whenToUse: 'Step 2 of every checkpoint, before gauntlet-build. args: the same as gauntlet-build, each piece with its contract {issue, objective, input, criteria:[{text, oracle?, command}], fails, outOfScope, env, output}. Returns {checkpoint, results:[{id, attacks:[{id, file, guard?, passesOnBase}], failingOnBase, gaps}]}; give results to gauntlet-build as args.attacks',
+  whenToUse: 'Step 2 of every checkpoint, before gauntlet-build. args: the same as gauntlet-build (graph? and affected included), each piece with its contract {issue, objective, input, criteria:[{text, oracle?, command}], fails, outOfScope, env, output}. Returns {checkpoint, results:[{id, attacks:[{id, file, guard?, passesOnBase}], failingOnBase, gaps}]}; give results to gauntlet-build as args.attacks',
   phases: [
     { title: 'Attacks', detail: 'one critic per piece writes the attacks and runs them on the base' },
     { title: 'Panel', detail: 'records the Round -1 of each piece on the panel', model: '{{aux.model}}' },
