@@ -1,7 +1,0 @@
-{
-  "base": "en-plain-published",
-  "file": ".claude/workflows/gauntlet-batch.js",
-  "find": "log(`WARNING graph:update: ${String(upd).slice(0, 100)}`)",
-  "replace": "{ throw new Error('graph:update failed') }",
-  "line": "graph: an answer to graph:update that does not start with \"graph:\" (none, a text, a long text) only logs WARNING graph:update: <the answer cut at 100 characters> in the three workflows, and the results and the other calls do not change"
-}

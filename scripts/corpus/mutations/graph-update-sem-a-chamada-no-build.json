@@ -3,5 +3,5 @@
   "file": ".claude/workflows/gauntlet-build.js",
   "find": "const upd = await agent(",
   "replace": "const upd = null && await agent(",
-  "line": "graph: gauntlet-build, gauntlet-batch and gauntlet-ponytail make one graph:update agent() per run, the first call, with the aux model and effort and node \"<root>/.claude/graph.mjs\" update, run in the foreground with the last line as the answer; gauntlet-attacks makes none"
+  "line": "graph: update: gauntlet-build, gauntlet-batch and gauntlet-ponytail make one graph:update agent() per run, the first call, with the aux model and effort and node \"<root>/.claude/graph.mjs\" update, run in the foreground with the last line as the answer, and gauntlet-attacks makes none; an answer that does not start with \"graph:\" (none, a text, a long text) only logs WARNING graph:update: <the answer cut at 100 characters> and the results and the other calls do not change"
 }
