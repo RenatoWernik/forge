@@ -161,7 +161,8 @@ function lerManifesto(raiz) {
   return m;
 }
 
-// as unidades por correr, pela ordem do agendamento: as de limite maior primeiro (enchem o paralelo), as exclusivas no fim
+// as unidades por correr, pela ordem do agendamento: as de limite maior primeiro (enchem o paralelo); as sensíveis ao tempo a seguir (cada uma
+// prende a carga global a carga_sensivel enquanto corre, por isso o resto acaba antes) e as exclusivas no fim
 function planeia(m, escolha, raiz) {
   const nomes = m.suites.map((s) => s.nome);
   if (escolha !== '*') { const f = escolha.filter((n) => !nomes.includes(n)); if (f.length) throw new Uso(`suites desconhecidas: ${f.join(', ')}`); }
@@ -172,7 +173,8 @@ function planeia(m, escolha, raiz) {
     for (const ficheiro of ficheiros) for (const bloco of s.blocos?.[ficheiro] ?? [null]) us.push({ suite: s, ficheiro, bloco, chave: `${ficheiro}\0${bloco ?? ''}` });
   }
   us.forEach((u, i) => { u.ordem = i; });
-  return us.toSorted((a, b) => (a.suite.exclusiva ? 1 : 0) - (b.suite.exclusiva ? 1 : 0) || b.suite.limite_s - a.suite.limite_s || a.ordem - b.ordem);
+  const classe = (u) => (u.suite.exclusiva ? 2 : u.suite.sensivel_ao_tempo ? 1 : 0);
+  return us.toSorted((a, b) => classe(a) - classe(b) || b.suite.limite_s - a.suite.limite_s || a.ordem - b.ordem);
 }
 
 export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
