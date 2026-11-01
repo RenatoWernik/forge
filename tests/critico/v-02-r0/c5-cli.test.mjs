@@ -5,9 +5,11 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { base } from '../_comum/base.mjs';
 import { ROOT, REL_AFETADAS, exige, ambiente, gitOk, linhas, lerMapa, casa, suiteDaPasta, nomesManifesto, nomes, afetadasAqui, fixtureLote,
-  testeDe, escreve, commitaTudo, temSuite, limpa } from './helpers.mjs';
+  testeDe, escreve, commitaTudo, temSuite, SUITES_LOTE, limpa } from './helpers.mjs';
 
 after(limpa);
 
@@ -25,7 +27,9 @@ function semLinha(out, suites, diff, mapa, afetadas) {
   const valida = (l, s) => diff.some((f) => l.includes(f) && (
     (l.includes('implícita') && suiteDaPasta(f) === s)
     || [...afetadas].some((o) => o !== s && l.includes(`doLote:${o}`))
-    || mapa.regras.some((r) => (r.suites.includes('*') || r.suites.includes(s)) && r.caminhos.some((g) => casa(f, g) && l.includes(g)))));
+    // AJUSTE (MECANISMO FINAL, #126): a regra de um ficheiro fora de tests/critico é `fora de tests/critico` (já não há globs no JSON), e `sempre`
+    || (l.includes('fora de tests/critico') && !f.startsWith('tests/critico/'))
+    || (l.includes('sempre') && Object.keys(mapa.sempre ?? {}).includes(s))));
   return [...suites].filter((s) => !ls.some((l) => temSuite(l, s) && valida(l, s)));
 }
 
@@ -51,12 +55,13 @@ test('C5: neste repo, cada suíte de afetadas(ficheiros do diff contra a base) t
   assert.deepEqual(semLinha(r.out, quer, diff, lerMapa(), quer), [], r.out.slice(-3000));
 });
 
-test('C5: numa fixture (ramo que muda lib/x.mjs e a delta), --base main imprime cada suíte com a sua regra e o ficheiro do diff', () => {
+// AJUSTADO (MECANISMO FINAL, #126, «autorizado pelo orquestrador (#126, este comentário)»): o ramo da fixture muda só testes (a alfa e a delta), porque
+// um ficheiro de código como lib/x.mjs dá agora TODAS as suítes (a regra `fora de tests/critico`); o segundo passo cobre esse caso.
+test('C5: numa fixture (ramo que muda os testes da alfa e da delta), --base main imprime cada suíte com a sua regra e o ficheiro do diff', () => {
   const d = fixtureLote();
   gitOk(d, 'checkout', '-q', '-b', 'ramo');
-  escreve(d, 'lib/x.mjs', 'export const x = 2;\n');
-  const delta = testeDe('suite-delta', 'd');
-  escreve(d, delta, "import { test } from 'node:test';\ntest('delta mudou', () => {});\n");
+  const alfa = testeDe('suite-alfa', 'a'), delta = testeDe('suite-delta', 'd');
+  for (const f of [alfa, delta]) escreve(d, f, readFileSync(join(d, f), 'utf8') + '// mudou\n'); // acrescenta uma linha: a alfa mantém o doLote para a beta
   commitaTudo(d, 'ramo');
   const r = cli(d, 'main');
   assert.equal(r.status, 0, r.out.slice(-2000));
@@ -64,10 +69,18 @@ test('C5: numa fixture (ramo que muda lib/x.mjs e a delta), --base main imprime 
   const ls = r.out.split(/\r?\n/);
   const tem = (s, ...partes) => ls.some((l) => temSuite(l, s) && partes.every((p) => l.includes(p)));
   const falta = [
-    ['suite-alfa', 'lib/x.mjs', 'lib/**'],
+    ['suite-alfa', alfa, 'implícita'],
     ['suite-delta', delta, 'implícita'],
-    ['suite-beta', 'lib/x.mjs', 'doLote:suite-alfa'],
-    ['suite-gama', 'lib/x.mjs', 'doLote:suite-beta'],
+    ['suite-beta', alfa, 'doLote:suite-alfa'],
+    ['suite-gama', alfa, 'doLote:suite-beta'],
   ].filter(([s, ...p]) => !tem(s, ...p)).map((x) => x.join(' | '));
   assert.deepEqual(falta, [], r.out);
+  // um ficheiro de código no diff: todas as suítes, cada uma com a regra `fora de tests/critico` e o ficheiro
+  escreve(d, 'lib/x.mjs', 'export const x = 2;\n');
+  commitaTudo(d, 'codigo');
+  const r2 = cli(d, 'main');
+  assert.equal(r2.status, 0, r2.out.slice(-2000));
+  const ls2 = r2.out.split(/\r?\n/);
+  const sem = SUITES_LOTE.filter((s) => !ls2.some((l) => temSuite(l, s) && l.includes('fora de tests/critico') && l.includes('lib/x.mjs')));
+  assert.deepEqual(sem, [], r2.out);
 });

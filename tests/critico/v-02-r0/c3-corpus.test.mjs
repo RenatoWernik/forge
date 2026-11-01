@@ -7,7 +7,7 @@
 // um diff só em README.md inclui o f-01-r0.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, REL_CORPUS, REL_MAPA, lerJson, lerMapa, nomesManifesto, regrasDe, nomes, afetadasAqui, gitOk, git, linhas, copiaRepo, commitaTudo,
   lintEm, resumo, limpa } from './helpers.mjs';
@@ -63,28 +63,27 @@ test('C3 (M4): cada caso do corpus histórico tem as suítes de devem_incluir na
 
 // numa cópia: tira o f-02-r0 das regras escolhidas, corre o lint e exige que ele falhe a nomear o caso (só contam as linhas de falha:
 // o «not ok» e a mensagem, não os títulos dos testes que passam nem os «# Subtest:»)
-function provaNegativa(nomeCaso, escolhe, oQue) {
+// AJUSTADO (MECANISMO FINAL do orquestrador, #126, «autorizado pelo orquestrador (#126, este comentário)»): as regras já não estão no JSON mas no
+// código de scripts/afetadas.mjs, e o que cobre estes casos é a regra «qualquer ficheiro fora de tests/critico dá TODAS as suítes». A prova
+// negativa passa a ser «retirar a regra que cobre o caso faz o caso falhar»: na cópia, a linha dessa regra no código é apagada.
+function provaNegativa(nomeCaso, oQue) {
   const d = copiaRepo(), c = caso(nomeCaso);
   assert.ok(c, `falta o caso ${nomeCaso}`);
-  const mapa = lerMapa(d);
-  // AJUSTE (REDESENHO #126): o código leva "*", por isso o "*" passa a ser todas as suítes do manifesto e é dessa lista que se tira o f-02-r0
-  for (const r of mapa.regras) if (r.suites.includes('*')) r.suites = nomesManifesto(d);
-  const doCaso = new Set(c.ficheiros.flatMap((f) => regrasDe(mapa, f)));
-  const tiradas = escolhe(mapa, doCaso).filter((r) => r.suites.includes('f-02-r0'));
-  assert.ok(tiradas.length > 0, `nenhuma regra (${oQue}) tem o f-02-r0`);
-  for (const r of tiradas) r.suites = r.suites.filter((s) => s !== 'f-02-r0');
-  writeFileSync(join(d, REL_MAPA), JSON.stringify(mapa, null, 2) + '\n');
-  commitaTudo(d, `sem f-02-r0 (${oQue})`);
+  const p = join(d, 'scripts/afetadas.mjs'), texto = readFileSync(p, 'utf8');
+  const regra = '    for (const n of nomes) junta(n, regra, fora);\n';
+  assert.ok(texto.includes(regra), 'a linha da regra «fora de tests/critico» não está em scripts/afetadas.mjs: ajustar a prova');
+  writeFileSync(p, texto.replace(regra, ''));
+  commitaTudo(d, `sem a regra que cobre o caso (${oQue})`);
   const r = lintEm(d);
-  assert.notEqual(r.status, 0, `o lint passou sem o f-02-r0 (${oQue}):\n` + resumo(r));
+  assert.notEqual(r.status, 0, `o lint passou sem a regra que cobre o caso (${oQue}):\n` + resumo(r));
   const falhas = r.out.split(/\r?\n/).filter((l) => !/^\s*(?:ok \d+ - |# Subtest: )/.test(l));
-  assert.ok(falhas.some((l) => l.includes(nomeCaso)), `a falha não nomeia o caso ${nomeCaso}: falhou outra coisa, não o M4:\n` + resumo(r));
+  assert.ok(falhas.some((l) => l.includes(nomeCaso)), `a falha não nomeia o caso ${nomeCaso}: falhou outra coisa, não o corpus:\n` + resumo(r));
 }
 
-test('C3 (M4): numa cópia, sem o f-02-r0 na regra das mutações, o lint falha no caso 8ff53ac-minimo', () => {
-  provaNegativa('8ff53ac-minimo', (mapa, doCaso) => [...doCaso], 'a regra das mutações e do seed');
+test('C3 (M4): numa cópia, sem a regra que cobre o caso, o lint falha no caso 8ff53ac-minimo', () => {
+  provaNegativa('8ff53ac-minimo', 'só o esquema do corpus');
 });
 
-test('C3 (M4): numa cópia, sem o f-02-r0 em TODAS as regras, o lint falha no caso 8ff53ac-commit', () => {
-  provaNegativa('8ff53ac-commit', (mapa) => mapa.regras, 'todas as regras');
+test('C3 (M4): numa cópia, sem a regra que cobre o caso, o lint falha no caso 8ff53ac-commit', () => {
+  provaNegativa('8ff53ac-commit', 'os 94 ficheiros do commit');
 });

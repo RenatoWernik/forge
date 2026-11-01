@@ -26,16 +26,5 @@
     "f-30-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket) e olha para o diff do ticket",
     "v-01-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o c6-manifesto (nomes = pastas) cobre-se porque uma pasta fora do manifesto leva todas as suítes",
     "v-02-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o C5 compara a saída do CLI com o diff contra a base"
-  },
-  "regras": [
-    { "caminhos": [".gitattributes", ".gitignore", "tsconfig.json", "compat.json", "components.json", ".claude-plugin/**", "hooks/**", "scripts/**", "skills/**",
-        "templates/**", "templates/.claude/**", "templates/.checkpoints/**", "templates/.*", "types/**", "tests/ponte/**", "tests/critico/_comum/**"],
-      "suites": ["*"],
-      "motivo": "código e templates: as suítes leem-nos por caminhos que nenhum scanner estático vê por inteiro (new URL, join com variáveis, o scaffold que copia templates/), por isso um diff aqui leva TODAS as suítes; tests/critico/_comum são os helpers de todas" },
-    { "caminhos": ["*.md", "docs/**", "LICENSE"],
-      "suites": ["f-01-r0", "f-03-r0", "f-04-r0", "f-05-r0", "f-06-r0", "f-11-r0", "f-14-r0", "f-26-r0"],
-      "motivo": "documentos da raiz e docs/ (não templates/ nem skills/): só as suítes `sempre`" },
-    { "caminhos": ["tests/critico/**"],
-      "suites": ["f-01-r0", "f-03-r0", "f-04-r0", "f-05-r0", "f-06-r0", "f-11-r0", "f-14-r0", "f-26-r0"],
-      "motivo": "testes: a suíte da própria pasta (regra implícita), as que importam ficheiros dela, o fecho do doLote e as `sempre`" }
-  ] }
+  }
+}
