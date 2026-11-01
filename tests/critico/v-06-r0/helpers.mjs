@@ -7,15 +7,17 @@
 // Com «headMuda», um terceiro commit H2 move o head real do PR, mas o gh continua a dizer H. O `pr merge` do gh falso faz o squash na
 // origem (commit-tree com a árvore do head real e pai na base) e recusa um --match-head-commit diferente do head real.
 //
-// LEITURA DO CONTRATO (registada como PERGUNTA na #130; a resposta do orquestrador prevalece):
+// O CONTRATO, com a RESPOSTA do orquestrador às PERGUNTAS 1–6 da Ronda −1 (#130, último comentário):
 // - o avancar corre com cwd = trabalho/ (um clone cujo origin é a origem); é a cópia de scripts/avancar.mjs que vive lá, por isso um
 //   avancar que use o cwd ou a pasta do próprio script vê o mesmo repo. O .forge/proxima-fase.json fica em trabalho/.forge/.
-// - o gh é o do PATH e herda o env do avancar (o PATH, o NODE_OPTIONS e o FORGE_GH_FALSO_DIR).
-// - o veredito e o CHECK-TICKET são comentários do PR; o gh falso serve os mesmos comentários na issue do ticket (#9130).
-// - pacote = as sub-issues da spec #9100, que são também as issues com «Parte da spec #9100» no corpo; bloqueios = os nativos
-//   (dependencies/blocked_by e issue_dependencies_summary), que são também os da linha «**Bloqueado por:** #a, #b». As formas
-//   concordam (guardas.test.mjs prova-o), por isso qualquer uma serve.
-// - o código das recusas não está no ticket: o corpus exige só ≠ 0 (o pós-merge vermelho exige 1, como o ticket diz).
+//   O gh é o do PATH e herda o env do avancar.
+// - códigos: 0 tudo ok, 1 pós-merge vermelho, 2 qualquer recusa antes do merge (o head-mudou inclui-se: ≤ 1 pr merge, recusado pelo gh).
+// - o VEREDITO, o CHECK-TICKET e o PÓS-MERGE VERDE <sha> são comentários do PR; a fase seguinte é um comentário na issue da spec.
+// - pacote = as issues com «Parte da spec #N» no corpo; os bloqueios são a linha «**Bloqueado por:** …», com itens `#n` ou um id
+//   (`V-01`) resolvido pelo prefixo do título (`V-01:`) dentro do pacote; «—» é sem bloqueios e o texto entre parênteses ignora-se.
+//   Entra na fase quem está aberto com todos os bloqueios fechados; sem ready-for-agent, sem bloqueios nativos nem sub-issues.
+// - .forge/proxima-fase.json = { spec, geradoEm, proximas: [ { numero, titulo } ] }; o stdout e o comentário na spec citam os números.
+// - modo projeto: o merge vai para a integração, o pós-merge corre sobre a nova origin/<integracao> e a main fica sempre intacta.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
@@ -32,8 +34,8 @@ export const GH_FALSO = join(AQUI, 'gh-falso.mjs');
 export const REPO = 'critico-falso/v06-alvo';
 export const PR = 9110, TICKET = 9130, SPEC = 9100;
 export const LIVRES = [9101, 9102];
-// o que a fase seguinte pode listar por engano: as 5 candidatas, a de outro pacote e a sem ready-for-agent
-export const VIGIADAS = [9101, 9102, 9103, 9104, 9105, 9120, 9121];
+// o que a fase seguinte pode listar por engano: as 5 abertas do pacote, a de outro pacote com o mesmo prefixo V-01 e o ticket do PR
+export const VIGIADAS = [9101, 9102, 9103, 9104, 9105, 9120, TICKET];
 export const NOME_REGRESSAO = 'v06-regressao-do-pr';
 // o valor falso do token (C4): vai no GH_TOKEN e no GITHUB_TOKEN de cada corrida e nunca pode aparecer em nenhuma saída
 export const TOKEN = `ghp_FALSOv06${randomBytes(12).toString('hex')}`;
@@ -108,25 +110,22 @@ export function refs(gitDir) {
   return Object.fromEntries(r.split('\n').filter(Boolean).map((l) => l.split(' ')));
 }
 
-// --- o pacote de teste (spec #9100): 5 candidatas com ready-for-agent, 2 livres (9101, 9102) e 3 presas, mais as que as prendem ---
-const issueDe = (number, title, { state = 'OPEN', labels = [], bloqueadoPor = [], pai = SPEC } = {}) => ({
-  number, title, state, labels, bloqueadoPor, pai,
-  body: `${pai ? `Parte da spec #${pai}.\n\n` : ''}**Bloqueado por:** ${bloqueadoPor.length ? bloqueadoPor.map((n) => `#${n}`).join(', ') : 'nenhum'}.\n\nTicket do pacote de teste do V-06.`,
-});
+// --- o pacote de teste (spec #9100), na forma das issues reais: 5 abertas, 2 livres (9101, 9102) e 3 presas. A #9120 é de outro pacote e
+// tem o mesmo prefixo V-01 da #9111: um id resolvido fora do pacote prende a 9101 e solta a 9104 ---
+const issueDe = (number, title, bloqueios, { state = 'OPEN', spec = SPEC } = {}) => ({ number, title, state, labels: [],
+  body: `Parte da spec #${spec} (pacote de teste do V-06).\n\n**Bloqueado por:** ${bloqueios}.\n\n**Objetivo:** ticket de teste.` });
 export const PACOTE = [
-  { ...issueDe(SPEC, 'Spec: pacote de teste do V-06', { labels: ['spec'], pai: null }), body: 'Spec do pacote de teste do V-06.\n\nTickets: as sub-issues desta spec.' },
-  { ...issueDe(9200, 'Spec: outro pacote', { labels: ['spec'], pai: null }), body: 'Spec de outro pacote.' },
-  issueDe(9111, 'T-01: base fechada', { state: 'CLOSED' }),
-  issueDe(9112, 'T-02: outra base fechada', { state: 'CLOSED' }),
-  issueDe(9113, 'T-03: em curso', {}),
-  issueDe(9101, 'T-11: livre (um bloqueio fechado)', { labels: ['ready-for-agent'], bloqueadoPor: [9111] }),
-  issueDe(9102, 'T-12: livre (dois bloqueios fechados)', { labels: ['ready-for-agent'], bloqueadoPor: [9111, 9112] }),
-  issueDe(9103, 'T-13: presa (bloqueio aberto)', { labels: ['ready-for-agent'], bloqueadoPor: [9113] }),
-  issueDe(9104, 'T-14: presa (um fechado e um aberto)', { labels: ['ready-for-agent'], bloqueadoPor: [9111, 9113] }),
-  issueDe(9105, 'T-15: presa (bloqueada por outra candidata aberta)', { labels: ['ready-for-agent'], bloqueadoPor: [9101] }),
-  issueDe(9120, 'T-90: de outro pacote, livre', { labels: ['ready-for-agent'], pai: 9200 }),
-  issueDe(9121, 'T-16: livre mas sem ready-for-agent', {}),
-  issueDe(TICKET, 'T-30: o ticket deste PR', { bloqueadoPor: [9111] }),
+  { number: SPEC, title: 'Spec: pacote de teste do V-06', state: 'OPEN', labels: ['spec'], body: 'Spec do pacote de teste do V-06.\n\nTickets: ver as issues que referenciam esta spec.' },
+  { number: 9200, title: 'Spec: outro pacote', state: 'OPEN', labels: ['spec'], body: 'Spec de outro pacote.' },
+  issueDe(9111, 'V-01: base fechada', '—', { state: 'CLOSED' }),
+  issueDe(9112, 'V-02: outra base fechada', '#9111', { state: 'CLOSED' }),
+  issueDe(9101, 'V-11: livre (um #n e um id, ambos fechados)', '#9112, V-01 (medição)'),
+  issueDe(9102, 'V-12: livre (sem bloqueios)', '—'),
+  issueDe(9103, 'V-13: presa (bloqueio aberto de outro pacote)', '#9120'),
+  issueDe(9104, 'V-14: presa (um id fechado e um id aberto)', 'V-01, V-11'),
+  issueDe(9105, 'V-15: presa (bloqueada por outra aberta do pacote)', '#9101'),
+  issueDe(9120, 'V-01: de outro pacote, aberta', '—', { spec: 9200 }),
+  issueDe(TICKET, 'V-30: o ticket deste PR', 'V-01, V-02'),
 ];
 export const ROTULOS = ['spec', 'ready-for-agent', 'regressao', 'seguimento', 'flaky', 'integracao', 'needs-triage'];
 
@@ -171,7 +170,7 @@ export function montaCenario(c) {
     repo: REPO, origem: m.origem, padrao: 'main', rotulos: ROTULOS,
     pr: { number: PR, title: 'T-30: mudança de teste', body: `Closes #${TICKET}\n\nTicket T-30 do pacote de teste.`, headRefName: 'v-99-pr',
       baseRefName: c.pr.base, isDraft: !!c.pr.isDraft, head: H, headReal: H2 ?? H, ticket: TICKET },
-    comentarios: { [PR]: lista, [TICKET]: lista },
+    comentarios: { [PR]: lista },
     issues: PACOTE,
   }, null, 2));
   return Object.assign(m, { P1, H, H2, refsAntes: refs(m.origem) });
@@ -225,19 +224,19 @@ export function flagsDoMerge(argv) {
   }
   return { squash: a.includes('--squash') || a.includes('-s'), match };
 }
-// os números de issue que um JSON menciona (valores, chaves, «#9101» e URLs em strings), sem apanhar dígitos dentro de um sha
-export function numerosNoJson(texto) {
-  const v = JSON.parse(texto), achados = new Set();
-  const deTexto = (s) => { for (const x of s.matchAll(/(?<![\w])(\d+)(?![\w])/g)) achados.add(Number(x[1])); };
-  const anda = (x) => {
-    if (typeof x === 'number') achados.add(x);
-    else if (typeof x === 'string') deTexto(x);
-    else if (x && typeof x === 'object') for (const [k, y] of Object.entries(x)) { if (!Array.isArray(x)) deTexto(k); anda(y); }
-  };
-  anda(v);
-  return achados;
-}
-export const mencionaNumero = (texto, n) => new RegExp(`(?<![\\w])#?${n}(?![\\w])`).test(texto);
+// o esquema do .forge/proxima-fase.json (resposta à P3): devolve a lista de erros, vazia = válido
+export function validaFase(f, titulos) {
+  const e = [];
+  if (!f || typeof f !== 'object' || Array.isArray(f)) return ['não é um objeto'];
+  if (f.spec !== SPEC) e.push(`spec: ${JSON.stringify(f.spec)} (esperava ${SPEC})`);
+  if (typeof f.geradoEm !== 'string' || !Number.isFinite(Date.parse(f.geradoEm))) e.push(`geradoEm: ${JSON.stringify(f.geradoEm)}`);
+  if (!Array.isArray(f.proximas)) return [...e, 'proximas não é uma lista'];
+  for (const p of f.proximas) {
+    if (!Number.isInteger(p?.numero)) e.push(`numero: ${JSON.stringify(p?.numero)}`);
+    else if (p.titulo !== titulos.get(p.numero)) e.push(`titulo de ${p.numero}: ${JSON.stringify(p.titulo)} (esperava ${JSON.stringify(titulos.get(p.numero))})`);
+  }
+  return e;
+}export const mencionaNumero = (texto, n) => new RegExp(`(?<![\\w])#?${n}(?![\\w])`).test(texto);
 
 // C4: onde o token aparece (vazio = em lado nenhum): a saída do avancar, todos os ficheiros da pasta do cenário (o argv do gh em
 // chamadas.jsonl, o do node em node-argv.jsonl, o do git em git-trace.log, os .git/config, o .forge/, o temp/) e o histórico de cada repo

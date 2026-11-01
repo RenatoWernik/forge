@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  corpus, montaCenario, ambienteDoCenario, procuraToken, refs, gitOk, tmp, limpa, REPO, PR, SPEC, LIVRES, TOKEN, NOME_REGRESSAO,
+  corpus, montaCenario, ambienteDoCenario, procuraToken, refs, gitOk, tmp, limpa, REPO, PR, SPEC, TICKET, LIVRES, TOKEN, NOME_REGRESSAO,
 } from './helpers.mjs';
 
 after(limpa);
@@ -19,19 +19,20 @@ const chamadas = (m) => readFileSync(join(m.estado, 'chamadas.jsonl'), 'utf8').s
 const OBRIGATORIOS = ['sem-veredito', 'reprovado', 'aprovado-outro-sha', 'sem-check-ticket', 'check-outro-sha', 'head-mudou', 'tudo-ok',
   'pos-merge-vermelho', 'projeto-base-main'];
 
-test('guarda: o corpus tem ≥ 9 cenários, um por cada cenário do C1, cada um com o código e as chamadas esperadas', () => {
+test('guarda: o corpus tem ≥ 9 cenários, um por cada cenário do C1, cada um com o código (0, 1 ou 2) e as chamadas esperadas', () => {
   assert.ok(CORPUS.length >= 9, `só ${CORPUS.length} cenários`);
   assert.deepEqual(OBRIGATORIOS.map((k) => CORPUS.filter((c) => c.criterio === k).length), OBRIGATORIOS.map(() => 1));
   for (const c of CORPUS) {
     assert.ok(['forge', 'projeto'].includes(c.modo), c.nome);
     assert.ok(c.modo === 'forge' || c.integracao, `${c.nome}: modo projeto sem integracao`);
     assert.ok(Array.isArray(c.comentarios) && c.descricao, c.nome);
-    assert.ok('codigo' in c.esperado && 'merges' in c.esperado && ('pr_merge' in c.esperado || 'pr_merge_max' in c.esperado), c.nome);
+    assert.ok([0, 1, 2].includes(c.esperado.codigo) && 'merges' in c.esperado && ('pr_merge' in c.esperado || 'pr_merge_max' in c.esperado), c.nome);
   }
   const ok = cenario('tudo-ok').esperado;
   assert.deepEqual([ok.codigo, ok.pr_merge, ok.merges, ok.fase], [0, 1, 1, LIVRES]);
   assert.equal(cenario('pos-merge-vermelho').esperado.codigo, 1);
-  assert.ok(CORPUS.filter((c) => c.esperado.recusa).length >= 8);
+  assert.ok(CORPUS.filter((c) => c.esperado.recusa).length >= 7);
+  assert.ok(CORPUS.filter((c) => c.esperado.recusa).every((c) => c.esperado.codigo === 2), 'as recusas saem com 2');
 });
 
 test('guarda: o gh do PATH é o falso: serve o PR do cenário em JSON, regista o argv e responde como o gh real a um campo desconhecido', () => {
@@ -74,22 +75,24 @@ test('guarda: o pr merge falso recusa um --match-head-commit que não é o head 
   assert.deepEqual(chamadas(ok).map((c) => [c.codigo, c.efeitos.map((e) => e.tipo).join()]), [[1, 'merge-recusado'], [0, 'merge'], [0, ''], [1, '']]);
 });
 
-test('guarda: as três formas de ler o pacote no gh falso (sub-issues + nativos, corpo + issue view, lista REST + summary) dão as mesmas 2 livres', () => {
+test('guarda: o pacote na forma real («Parte da spec #N» + «**Bloqueado por:**» com #n e ids V-NN) dá as 2 livres depois do merge; um id resolvido fora do pacote dá outra resposta', () => {
   const m = montaCenario(cenario('tudo-ok'));
   const j = (...a) => { const r = gh(m, ...a); assert.equal(r.status, 0, `gh ${a.join(' ')}: ${r.stderr}`); return JSON.parse(r.stdout); };
-  const pronta = (i) => i.state === 'open' && i.labels.some((l) => l.name === 'ready-for-agent');
-  const a = j('api', `repos/${REPO}/issues/${SPEC}/sub_issues`).filter(pronta)
-    .filter((i) => j('api', `repos/${REPO}/issues/${i.number}/dependencies/blocked_by`).every((b) => b.state === 'closed')).map((i) => i.number);
-  const b = j('issue', 'list', '-R', REPO, '--label', 'ready-for-agent', '--state', 'open', '--json', 'number,body')
-    .filter((i) => i.body.includes(`Parte da spec #${SPEC}.`))
-    .filter((i) => [...(i.body.match(/\*\*Bloqueado por:\*\*([^\n]*)/)?.[1] ?? '').matchAll(/#(\d+)/g)]
-      .every((x) => j('issue', 'view', x[1], '--json', 'state').state === 'CLOSED'))
-    .map((i) => i.number);
-  const c = j('api', `repos/${REPO}/issues?state=open&labels=ready-for-agent`, '--paginate')
-    .filter((i) => !i.pull_request && i.body.includes(`Parte da spec #${SPEC}.`) && i.issue_dependencies_summary.blocked_by === 0).map((i) => i.number);
-  for (const x of [a, b, c]) assert.deepEqual(x.toSorted(), LIVRES);
+  assert.equal(gh(m, 'pr', 'merge', String(PR), '--squash', '--match-head-commit', m.H).status, 0);
+  const todas = j('issue', 'list', '-R', REPO, '--state', 'all', '--limit', '200', '--json', 'number,title,body,state');
+  const pacote = todas.filter((i) => new RegExp(`Parte da spec #${SPEC}(?!\\d)`).test(i.body));
+  const estado = new Map(todas.map((i) => [i.number, i.state]));
+  const bloqueios = (i, universo) => (i.body.match(/\*\*Bloqueado por:\*\*([^\n]*)/)?.[1] ?? '').replace(/\([^)]*\)/g, '').split(',')
+    .map((x) => x.trim().replace(/\.$/, '').trim()).filter((x) => x && x !== '—')
+    .map((x) => (x.startsWith('#') ? Number(x.slice(1)) : universo.find((y) => y.title.startsWith(`${x}:`))?.number));
+  const livres = (universo) => pacote.filter((i) => i.state === 'OPEN' && bloqueios(i, universo).every((n) => estado.get(n) === 'CLOSED')).map((i) => i.number).toSorted();
+  assert.equal(estado.get(TICKET), 'CLOSED', 'o merge na branch por omissão fecha o ticket (Closes #9130)');
+  assert.deepEqual(pacote.filter((i) => i.state === 'OPEN').map((i) => i.number).toSorted(), [9101, 9102, 9103, 9104, 9105]);
+  assert.deepEqual(livres(pacote), LIVRES);
+  assert.notDeepEqual(livres(todas), LIVRES, 'o V-01 de outro pacote (#9120) tem de morder um id resolvido fora do pacote');
+  assert.deepEqual(j('api', `repos/${REPO}/issues/${SPEC}/sub_issues`), [], 'sem sub-issues, como nas issues reais');
+  assert.deepEqual(j('api', `repos/${REPO}/issues/9103/dependencies/blocked_by`), [], 'sem bloqueios nativos, como nas issues reais');
 });
-
 test('guarda: o pós-merge dos cenários é real: o executor no clone da main depois do squash falha no vermelho (com o teste do PR) e passa no verde', () => {
   for (const [nome, codigo] of [['pos-merge-vermelho', 1], ['tudo-ok', 0]]) {
     const m = montaCenario(cenario(nome));

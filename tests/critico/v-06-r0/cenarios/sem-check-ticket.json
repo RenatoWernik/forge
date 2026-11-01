@@ -7,5 +7,5 @@
   "comentarios": [
     { "corpo": "VEREDITO: APROVADO\nHEAD: @H\nEXECUTOR: .forge/resultados/@H-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 5/5\nFALHAS (todas, numeradas): nenhuma\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" }
   ],
-  "esperado": { "codigo": "naoZero", "recusa": true, "pr_merge": 0, "merges": 0, "regressao": 0, "pos_merge_verde": false, "fase": null }
+  "esperado": { "codigo": 2, "recusa": true, "pr_merge": 0, "merges": 0, "regressao": 0, "pos_merge_verde": false, "fase": null }
 }

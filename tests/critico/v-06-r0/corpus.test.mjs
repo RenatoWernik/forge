@@ -5,14 +5,15 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
-  corpus, montaCenario, correAvancar, exigeAvancar, saida, prMerges, merges, comentariosEm, issuesCriadas, indice, flagsDoMerge, numerosNoJson,
-  mencionaNumero, procuraToken, ambiente, limpa, PR, TICKET, SPEC, LIVRES, VIGIADAS, NOME_REGRESSAO, TOKEN,
+  corpus, montaCenario, correAvancar, exigeAvancar, saida, prMerges, merges, comentariosEm, issuesCriadas, indice, flagsDoMerge, validaFase,
+  mencionaNumero, procuraToken, ambiente, limpa, PR, SPEC, PACOTE, NOME_REGRESSAO, TOKEN,
 } from './helpers.mjs';
 
 after(limpa);
 
 const CORPUS = corpus();
 const CORRIDAS = new Map();
+const TITULOS = new Map(PACOTE.map((i) => [i.number, i.title]));
 const pai = (gitDir, sha) => spawnSync('git', ['--git-dir', gitDir, 'rev-parse', `${sha}^`], { encoding: 'utf8', env: ambiente() }).stdout.trim();
 
 for (const c of CORPUS) {
@@ -23,8 +24,7 @@ for (const c of CORPUS) {
     CORRIDAS.set(c.nome, { m, r });
     const e = c.esperado, diz = saida(r);
     assert.equal(r.pendurado, false, `o avancar não acabou\n${diz}`);
-    if (e.codigo === 'naoZero') assert.notEqual(r.status, 0, `uma recusa sai com ≠ 0\n${diz}`);
-    else if (e.codigo !== null) assert.equal(r.status, e.codigo, diz);
+    assert.equal(r.status, e.codigo, `códigos: 0 ok, 1 pós-merge vermelho, 2 recusa\n${diz}`);
 
     // as chamadas `pr merge`: quantas, e cada uma com --squash e --match-head-commit <o head que o gh mostra>
     const pm = prMerges(r);
@@ -61,9 +61,9 @@ for (const c of CORPUS) {
           `a issue regressao não traz o resumo do TAP (o teste que falhou, «not ok» ou a contagem de falhas):\n${i.corpo}`);
       }
     }
-    // PÓS-MERGE VERDE <sha do squash>, no PR (ou na issue do ticket)
+    // PÓS-MERGE VERDE <sha do squash>, comentário do PR
     if (e.pos_merge_verde !== undefined) {
-      const ditos = comentariosEm(r, PR, TICKET);
+      const ditos = comentariosEm(r, PR);
       if (e.pos_merge_verde) assert.ok(ditos.some((k) => k.corpo.includes(`PÓS-MERGE VERDE ${feitos[0]?.sha}`)), `falta o comentário PÓS-MERGE VERDE ${feitos[0]?.sha}\n${diz}`);
       else assert.ok(!ditos.some((k) => k.corpo.includes('PÓS-MERGE VERDE')), `comentou PÓS-MERGE VERDE sem pós-merge verde\n${diz}`);
     }
@@ -73,8 +73,9 @@ for (const c of CORPUS) {
       assert.deepEqual(comentariosEm(r, SPEC).map((k) => k.corpo), [], 'comentou a fase seguinte na spec sem avançar');
     } else if (e.fase !== undefined) {
       assert.notEqual(r.proxima, null, `falta .forge/proxima-fase.json\n${diz}`);
-      const nums = numerosNoJson(r.proxima);
-      assert.deepEqual(VIGIADAS.filter((n) => nums.has(n)), e.fase, `a fase seguinte tem de listar exatamente ${e.fase.join(', ')}:\n${r.proxima}`);
+      const fase = JSON.parse(r.proxima);
+      assert.deepEqual(validaFase(fase, TITULOS), [], `esquema { spec, geradoEm, proximas: [{ numero, titulo }] }:\n${r.proxima}`);
+      assert.deepEqual(fase.proximas.map((x) => x.numero).toSorted(), e.fase, `a fase seguinte tem de listar exatamente ${e.fase.join(', ')}:\n${r.proxima}`);
       for (const n of e.fase) assert.ok(mencionaNumero(r.out, n), `o avancar não imprimiu a fase seguinte (falta ${n})\n${diz}`);
       const naSpec = comentariosEm(r, SPEC);
       assert.ok(naSpec.some((k) => e.fase.every((n) => mencionaNumero(k.corpo, n))), `falta o comentário da fase seguinte na spec #${SPEC}\n${diz}`);
@@ -84,7 +85,7 @@ for (const c of CORPUS) {
 
 test('C2: em todas as recusas do corpus, nenhum merge: 0 chamadas pr merge (no head-mudou, ≤ 1, recusada pelo gh) e a origem intacta', () => {
   const recusas = CORPUS.filter((c) => c.esperado.recusa);
-  assert.ok(recusas.length >= 8, `o corpus só tem ${recusas.length} recusas`);
+  assert.ok(recusas.length >= 7, `o corpus só tem ${recusas.length} recusas`);
   const falhas = [];
   for (const c of recusas) {
     const x = CORRIDAS.get(c.nome);
