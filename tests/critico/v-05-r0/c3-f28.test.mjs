@@ -4,14 +4,19 @@
 //   relativa, o scripts/suites.json só com as suítes que existem depois do commit reaplicado, o scripts/mapa-suites.json só com essas suítes,
 //   sem as regras que ficam vazias, e a linha .forge/ no .gitignore);
 // - no ramo f-22a-reaplicado: o cherry-pick do commit; o --ambito são os ficheiros que ele muda.
+// Nomear o f-02-r0 não chega: o resultado do executor do ramo (§4.2, <repo>/.forge/resultados/<sha do ramo>-*.json) tem de mostrar o
+// c2-mutacoes (o teste que o F-28 partiu) com estado fail. Uma suíte que ficou por correr (orçamento) e é listada não prova nada.
 // Lido assim como PERGUNTA na #129. Só corre com FORGE_V05_PONTA=<pasta>: as afetadas do commit passam dos 540 s de uma chamada. Cada chamada do
 // teste faz uma chamada ao check-ticket (com --continuar depois de um código 3) e guarda o estado em <pasta>/c3-<sha>/; enquanto der 3, o teste
-// falha a pedir que se corra de novo com a mesma pasta.
-import { test } from 'node:test';
+// falha a pedir que se corra de novo com a mesma pasta. O C3 é de correção, não de tempo: corre com um TEMP privado (vagas só deste teste),
+// porque com as vagas reais ocupadas por outros executores uma unidade sensível de 480 s (o f-02-r0) pode nunca arrancar.
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
-import { ROOT, gitOk, shaDe, correr, linhas, saida, exigeCheck, escreve } from './helpers.mjs';
+import { ROOT, gitOk, shaDe, correr, linhas, saida, exigeCheck, escreve, limpa } from './helpers.mjs';
+
+after(limpa);
 
 const PONTA = process.env.FORGE_V05_PONTA;
 const COMMIT_F28 = '8ff53ac';
@@ -60,7 +65,7 @@ test('C3 (ponta real do F-28): o diff do commit do F-22a reaplicado sobre o pai 
   const estado = existsSync(fEstado) ? JSON.parse(readFileSync(fEstado, 'utf8')) : { chamadas: [] };
   const ambito = gitOk(repo, 'show', '--name-only', '--format=', 'HEAD').split(/\r?\n/).filter(Boolean);
   const continuar = estado.chamadas.at(-1)?.codigo === 3;
-  const r = await correr(repo, ['--ambito', ...ambito, '--base', 'origin/main', ...(continuar ? ['--continuar'] : [])], { limite_ms: 520000, tempReal: true });
+  const r = await correr(repo, ['--ambito', ...ambito, '--base', 'origin/main', ...(continuar ? ['--continuar'] : [])], { limite_ms: 520000 });
   estado.chamadas.push({ codigo: r.status, ms: r.ms, pendurado: r.pendurado });
   writeFileSync(fEstado, JSON.stringify(estado, null, 2));
   writeFileSync(join(pasta, `chamada-${estado.chamadas.length}.log`), r.out + '\n--- stderr ---\n' + r.err);
@@ -71,4 +76,8 @@ test('C3 (ponta real do F-28): o diff do commit do F-22a reaplicado sobre o pai 
   assert.ok(p4, `sem a linha do passo 4\n${saida(r)}`);
   assert.equal(p4.estado, 'FAIL', p4.linha);
   assert.match(p4.linha, /\bf-02-r0\b/, p4.linha);
+  const shaRamo = gitOk(repo, 'rev-parse', 'HEAD').trim(), res = join(repo, '.forge', 'resultados');
+  const c2 = (existsSync(res) ? readdirSync(res) : []).filter((n) => n.startsWith(shaRamo + '-') && n.endsWith('.json'))
+    .flatMap((n) => JSON.parse(readFileSync(join(res, n), 'utf8')).unidades).filter((u) => u.ficheiro === 'tests/critico/f-02-r0/c2-mutacoes.test.mjs');
+  assert.ok(c2.some((u) => u.estado === 'fail' && u.fail > 0), `o f-02-r0 tem de ter corrido e falhado no ramo (o c2-mutacoes, o caso do seed), não só ser nomeado: ${JSON.stringify(c2.map((u) => [u.estado, u.fail]))}`);
 });
