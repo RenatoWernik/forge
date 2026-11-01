@@ -271,8 +271,9 @@ async function runPiece(p) {
   const pid = `cp${CP.n}-${p.id}`, short = p.title.slice(0, 40), role = devRole(p), DEV = devOf(p), CAP = ROUNDS[MODE]
   const attackIds = attacksOf(p).map(a => a.id)
   const minutes = minutesOf(p), failed = {}, followUps = [], contested = [], graphNodes = new Set() // failed: criterion -> rounds in which it failed (a failure moved to followUps, or a PRE-EXISTING one, does not count)
-  let round = 0, won = false, last = null, lastRound = 0, prevDiff = null, build = null, stopped = null, more = {}, red = 0 // lastRound: the round whose findings F<round>-<n> `last` holds
-  const metrics = () => ({ rounds: round, sameCriterionFailures: Math.max(0, ...Object.values(failed)), attacksRedOnDelivery: red, minutesWithoutProgress: minutes })
+  let round = 0, won = false, last = null, lastRound = 0, lastIds = [], prevDiff = null, build = null, stopped = null, more = {}, red = 0, notRep = 0 // lastRound: the round whose findings F<round>-<n> `last` holds; lastIds: the id of each of its blocking items (a finding that left the blocking keeps its number)
+  const classes = {} // class -> blocking failures of that class in the rounds (only the ones that stayed blocking after the repro)
+  const metrics = () => ({ rounds: round, sameCriterionFailures: Math.max(0, ...Object.values(failed)), attacksRedOnDelivery: red, minutesWithoutProgress: minutes, criticNotReproduced: notRep, classes })
   const stop = (why, extra = {}) => { stopped = why; more = extra; log(`${p.id} r${round}: stopped, ${typeof why === 'string' ? why : why.reason}${extra.condition ? ' (' + extra.condition + ')' : ''}${extra.criterion ? ' (' + extra.criterion + ')' : ''}`) }
   // The signals come from the orchestrator (args.vida, piece.redesigns) and from the critic's verdict, never from the developer.
   if (minutes >= ESC.minutesWithoutProgress.value) stop('escalate', { condition: 'minutesWithoutProgress' })
