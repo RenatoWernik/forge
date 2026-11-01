@@ -115,9 +115,9 @@ test('C2: cada session_id tem o seu nível: o aviso de uma sessão não cala o d
 
 test('C2 (comentário do orquestrador, ponto 1): com o payload de um subagente (agent_id, agent_type) fica calado, e não gasta o aviso da sessão principal', async () => {
   const c = await H.cenarioContexto();
-  const tr = em(c, 85);
+  const tr = H.transcript(c.tr, [H.utilizador(), H.assistente(H.pct(85))], 'principal.jsonl');
   for (const evento of ['PostToolUse', 'UserPromptSubmit']) calado(c.chama(tr, { evento, agente: { agent_id: 'a7f3c2e1b9', agent_type: 'critic' } }), `avisou um subagente no ${evento}`);
-  calado(c.chama(em(c, 92), { evento: 'PostToolUse', agente: { agent_id: 'a7f3c2e1b9', agent_type: 'general-purpose' } }), 'avisou um subagente a 92 %');
+  calado(c.chama(H.transcript(c.tr, [H.assistente(H.pct(92))], 'a-92.jsonl'), { evento: 'PostToolUse', agente: { agent_id: 'a7f3c2e1b9', agent_type: 'general-purpose' } }), 'avisou um subagente a 92 %');
   avisa(c.chama(tr, { evento: 'PostToolUse' }), 'PostToolUse', 85);
 });
 
