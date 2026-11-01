@@ -60,7 +60,7 @@ export function arvoreDe(raiz) {
 // --- vagas globais: os.tmpdir()/forge-vagas/<n> (mkdir atómico, info.json com o PID do executor); `x` é a exclusiva ---
 const vivoPid = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 const lerInfo = (dir) => { try { return JSON.parse(readFileSync(join(dir, 'info.json'), 'utf8')); } catch { return null; } };
-const rm = (d) => rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+const rm = (d) => { try { rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* ocupada por outro processo: fica para a próxima recuperação */ } };
 // um dono vivo, ou uma pasta acabada de criar (sem info.json há < 10 s)
 function ocupada(dir) {
   const i = lerInfo(dir);
@@ -84,7 +84,12 @@ class Vagas {
   toma(dir, info) {
     for (let t = 0; t < 2; t++) {
       try { mkdirSync(dir); writeFileSync(join(dir, 'info.json'), JSON.stringify(info)); this.minhas.add(dir); return true; }
-      catch (e) { if (e.code !== 'EEXIST') throw e; if (ocupada(dir)) return false; this.recupera(dir); }
+      catch (e) {
+        if (['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) return false; // Windows: a pasta de outro executor está a ser apagada
+        if (e.code !== 'EEXIST') throw e;
+        if (ocupada(dir)) return false;
+        this.recupera(dir);
+      }
     }
     return false;
   }
