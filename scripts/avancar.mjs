@@ -175,9 +175,8 @@ function faseSeguinte(o, pr, padrao) {
 }
 
 export async function avancar(argv) {
-  const o = lerArgs(argv);
-  invalidaFase('avancar em curso');
-  try { return await executa(o); } catch (e) { invalidaFase(`${e instanceof Recusa ? 'recusa' : 'erro'}: ${e.message}`); throw e; }
+  invalidaFase('em curso'); // a primeira instrução: antes dos argumentos e do gh, nenhuma recusa deixa a fase velha no disco
+  try { return await executa(lerArgs(argv)); } catch (e) { invalidaFase(`${e instanceof Recusa ? 'recusa' : 'erro'}: ${e.message}`); throw e; }
 }
 
 async function executa(o) {
