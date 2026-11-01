@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-attacks.js",
+  "find": "Known failure classes (names only): ${CLASSES}. Attack first the known classes that apply to this contract.",
+  "replace": "Attack the contract.",
+  "line": "build: knownClasses (each class kebab-case, else incomplete args: knownClasses before any agent, in both workflows) reach the critic of Round -1 and the critic of the build and never the developer, without them both critics are told \"No known classes yet.\", the verdict schema requires the class of each blocking failure, and metrics.classes counts them"
+}
