@@ -21,8 +21,14 @@
 //   linha `FAIL afetadas no ramo` nomeia a vermelha.
 // - C5: o testCommand `node .claude/executor.mjs --todas`, corrido 2× no mesmo projeto, executa a suíte 2× (a 2.ª corrida não reaproveita o
 //   resultado da 1.ª). O gauntlet-batch do projeto, com o bloco do lote do BOOTSTRAP.md e esse testCommand, aprova 2 passes e recusa 1 (runs).
-// Regras 8 e 9 dos briefs: base() e soNoTicket() são os de tests/critico/_comum/ (F-26), reexportados daqui.
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+// RESPOSTA do orquestrador (#132, 6563556283), que prevalece: (1) os 4 módulos procuram primeiro <raiz>/.claude/suites.json e
+// <raiz>/.claude/mapa-suites.json e depois <raiz>/scripts/...; com os dois, ganha o .claude/ e a saída diz qual leu (C6). (2) O V-08 acrescenta
+// ao executor o `tipo: comando` (comando, formato tap|codigo, limite_s). (3) O manifesto ganha `lints: [...]`: no forge, os 2 lints de scripts/;
+// no template, []; com [] o passo dá «ok lint (nenhum lint declarado)»; um ticket limpo num projeto gerado dá CHECK-TICKET VERDE (C7).
+// (4) .forge/ entra no .gitignore do template, com uma linha no check e a sua mutação. (5) e (6): as leituras acima ficam aceites.
+// - Leitura do «VERDE»: código 0, as 6 linhas ok e, com --publicar <n> e um gh falso (GH_BIN, sem shell), 1.ª linha do --body
+//   `CHECK-TICKET: VERDE <sha>` (V-05, #129). O gh falso é uma cópia do node com o nome gh(.exe) e um preload que só regista o argv.// Regras 8 e 9 dos briefs: base() e soNoTicket() são os de tests/critico/_comum/ (F-26), reexportados daqui.
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -129,10 +135,10 @@ export const aplicaMutacao = async ({ name, value: m }) => {
 
 // ---------- Os módulos no projeto ----------
 // Corre `node .claude/<modulo> ...args` no projeto; um código 3 (incompleto) repete com --continuar, no máximo `max` chamadas
-export const correAteFim = (P, modulo, args, { max = 12, timeout = 300000 } = {}) => {
+export const correAteFim = (P, modulo, args, { max = 12, timeout = 300000, env = {} } = {}) => {
   const chamadas = [];
   for (let i = 0; i < max; i++) {
-    const r = spawnSync(process.execPath, [NO_PROJETO(modulo), ...args, ...(i ? ['--continuar'] : [])], { cwd: P, encoding: 'utf8', env: ambiente(), timeout, windowsHide: true });
+    const r = spawnSync(process.execPath, [NO_PROJETO(modulo), ...args, ...(i ? ['--continuar'] : [])], { cwd: P, encoding: 'utf8', env: ambiente(env), timeout, windowsHide: true });
     chamadas.push({ status: r.status, out: (r.stdout || '') + (r.stderr || '') + (r.error ? '\n[erro] ' + r.error.message : '') });
     if (r.status !== 3) break;
   }
@@ -162,4 +168,15 @@ export const lote = async (P, args, impl) => {
   vm.runInContext('Date.now = Math.random = () => { throw new Error("forbidden in Workflow") }; Date = new Proxy(Date, { construct: (T, a) => a.length ? new T(...a) : Date.now() })', ctx);
   try { run.out = await new vm.Script('(async () => {' + src + '\n})()').runInContext(ctx); } catch (e) { run.err = e; }
   return run;
+};
+// ---------- O gh falso (C7) ----------
+// Uma cópia do node com o nome gh(.exe) e um preload (NODE_OPTIONS) que, só quando corre como gh, regista o argv num ficheiro e sai com 0
+// (o 1.º argumento do gh é o «script» do node: fica o nome dele).
+// Nunca regista o ambiente. Os outros processos node que herdam o NODE_OPTIONS não são tocados (o preload só age com o nome gh).
+export const ghFalso = () => {
+  const d = tmp('critico-v08-gh-'), bin = join(d, process.platform === 'win32' ? 'gh.exe' : 'gh'), log = join(d, 'argv.jsonl'), pre = join(d, 'pre.cjs');
+  copyFileSync(process.execPath, bin);
+  if (process.platform !== 'win32') chmodSync(bin, 0o755);
+  writeFileSync(pre, `if (/^gh(\\.exe)?$/i.test(require('node:path').basename(process.execPath))) { require('node:fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify([require('node:path').basename(process.argv[1] ?? ''), ...process.argv.slice(2)]) + '\\n'); process.exit(0); }\n`);
+  return { bin, log, env: { GH_BIN: bin, NODE_OPTIONS: `--require ${JSON.stringify(pre)}` }, chamadas: () => (existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []) };
 };

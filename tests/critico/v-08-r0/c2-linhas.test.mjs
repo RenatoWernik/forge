@@ -1,11 +1,12 @@
 // V-08 C2 (#132): cada linha nova do check.cjs dá ok no projeto gerado e FAIL com a mutação dela; o corpus F-02 C2 continua com ≥ 5 linhas
 // distintas. Oráculo que não depende dos nomes que o dev der às linhas: num projeto gerado e commitado, cada mutação abaixo (as três coisas que
-// o corpo da #132 manda verificar: os 4 módulos existem, o suites.json é válido, todo o ficheiro rastreado é coberto pelo mapa) põe a FAIL pelo
+// o corpo da #132 manda verificar: os 4 módulos existem, o suites.json é válido, todo o ficheiro rastreado é coberto pelo mapa; e o .forge/ no
+// .gitignore, da RESPOSTA 4, 6563556283) põe a FAIL pelo
 // menos uma linha que estava ok, e uma dessas linhas tem a sua mutação no corpus, que, aplicada como no f-02-r0 C2, a põe a FAIL.
 // O teste ÂMBITO de ambito.test.mjs fecha o resto: todas as linhas novas contra o merge-base, ok e com mutação, e nenhuma linha da base some.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MODULOS, NO_PROJETO, MANIFESTO, MAPA, loadCorpus, gerar, conjunto, preCondicao, repo, check, mesma, lerJson, aplicaMutacao, fim } from './helpers.mjs';
 
@@ -20,6 +21,7 @@ const CASOS = [
   ...MODULOS.map((m) => ({ nome: `sem ${NO_PROJETO(m)}`, muda: (P) => rmSync(join(P, NO_PROJETO(m))) })),
   { nome: `${MANIFESTO} que não é JSON`, muda: (P) => writeFileSync(join(P, MANIFESTO), 'isto não é json\n') },
   { nome: `${MANIFESTO} sem a lista suites`, muda: (P) => writeFileSync(join(P, MANIFESTO), JSON.stringify({ versao: 1 }) + '\n') },
+  { nome: '.gitignore sem a linha .forge/ (RESPOSTA 4, #132)', muda: (P) => { const g = join(P, '.gitignore'); writeFileSync(g, readFileSync(g, 'utf8').split(/\r?\n/).filter((l) => l.trim() !== '.forge/').join('\n')); } },
   {
     nome: `${MAPA} sem nenhuma regra que case com os ficheiros rastreados`,
     muda: (P) => { const m = lerJson(join(P, MAPA)); writeFileSync(join(P, MAPA), JSON.stringify({ ...m, regras: m.regras.map((r) => ({ ...r, caminhos: ['nenhum-sitio-v08/**'] })) }, null, 2) + '\n'); },
