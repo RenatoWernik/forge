@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-build.js",
+  "find": "Verify each one yourself, they are claims: ${JSON.stringify(last.blocking)}",
+  "replace": "Verify each one yourself, they are claims: ${JSON.stringify(last.blocking)} ${JSON.stringify(build.responses)}",
+  "line": "build: each blocking failure gets the id F<round>-<n> that the developer of the next round sees (the one of round 1 sees none), a contested answer reaches results[].contested with the round of the finding, the critic never gets the answer or its reason, and a missing answer gives a WARNING"
+}
