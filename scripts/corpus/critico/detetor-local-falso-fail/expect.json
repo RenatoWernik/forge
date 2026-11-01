@@ -1,0 +1,6 @@
+{
+  "kind": "defect",
+  "criterion": "C1",
+  "class": "false-alarm-detector",
+  "source": "#41"
+}

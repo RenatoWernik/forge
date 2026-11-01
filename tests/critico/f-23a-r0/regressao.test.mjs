@@ -5,7 +5,7 @@
 // entregue, um diff novo a cada ronda, sem pré-existentes nem seguimentos, cada achado respondido «fixed»).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { srcNow, srcBase, contract, baseArgs, runWf, scenario, fresh, planned, resultOf, outcome, why, rng, randomPlan } from './helpers.mjs';
+import { srcNow, srcBase, contract, baseArgs, runWf, scenario, fresh, planned, resultOf, outcome, sameOutcome, why, rng, randomPlan } from './helpers.mjs';
 
 const p = contract('pa', 9101);
 
@@ -18,7 +18,7 @@ for (const mode of ['rigorous', 'accelerated']) {
         assert.ok(resultOf(ref), 'a BASE não correu: ' + why(ref));
         const run = await runWf(srcNow(), baseArgs([p], { mode }), scenario(p, shape(plan)));
         assert.equal(run.err, undefined, `semente ${seed}: ` + why(run));
-        assert.deepEqual(outcome(resultOf(run)), outcome(resultOf(ref)), `${mode}, semente ${seed}, plano ${JSON.stringify(plan)}: ${why(run)}`);
+        sameOutcome(resultOf(run), resultOf(ref), `${mode}, semente ${seed}, plano ${JSON.stringify(plan)}: ${why(run)}`);
       }
     });
   }

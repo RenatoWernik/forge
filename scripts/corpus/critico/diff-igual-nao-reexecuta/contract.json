@@ -1,0 +1,21 @@
+{
+  "issue": 51,
+  "objective": "A round whose diff hash equals the previous round does not call the critic again; a hash that is absent or invalid never skips the critic.",
+  "input": "branch main; file piece/unchanged.mjs",
+  "criteria": [
+    {
+      "text": "Two equal valid hashes mean the diff is unchanged",
+      "oracle": "corpus",
+      "command": "node --test proof.test.mjs"
+    },
+    {
+      "text": "An absent, short or upper case hash never means unchanged",
+      "oracle": "corpus",
+      "command": "node --test proof.test.mjs"
+    }
+  ],
+  "fails": "the critic skipped on an invalid hash; the critic called again on an equal diff; a regression",
+  "outOfScope": "computing the hash",
+  "env": "Node 24 and the standard library; the proof runs with node --test in a copy of this folder",
+  "output": "the verdict of the critic on the issue"
+}

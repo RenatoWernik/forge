@@ -1,0 +1,20 @@
+{
+  "issue": 6,
+  "objective": "The detector of a contract stored in a local file flags the names of contract files and nothing else.",
+  "input": "branch main; file piece/local.mjs",
+  "criteria": [
+    {
+      "text": "No legitimate file name (a version, a status code, an issue template) is flagged as a local contract",
+      "oracle": "corpus",
+      "command": "node --test proof.test.mjs"
+    },
+    {
+      "text": "A contract file named in Portuguese is flagged",
+      "command": "node --test proof.test.mjs"
+    }
+  ],
+  "fails": "a false alarm on a legitimate name; a contract file that escapes",
+  "outOfScope": "a folder named without a file",
+  "env": "Node 24 and the standard library; the proof runs with node --test in a copy of this folder",
+  "output": "the verdict of the critic on the issue"
+}

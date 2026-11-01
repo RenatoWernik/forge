@@ -1,0 +1,20 @@
+{
+  "issue": 51,
+  "objective": "The criterion that a critic writes (C1, C01, c001) is the same criterion for the count of failed rounds.",
+  "input": "branch main; file piece/critkey.mjs",
+  "criteria": [
+    {
+      "text": "C01, c1, C001 and a padded C1 are the criterion C1",
+      "oracle": "corpus",
+      "command": "node --test proof.test.mjs"
+    },
+    {
+      "text": "A name that is not C<n> stays as it is, in upper case",
+      "command": "node --test proof.test.mjs"
+    }
+  ],
+  "fails": "two spellings of one criterion counted as two; a regression",
+  "outOfScope": "the materiality of the failure",
+  "env": "Node 24 and the standard library; the proof runs with node --test in a copy of this folder",
+  "output": "the verdict of the critic on the issue"
+}

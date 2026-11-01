@@ -1,0 +1,20 @@
+{
+  "issue": 15,
+  "objective": "A suite pass that the tester declares in several blocks counts as one complete run only when the blocks are the test command.",
+  "input": "branch main; file piece/classify.mjs",
+  "criteria": [
+    {
+      "text": "Every block of a split pass starts with the test command, otherwise the pass does not count",
+      "oracle": "corpus",
+      "command": "node --test proof.test.mjs"
+    },
+    {
+      "text": "A pass with the whole test command counts as one run",
+      "command": "node --test proof.test.mjs"
+    }
+  ],
+  "fails": "a split pass made of blocks that are not the test command counts as a complete run; a regression",
+  "outOfScope": "pagination and the report format",
+  "env": "Node 24 and the standard library; the proof runs with node --test in a copy of this folder",
+  "output": "the verdict of the critic on the issue"
+}

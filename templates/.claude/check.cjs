@@ -323,7 +323,7 @@ async function chk(name, f) {
   const stuck = calls => calls.filter(c => c.prompt.includes('-stuck'))
   const veto = c => ['Do not consult memory', 'do not open FRAMEWORK.md or .claude/workflows/', 'unless the context above allows it', 'you edit no file'].every(t => c.prompt.includes(t)) // what invariant 3 forbids the critic
   const key = r => r.model + ',' + r.effort
-  const ROLE = { build: key(D), pony: key(D), critic: key(C), 'pony-critic': key(C), attacks: key(C), batch: key(T), panel: key(X), graph: key(X) } // invariant 3: model,effort of each role by label prefix, from forge.json
+  const ROLE = { build: key(D), pony: key(D), critic: key(C), 'pony-critic': key(C), attacks: key(C), batch: key(T), repro: key(T), panel: key(X), graph: key(X) } // invariant 3: model,effort of each role by label prefix, from forge.json
   const rolesOk = (calls, roles = ROLE) => calls.every(c => roles[c.opts.label.split(':')[0]] === c.opts.model + ',' + c.opts.effort)
   const ver = (calls, l) => only(calls, new RegExp('^panel:verdict:' + l + '$'))[0].prompt // what the workflow tells the panel to record at the end of a round (only it knows whether ours really won)
   const LOST = ['"verdict":"perdeu"', '"status":"building"', '"kind":"fail"'], WON = ['"verdict":"ganhou"', '"status":"won"', '"kind":"ok"'] // "ganhou"/"perdeu" are fixed panel values the dashboard reads
@@ -354,7 +354,7 @@ async function chk(name, f) {
   })
   await chk('build: the results[] return has id, stopped, files, testCommand, models, the measures, followUps and the last round\'s lastVerdict', () => { const x = r.out.results[0]; return x.id === 'p' && x.won && x.rounds === 3 && !x.stopped && x.files.join() === 'src/a.js' && x.testCommand === 'TEST-DEV' && x.models.builder === declared(D) && x.models.critic === declared(C) && x.lastVerdict.biggestGap === 'GAP-3' && Array.isArray(x.followUps) && ['rounds', 'sameCriterionFailures', 'attacksRedOnDelivery', 'minutesWithoutProgress'].every(k => k in x.metrics) })
   await chk('panel: build: the verdict records perdeu/building/fail or ganhou/won/ok, plus the round and the gap (rounds 1 and 3 here)', () => verdictOk(ver(r.calls, 'p:r1'), 1, 'GAP-1', LOST, WON) && verdictOk(ver(r.calls, 'p:r3'), 3, 'GAP-3', WON, LOST))
-  await chk('build: each round calls, in separate agent() calls and in this order, the developer, the critic and the panel', () => r.calls.length === 11 && r.calls.slice(0, 5).map(c => c.opts.label).join() === 'graph:update,panel:seed,build:p:r1,critic:p:r1,panel:verdict:p:r1' && r.calls.slice(-3).map(c => c.opts.label).join() === 'build:p:r3,critic:p:r3,panel:verdict:p:r3')
+  await chk('build: each round calls, in separate agent() calls and in this order, the developer, the critic and the panel', () => { const k = r.calls.filter(c => !c.opts.label.startsWith('repro:')); return k.length === 11 && k.slice(0, 5).map(c => c.opts.label).join() === 'graph:update,panel:seed,build:p:r1,critic:p:r1,panel:verdict:p:r1' && k.slice(-3).map(c => c.opts.label).join() === 'build:p:r3,critic:p:r3,panel:verdict:p:r3' }) // the repro: calls of a verdict with blocking failures (F-23b) sit between the critic and the panel and are not counted here
   await chk('build: the gap and blocking failures of round N reach the developer of round N+1, and the round 1 developer gets nothing', () => devs.length === 3 && !devs[0].prompt.includes('GAP-') && !devs[0].prompt.includes('BLOCK-') && ['GAP-1', 'BLOCK-1'].every(t => devs[1].prompt.includes(t)) && !devs[1].prompt.includes('BLOCK-2') && devs[2].prompt.includes('BLOCK-2'))
   await chk('build: the critic gets neither the developer\'s reasoning (summary) nor the reasoning and gap of earlier rounds', () => crit.length === 3 && crit.every(c => !/REASONING|GAP-/.test(c.prompt)))
   await chk('build: from round 2 the critic gets the failures that the critic of the previous round listed (criterion, materiality, repro), and the round 1 critic gets none', () => crit.length === 3 && !crit[0].prompt.includes('BLOCK-') && crit[1].prompt.includes('BLOCK-1') && /\bC1\b/.test(crit[1].prompt) && crit[2].prompt.includes('BLOCK-2') && !crit[2].prompt.includes('BLOCK-1'))
@@ -491,7 +491,44 @@ async function chk(name, f) {
     const id = o.label.split(':')[1]
     return { attacks: (over.attacks || {})[id] || r0(id).attacks, failingOnBase: over.claim ?? true, gaps: (over.gaps || {})[id] || [], model: declared(C) }
   }
-  const [A1, G1] = r0('p').attacks, q = { ...piece, id: 'q', title: 'Q', owns: ['src/b.js'], issue: 8 }
+  // The repro (F-23b, D2): a blocking failure fails the piece only after another agent (models.tester) ran its repro again; the class of each failure (C2) comes from the critic and the known classes only reach the critics.
+  const reproOf = (oks, over = {}) => () => ({ results: oks.map((ok, i) => ({ finding: 'F1-' + (i + 1), reproduced: ok, output: 'OUT-' + (i + 1) })), model: declared(T), ...over })
+  const withRepro = (impl, rep) => (p, o) => o.label.startsWith('repro:') ? rep(p, o) : impl(p, o)
+  await chk('build: a verdict with blocking failures makes ONE repro:<id>:r<N> call, after the critic and before the panel records the verdict, with models.tester and a prompt of only the {finding, repro} pairs and the root (never the description, the reason of the developer, the summary, the gap or the reasoning), a schema with an object root and one array of {finding, reproduced: boolean, output}, and no call without blocking failures', async () => {
+    const two = n => n === 1 ? { blocking: [item(11, 1), item(12, 3)] } : {}, ans = n => n === 2 ? { responses: [{ finding: 'F1-1', answer: 'contested', reason: 'REASON-CONTESTED-9' }] } : {}
+    const x = await go(withRepro((p, o) => rich(p, o, 2, two, ans), reproOf([true, true]))), w = await go((p, o) => rich(p, o, 1))
+    const rs = only(x.calls, /^repro:/), c = rs[0], at = l => x.calls.findIndex(k => k.opts.label === l), s = c?.opts.schema || {}
+    const arr = Object.entries(s.properties || {}).filter(([, v]) => v.type === 'array')
+    return rs.length === 1 && c.opts.label === 'repro:p:r1' && key(c.opts) === key(T) && at('critic:p:r1') < at('repro:p:r1') && at('repro:p:r1') < at('panel:verdict:p:r1')
+      && ['F1-1', 'F1-2', 'BLOCK-11', 'BLOCK-12', base.root].every(t => c.prompt.includes(t)) && !/DESC-|DEV-REASONING|REASON-CONTESTED|GAP-|CRITIC-REASONING/.test(c.prompt)
+      && s.type === 'object' && arr.length === 1 && s.required.includes(arr[0][0]) && arr[0][1].items.properties.reproduced.type === 'boolean' && ['finding', 'reproduced', 'output'].every(k => arr[0][1].items.properties[k]) && /2000/.test(c.prompt + JSON.stringify(s)) && /foreground/.test(c.prompt)
+      && only(w.calls, /^repro:/).length === 0 && x.out.results[0].won
+  })
+  await chk('build: a blocking failure that the repro did not reproduce leaves the blocking list for minor with notReproduced, keeps the id F<round>-<n> of the others and counts in metrics.criticNotReproduced; one of materiality 1 stays blocking, only unconfirmed and not counted; an invalid repro answer (not valid, not a list, one id missing, a non-boolean) keeps them all', async () => {
+    const mix = n => n === 1 ? { blocking: [item(21, 1), item(22, 3), item(23, 2, 1, 'regression')] } : {}, two = n => n === 1 ? { blocking: [item(21, 1), item(22, 3)] } : {}
+    const run = (rep, cx = mix, at = 2) => go(withRepro((p, o) => rich(p, o, at, cx), rep))
+    const x = await run(reproOf([false, true, false])), u = await run(reproOf([true, true, false])), one = await run(reproOf([false, false]), two, 1)
+    const bad = await Promise.all([() => 'ok', () => null, reproOf([false, false]), reproOf([], { results: 'F1-1' }), reproOf([], { results: undefined }), reproOf([false, false, 'x'])].map(rep => run(rep)))
+    const dev2 = y => only(y.calls, /^build:/)[1].prompt, m = y => y.out.results[0].metrics.criticNotReproduced, lv = one.out.results[0].lastVerdict
+    return x.out.results[0].won && m(x) === 1 && ['"id":"F1-2"', '"id":"F1-3"', 'BLOCK-22', 'BLOCK-23'].every(t => dev2(x).includes(t)) && !dev2(x).includes('"id":"F1-1"') && !dev2(x).includes('BLOCK-21')
+      && m(u) === 0 && dev2(u).includes('"unconfirmed":true') && ['F1-1', 'F1-2', 'F1-3'].every(t => dev2(u).includes(t))
+      && one.out.results[0].won && one.out.results[0].rounds === 1 && m(one) === 2 && lv.blocking.length === 0 && lv.minor.filter(k => k.notReproduced === true).length === 2
+      && bad.every(y => m(y) === 0 && ['F1-1', 'F1-2', 'F1-3'].every(t => dev2(y).includes(t)))
+  })
+  await chk('build: knownClasses (each class kebab-case, else incomplete args: knownClasses before any agent, in both workflows) reach the critic of Round -1 and the critic of the build and never the developer, without them both critics are told "No known classes yet.", the verdict schema requires the class of each blocking failure, and metrics.classes counts them', async () => {
+    const KN = [{ class: 'port-race', entries: ['E-1', 'E-2'], strongest: 'test' }, { class: 'stale-graph', entries: ['E-3'], strongest: 'hook' }], names = KN.map(k => k.class), cls = (it, c) => ({ ...it, class: c })
+    const plan = n => n === 1 ? { blocking: [cls(item(31, 1), 'port-race'), cls(item(32, 3), 'new-one')] } : n === 2 ? { blocking: [cls(item(33, 2), 'port-race')] } : {}
+    const all = p => ({ results: [...p.matchAll(/"finding":"(F\d+-\d+)"/g)].map(k => ({ finding: k[1], reproduced: true, output: '' })), model: declared(T) })
+    const x = await go(withRepro((p, o) => rich(p, o, 3, plan), all), { knownClasses: KN }), y = await go(win)
+    const att = await wf('gauntlet-attacks.js', { ...base, pieces: [piece], knownClasses: KN }, attImpl()), att0 = await wf('gauntlet-attacks.js', { ...base, pieces: [piece] }, attImpl())
+    const refused = async (file, c) => { let n = 0; const z = await wf(file, { ...base, pieces: [piece], knownClasses: [KN[0], { class: c, entries: [], strongest: 'text' }] }, () => ++n); return n === 0 && (z.err?.message || '').includes('incomplete args: knownClasses: ') }
+    const cs = only(x.calls, /^critic:/), s = cs[0]?.opts.schema.properties.blocking.items, ap = only(att.calls, /^attacks:/)[0]?.prompt || ''
+    return cs.length === 3 && cs.every(k => names.every(n => k.prompt.includes(n))) && only(x.calls, /^build:/).every(d => names.every(n => !d.prompt.includes(n))) && x.out.results[0].won
+      && JSON.stringify(x.out.results[0].metrics.classes) === JSON.stringify({ 'port-race': 2, 'new-one': 1 }) && s.required.includes('class') && s.properties.class.pattern === '^[a-z0-9]+(-[a-z0-9]+)*$'
+      && names.every(n => ap.includes(n)) && /first/.test(ap) && only(y.calls, /^critic:/).every(k => k.prompt.includes('No known classes yet.')) && JSON.stringify(y.out.results[0].metrics.classes) === '{}' && only(att0.calls, /^attacks:/)[0].prompt.includes('No known classes yet.')
+      && (await Promise.all(['Bad Class', 'x y'].flatMap(c => ['gauntlet-build.js', 'gauntlet-attacks.js'].map(f => refused(f, c))))).every(Boolean)
+  })
+  const [A1, G1] = r0('p').attacks, q ={ ...piece, id: 'q', title: 'Q', owns: ['src/b.js'], issue: 8 }
   const C0 = contract.criteria[0], many = n => Array.from({ length: n }, (_, i) => ({ text: 'Step ' + i + ' returns 3 rows', command: 'node --test t' + i }))
   const NAMED = [['issue', { issue: undefined }], ['issue', { issue: 0 }], ['issue', { issue: 'abc' }], ['criteria', { criteria: undefined }], ['criteria', { criteria: [] }], ['criteria', { criteria: many(7) }],
     ['criteria[0].command', { criteria: [{ ...C0, command: ' ' }] }], ['criteria[0].text', { criteria: [{ ...C0, text: '' }] }], ['criteria[0].oracle', { criteria: [{ ...C0, oracle: 'vibes' }] }],
