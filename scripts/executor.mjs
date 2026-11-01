@@ -166,8 +166,9 @@ function lerManifesto(raiz) {
   return m;
 }
 
-// as unidades por correr, pela ordem do agendamento: as de limite maior primeiro (enchem o paralelo); as sensíveis ao tempo a seguir (cada uma
-// prende a carga global a carga_sensivel enquanto corre, por isso o resto acaba antes) e as exclusivas no fim
+// as unidades por correr, pela ordem do agendamento: as exclusivas primeiro (com a máquina vazia correm seguidas, numa só chamada; no fim, cada
+// uma esperava pelas outras e só cabia uma por chamada), depois as normais e por fim as sensíveis ao tempo (cada uma prende a carga global a
+// carga_sensivel enquanto corre); dentro de cada classe, as de limite maior primeiro (enchem o paralelo)
 function planeia(m, escolha, raiz) {
   const nomes = m.suites.map((s) => s.nome);
   if (escolha !== '*') { const f = escolha.filter((n) => !nomes.includes(n)); if (f.length) throw new Uso(`suites desconhecidas: ${f.join(', ')}`); }
@@ -178,7 +179,7 @@ function planeia(m, escolha, raiz) {
     for (const ficheiro of ficheiros) for (const bloco of s.blocos?.[ficheiro] ?? [null]) us.push({ suite: s, ficheiro, bloco, chave: `${ficheiro}\0${bloco ?? ''}` });
   }
   us.forEach((u, i) => { u.ordem = i; });
-  const classe = (u) => (u.suite.exclusiva ? 2 : u.suite.sensivel_ao_tempo ? 1 : 0);
+  const classe = (u) => (u.suite.exclusiva ? 0 : u.suite.sensivel_ao_tempo ? 2 : 1);
   return us.toSorted((a, b) => classe(a) - classe(b) || b.suite.limite_s - a.suite.limite_s || a.ordem - b.ordem);
 }
 
