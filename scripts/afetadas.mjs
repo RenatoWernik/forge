@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 // Suítes afetadas por um diff (V-02, #126; spec #123 §4.3). Só biblioteca padrão.
-//   afetadas(ficheiros, { raiz }) → { suites, porque }: a união de três coisas (o mapa, o manifesto e os ficheiros lidos vêm de `raiz`,
-//   por omissão a raiz do repo deste módulo)
-//     1. as regras de scripts/mapa-suites.json cujo glob casa com um ficheiro do diff ("*" = todas as suítes);
-//     2. a regra implícita: tests/critico/<x>/** afeta a suíte <x>;
-//     3. o fecho do lote: as suítes-alvo dos doLote das suítes já afetadas (repetido até não entrar nenhuma).
-//   Um ficheiro que nenhuma regra cobre conta como "*" (a regra «sem regra»): o lint M1 do mapa existe para isso nunca acontecer.
-//   `porque` é { <suíte>: [{ regra, ficheiro }] }, com `regra` = o glob que casou, `implícita`, `doLote:<suíte de origem>` ou `sem regra`.
+//   afetadas(ficheiros, { raiz }) → { suites, porque }: a união de cinco coisas (o mapa, o manifesto e os ficheiros lidos vêm de `raiz`,
+//   por omissão a raiz do repo deste módulo). O desenho é conservador (REDESENHO na #126): um mapa fino falha em silêncio, um largo só custa tempo.
+//     1. as regras de scripts/mapa-suites.json cujo glob casa com um ficheiro do diff ("*" = todas as suítes): código e templates levam todas,
+//        documentos e tests/critico/** levam só as `sempre`;
+//     2. a regra implícita: tests/critico/<x>/** afeta a suíte <x>, e as suítes que importam ficheiros dessa pasta (os helpers e os golden dela);
+//     3. as suítes `sempre` do mapa (as guardas por diff e varrimento), mesmo com o diff vazio;
+//     4. o fecho do lote: as suítes-alvo dos doLote das suítes já afetadas (repetido até não entrar nenhuma).
+//   Um ficheiro que nenhuma regra cobre, ou uma pasta de testes fora do manifesto, conta como "*": o lint M1 existe para isso não acontecer.
+//   `porque` é { <suíte>: [{ regra, ficheiro }] }, com `regra` = o glob que casou, `implícita`, `importa <pasta>`, `sempre`,
+//   `doLote:<suíte de origem>`, `sem regra` ou `pasta fora do manifesto`; as das regras vêm primeiro e `sempre` por último.
 //   node scripts/afetadas.mjs --base <ref>   imprime, por suíte, a regra e o ficheiro que a trouxeram (diff contra git merge-base HEAD <ref>).
 import { spawnSync } from 'node:child_process';
 import { existsSync, globSync, readFileSync, statSync } from 'node:fs';
@@ -26,6 +29,7 @@ export function lerMapa(raiz = RAIZ) {
     if (!Array.isArray(r.caminhos) || !r.caminhos.length) throw new Error(`mapa-suites.json: regra ${i} sem caminhos`);
     if (!Array.isArray(r.suites) || !r.suites.length) throw new Error(`mapa-suites.json: regra ${i} com a lista de suites vazia`);
   });
+  if (m.sempre !== undefined && !(m.sempre && typeof m.sempre === 'object' && !Array.isArray(m.sempre))) throw new Error('mapa-suites.json: sempre é { suíte: motivo }');
   return m;
 }
 
@@ -45,23 +49,36 @@ export function fechoImports(raiz, ficheiros) {
 export const ficheirosDaSuite = (raiz, suite) =>
   fechoImports(raiz, [...new Set((suite.ficheiros ?? []).flatMap((g) => globSync(g, { cwd: raiz }).map((f) => f.replaceAll('\\', '/'))))]);
 
-// o que cada suíte afetada traz só pelas regras e pela regra implícita, sem o fecho do lote
+const pastaDe = (f) => (f.startsWith(PASTA) ? f.slice(PASTA.length).split('/')[0] : null);
+
+// o que cada suíte afetada traz só pelas regras, pela regra implícita, pelos imports entre pastas e pelas `sempre`, sem o fecho do lote
 export function diretas(ficheiros, raiz = RAIZ) {
-  const nomes = json(raiz, 'scripts/suites.json').suites.map((s) => s.nome), mapa = lerMapa(raiz), porque = {};
+  const suites = json(raiz, 'scripts/suites.json').suites, nomes = suites.map((s) => s.nome), mapa = lerMapa(raiz), porque = {};
   const junta = (s, regra, ficheiro) => (porque[s] ??= []).push({ regra, ficheiro });
+  const sempre = Object.keys(mapa.sempre ?? {});
+  const fora = sempre.filter((s) => !nomes.includes(s));
+  if (fora.length) throw new Error(`mapa-suites.json: sempre com suítes que não estão no manifesto: ${fora.join(', ')}`);
+  let deps; // suíte → pastas de tests/critico que ela importa (as dos helpers de outras suítes)
   for (const f of ficheiros) {
     let achou = false;
     for (const r of mapa.regras) {
       const g = r.caminhos.find((x) => casa(f, x));
       if (g) { achou = true; for (const s of r.suites) junta(s, g, f); }
     }
-    const pasta = f.startsWith(PASTA) ? f.slice(PASTA.length).split('/')[0] : null;
+    const pasta = pastaDe(f);
     if (nomes.includes(pasta)) { achou = true; junta(pasta, 'implícita', f); }
+    // uma pasta de testes fora do manifesto nunca corre sozinha: o conservador é correr tudo (_comum são os helpers, que têm a sua regra)
+    else if (pasta && pasta !== '_comum' && f.slice(PASTA.length).includes('/')) junta('*', 'pasta fora do manifesto', f);
+    if (pasta) {
+      deps ??= Object.fromEntries(suites.map((s) => [s.nome, new Set(ficheirosDaSuite(raiz, s).map(pastaDe).filter((p) => p && p !== s.nome))]));
+      for (const n of nomes) if (deps[n].has(pasta)) junta(n, `importa ${PASTA}${pasta}/`, f);
+    }
     if (!achou) junta('*', 'sem regra', f);
   }
   const todas = porque['*'] ?? [];
   delete porque['*'];
   if (todas.length) for (const n of nomes) for (const e of todas) junta(n, e.regra, e.ficheiro);
+  for (const s of sempre) junta(s, 'sempre', ficheiros[0] ?? '(diff vazio)');
   return { nomes, porque };
 }
 
