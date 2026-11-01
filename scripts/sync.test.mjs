@@ -361,3 +361,21 @@ test('an e-mail address or an absolute path in an added line is flagged as perso
   await writeFile(join(dir, 'CLAUDE.md'), `${await read(dir, 'CLAUDE.md')}Run plugin forge@forge and read docs/house/notes at https://example.org/x.\n`);
   assert.deepEqual((await sync(dir, PKG)).leaks, []);
 });
+
+test('the Learned rules block of CLAUDE.md goes out of the comparison whatever its shape: no title, a user edit around it stays; a marker without its pair, or a second block, is exit 3 with no patch', async () => {
+  const [S, E] = ['<!-- forge:learnings:start -->', '<!-- forge:learnings:end -->'];
+  const dir = await project();
+  const base = await read(dir, 'CLAUDE.md');
+  await writeFile(join(dir, 'CLAUDE.md'), `${base}\n${S}\n- E-001 \`acme\`: the ACME export lost a column\n${E}\n\nMy own note.\n`);
+  const { patch, files } = await sync(dir, PKG);
+  assert.deepEqual(files, ['CLAUDE.md']);
+  assert.ok(patch.includes('+My own note.') && !/ACME|forge:learnings/.test(patch));
+  for (const text of [`${base}\n${S}\n${E}\n${S}\n${E}\n`, `${base}\n${E}\n${S}\n`]) {
+    await writeFile(join(dir, 'CLAUDE.md'), text);
+    const err = [];
+    let out = '';
+    assert.equal(await main(['--project', dir], (s) => { out += s; }, (m) => err.push(m)), 3);
+    assert.equal(out, '');
+    assert.ok(err.some((m) => m.startsWith('CLAUDE.md:')));
+  }
+});
