@@ -2,7 +2,7 @@
 // Executor paralelo (V-01, #125; spec #123 §4.1 e §4.2): corre as suítes de scripts/suites.json em paralelo, cada ficheiro de teste (ou bloco)
 // num filho `node --test` com home e tmp próprios, limite de tempo que mata só a árvore do PID lançado, vagas partilhadas por todos os
 // executores da máquina e resultados ligados ao sha e à árvore em .forge/resultados/. Só biblioteca padrão.
-//   node scripts/executor.mjs (--todas | --suites a,b) [--passe 1|2] [--continuar] [--paralelo N] [--raiz <dir>]
+//   node scripts/executor.mjs (--todas | --suites a,b | --afetadas [--base origin/main]) [--passe 1|2] [--continuar] [--paralelo N] [--raiz <dir>]
 // Saída: 0 tudo verde; 1 falha, limite ou erro; 2 erro de uso; 3 incompleto (o orçamento_s não chega: repetir com --continuar).
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -10,6 +10,7 @@ import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, renameSync,
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { desdeBase } from './afetadas.mjs';
 
 const LIMITE_PADRAO_S = 240; // unidade de uma suíte sem limite_s
 const PASSO_MS = 100; // varredura do agendador e da carga global
@@ -130,7 +131,7 @@ function mataArvore(pid) {
 }
 
 function lerArgs(argv) {
-  const o = { suites: null, passe: 1, continuar: false, paralelo: null, raiz: process.cwd() };
+  const o = { suites: null, afetadas: false, base: null, passe: 1, continuar: false, paralelo: null, raiz: process.cwd() };
   const valor = (i, nome) => { if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) throw new Uso(`${nome} precisa de um valor`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -140,10 +141,13 @@ function lerArgs(argv) {
     else if (a === '--continuar') o.continuar = true;
     else if (a === '--paralelo') { o.paralelo = +valor(i++, a); if (!Number.isInteger(o.paralelo) || o.paralelo < 1) throw new Uso('--paralelo: inteiro ≥ 1'); }
     else if (a === '--raiz') o.raiz = resolve(valor(i++, a));
-    else if (a === '--afetadas') throw new Uso('--afetadas ainda não existe (V-02)');
+    else if (a === '--afetadas') o.afetadas = true;
+    else if (a === '--base') o.base = valor(i++, a);
     else throw new Uso(`argumento desconhecido: ${a}`);
   }
-  if (!o.suites) throw new Uso('indique --todas ou --suites a,b');
+  if (o.afetadas && o.suites) throw new Uso('--afetadas não se combina com --todas nem --suites');
+  if (o.base && !o.afetadas) throw new Uso('--base só vale com --afetadas');
+  if (!o.suites && !o.afetadas) throw new Uso('indique --todas, --suites a,b ou --afetadas');
   return o;
 }
 
@@ -182,6 +186,14 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
   const rev = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: raiz, encoding: 'utf8' });
   if (rev.status !== 0) throw new Uso(`${raiz} não é um repositório git`);
   const sha = rev.stdout.trim(), arvore = arvoreDe(raiz);
+  if (o.afetadas) {
+    let r;
+    try { r = desdeBase(o.base ?? 'origin/main', raiz); } catch (e) { throw new Uso(e.message); }
+    // um diff vazio não afeta nada e «correr nada» seria um falso verde: é um erro de uso
+    if (!r.ficheiros.length) throw new Uso(`nenhum ficheiro mudou contra ${o.base ?? 'origin/main'}`);
+    saida(`afetadas: ${r.suites.length} suítes (${r.ficheiros.length} ficheiros contra ${r.base.slice(0, 7)}): ${r.suites.join(', ')}`);
+    o.suites = r.suites;
+  }
   const plano = planeia(m, o.suites, raiz);
   const pasta = join(raiz, '.forge', 'resultados');
   mkdirSync(join(pasta, 'logs'), { recursive: true });
