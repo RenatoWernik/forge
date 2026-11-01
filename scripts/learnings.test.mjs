@@ -26,9 +26,11 @@ const answers = {
 };
 
 let dest;
+const DOCS = {}; // CLAUDE.md and AGENTS.md as the scaffold wrote them: every run starts from them
 before(async () => {
   dest = await mkdtemp(join(tmpdir(), 'forge-learnings-'));
   await scaffold(answers, { dest });
+  for (const f of ['CLAUDE.md', 'AGENTS.md']) DOCS[f] = await readFile(join(dest, f), 'utf8');
   for (const rel of (await readFile(join(CORPUS, 'tree.txt'), 'utf8')).split(/\r?\n/).filter(Boolean)) {
     await mkdir(dirname(join(dest, rel)), { recursive: true });
     await writeFile(join(dest, rel), '// corpus tree\n');
@@ -36,14 +38,17 @@ before(async () => {
 });
 after(() => rm(dest, { recursive: true, force: true }));
 
-// learnings/ holds only the given files ({ name: text }); null removes the folder
-const run = async (files, args = ['--today', TODAY]) => {
+// learnings/ holds only the given files ({ name: text }); null removes the folder. block: the Learned rules block that .claude/learn.mjs readout writes from them, in CLAUDE.md and AGENTS.md
+const run = async (files, args = ['--today', TODAY], block = false) => {
   await rm(join(dest, 'learnings'), { recursive: true, force: true });
+  for (const [f, text] of Object.entries(DOCS)) await writeFile(join(dest, f), text);
   if (files) {
     await mkdir(join(dest, 'learnings'), { recursive: true });
     for (const [n, t] of Object.entries(files)) await writeFile(join(dest, 'learnings', n), t);
   }
-  const r = spawnSync(process.execPath, ['.claude/check.cjs', ...args], { cwd: dest, encoding: 'utf8', env: { ...process.env, HOME: dest, USERPROFILE: dest, DISABLE_AUTOUPDATER: '1' } });
+  const env = { ...process.env, HOME: dest, USERPROFILE: dest, DISABLE_AUTOUPDATER: '1' };
+  if (block) assert.equal(spawnSync(process.execPath, ['.claude/learn.mjs', 'readout'], { cwd: dest, encoding: 'utf8', env }).status, 0);
+  const r = spawnSync(process.execPath, ['.claude/check.cjs', ...args], { cwd: dest, encoding: 'utf8', env });
   const out = r.stdout + r.stderr;
   return { code: r.status, out, line: out.split(/\r?\n/).find((l) => l.slice(6).startsWith(FORM)) };
 };
@@ -51,7 +56,7 @@ const mdFiles = async (sub) => (await readdir(join(CORPUS, sub))).filter((n) => 
 
 for (const n of await mdFiles('valid')) {
   test(`corpus valid/${n}: the learnings line is ok, no FAIL, exit 0`, async () => {
-    const r = await run({ '2026-10.md': await readFile(join(CORPUS, 'valid', n), 'utf8') });
+    const r = await run({ '2026-10.md': await readFile(join(CORPUS, 'valid', n), 'utf8') }, undefined, true);
     assert.match(r.line, /^ok {4}/, r.out.slice(-1500));
     assert.equal(r.code, 0, r.out.slice(-1500));
     assert.match(r.out, /All ok\./);
@@ -94,7 +99,7 @@ test('a file that is not YYYY-MM.md or README.md is a FAIL, whatever it holds', 
 
 test('--today: a past REVIEW-BY on an open entry is a warn line (exit 0); a date that is not YYYY-MM-DD is a FAIL', async () => {
   const open = (await readFile(join(CORPUS, 'valid', 'climb-and-triggers.md'), 'utf8'));
-  const late = await run({ '2026-10.md': open }, ['--today', '2026-11-21']);
+  const late = await run({ '2026-10.md': open }, ['--today', '2026-11-21'], true);
   assert.ok(late.out.includes('warn  learnings: open entries past their REVIEW-BY (today 2026-11-21): E-005 (2026-11-20)'), late.out.slice(-800));
   assert.equal(late.code, 0);
   const bad = await run({ '2026-10.md': open }, ['--today', '1-11-2026']);
@@ -167,4 +172,22 @@ test('check: --today=X is the same as --today X, a bad one is a FAIL', async () 
 test('history: a BOM is not a change', () => {
   assert.deepEqual(grows('﻿' + head), []);
   assert.deepEqual(grows(head, '﻿' + head), []);
+});
+// the style line skips the Learned rules block (the register's own words) and still reads the text around it
+test('style: a dash inside the Learned rules block is the register\'s text, a dash right after the block is a FAIL', async () => {
+  const text = (await readFile(join(CORPUS, 'valid', 'climb-and-triggers.md'), 'utf8')).replace(/^- SYMPTOM: (.*)$/gm, (m, s) => `- SYMPTOM: ${s} — again`);
+  const style = (out) => out.split(/\r?\n/).find((l) => l.slice(6).startsWith('style: '));
+  const inside = await run({ '2026-10.md': text }, undefined, true);
+  assert.ok((await readFile(join(dest, 'CLAUDE.md'), 'utf8')).includes('— again (learnings/'), 'the dash is not in the block');
+  assert.match(style(inside.out), /^ok {4}/, inside.out.slice(-800));
+  await writeFile(join(dest, 'CLAUDE.md'), (await readFile(join(dest, 'CLAUDE.md'), 'utf8')) + '\nA dash — right after the block.\n');
+  const env = { ...process.env, HOME: dest, USERPROFILE: dest, DISABLE_AUTOUPDATER: '1' };
+  const after = spawnSync(process.execPath, ['.claude/check.cjs', '--today', TODAY], { cwd: dest, encoding: 'utf8', env });
+  assert.match(style(after.stdout), /^FAIL {2}/);
+});
+// learn.mjs refuses a rule that repeats an invariant by the TITLES of learnings.cjs; check.cjs keeps its own copy of the list
+test('the invariant titles of learnings.cjs are the TITLES of check.cjs', async () => {
+  const src = await readFile(fileURLToPath(new URL('../templates/.claude/check.cjs', import.meta.url)), 'utf8');
+  const { TITLES } = createRequire(import.meta.url)('../templates/.claude/learnings.cjs');
+  assert.deepEqual(TITLES, [...src.match(/const TITLES = (\[.*\])/)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
 });
