@@ -221,6 +221,7 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
   // o resultado da fase 1 que os doLote da fase 2 leem: fica como estava quando a fase 1 acabou, sem a fase 2 a mexer-lhe
   // (fora de .forge/resultados/: ali só fica um JSON por passe)
   const fase1 = join(raiz, '.forge', 'lote', `${marca}.fase1.json`);
+  if (!o.continuar) rmSync(fase1, { force: true }); // um passe novo nunca herda o resultado da fase 1 de um anterior
 
   const vagas = new Vagas(m.vagas_globais, m.carga_sensivel);
   const raizTmp = mkdtempSync(join(tmpdir(), 'forge-exec-'));
