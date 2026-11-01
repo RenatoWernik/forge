@@ -187,7 +187,9 @@ async function main(argv) {
     const cabeca = falhou ? `CHECK-TICKET: VERMELHO ${sha}` : `CHECK-TICKET: VERDE ${sha} ${createHash('sha256').update(readFileSync(rel)).digest('hex')}`;
     publica(ghEnv, raiz, o.publicar, [cabeca, ...passos.map((p) => `${p.estado === 'ok' ? 'ok' : 'FAIL'} ${p.passo}${p.detalhe ? ` (${p.detalhe})` : ''}`)].join('\n'));
   }
-  if (codigo !== 3) rmSync(clonePath(sha), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  // o clone fica com os logs TAP do pós-merge quando algo falhou ou falta (o --continuar também o reaproveita); só o verde o apaga
+  if (codigo === 0) rmSync(clonePath(sha), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  else console.log(`check-ticket: o clone do pós-merge (com os logs) ficou em ${clonePath(sha)}`);
   return codigo;
 }
 
