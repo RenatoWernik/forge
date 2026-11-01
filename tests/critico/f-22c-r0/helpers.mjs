@@ -8,9 +8,7 @@
 //   «### Step N.» dentro do «## 5. »;
 // - os passos da skill são os títulos «## N. <título>» (a forma de todas as skills numeradas do pacote: new-project, update, sync); ver a PERGUNTA 1.
 //
-// Regras 8 e 9 dos briefs: base() e soNoTicket() são os de tests/critico/_comum/ (F-26). Este ticket nasce em cima do F-22b (#76), que ainda não
-// está na main: baseDoTicket() é o base() salvo quando a HEAD contém a branch do F-22b e o base() não, e então é o ponto onde este ticket começou
-// (o merge-base com essa branch). Depois do merge do F-22b e do rebase, volta a ser o base().
+// Regras 8 e 9 dos briefs: base() e soNoTicket() são os de tests/critico/_comum/ (F-26).
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, relative } from 'node:path';
@@ -54,16 +52,7 @@ export const linhasDeTabela = (s) => s.split('\n').filter((l) => /^\s*\|/.test(l
 export const palavra = (id) => new RegExp(`(?<![\\w-])${id.replace(/-/g, '\\-')}(?![\\w-])`);
 
 // ---------- Git, para as guardas de âmbito ----------
-const DEP = 'origin/f-22b-learn-mjs'; // a branch do F-22b (#76)
-const gitR = (...a) => spawnSync('git', a, { cwd: ROOT, encoding: 'utf8' });
-export const gitRoot = (...a) => { const r = gitR(...a); assert.equal(r.status, 0, 'git ' + a.join(' ') + ': ' + r.stderr); return r.stdout; };
-export const baseDoTicket = () => {
-  const b = base();
-  if (!b) return null;
-  const d = gitR('merge-base', 'HEAD', DEP);
-  const dep = d.status === 0 ? d.stdout.trim() : '';
-  return dep && dep !== b && gitR('merge-base', '--is-ancestor', b, dep).status === 0 ? dep : b;
-};
+export const gitRoot = (...a) => { const r = spawnSync('git', a, { cwd: ROOT, encoding: 'utf8' }); assert.equal(r.status, 0, 'git ' + a.join(' ') + ': ' + r.stderr); return r.stdout; };
 
 // ---------- Sync ----------
 // Corre `node scripts/sync.mjs --project <proj> --package <ROOT>` com o ambiente do sandbox; out = stdout e stderr, por esta ordem

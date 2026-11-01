@@ -4,7 +4,7 @@
 // O que reprova: as knownClasses lidas da worktree ou da memória.
 // LEITURA: a «Exact input» é o item «**Exact input**» do §10.2 (o §10.1 não tem esse item); o exemplo de args do Step 2 é a cerca ```json do
 // Step 2, a que o check.cjs lê (linha `manual: the args example in FRAMEWORK.md`); `"knownClasses":[...]` tem pelo menos uma classe na forma da
-// saída do `learn.mjs classes` ({class, entries, strongest}, FRAMEWORK §5 Step 2), ver a PERGUNTA 2.
+// saída do `learn.mjs classes` ({class, entries, strongest}, FRAMEWORK §5 Step 2): PERGUNTA 2, confirmada pelo orquestrador na #79.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

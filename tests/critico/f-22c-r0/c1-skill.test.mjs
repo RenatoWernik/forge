@@ -1,7 +1,7 @@
 // F-22c critério 1: a skill skills/learn/SKILL.md (/forge:learn).
 // Oráculos (corpo da #79): scripts/frontmatter.test.mjs verde com a skill nova; cada um dos 6 identificadores 1× na lista do passo 1; os comandos
 // `learn.mjs add`, `learn.mjs readout`, `learn.mjs report` e `learn.mjs gotcha` 1× cada; a ordem dos títulos dos 8 passos é a do contrato.
-// LEITURA (PERGUNTA 1 na issue): os passos são os títulos «## N. <título>» (a forma das skills numeradas do pacote), numerados de 1 a 8; o título de
+// LEITURA (PERGUNTA 1, confirmada pelo orquestrador na #79; um item de lista numerada não conta): os passos são os títulos «## N. <título>» (a forma das skills numeradas do pacote), numerados de 1 a 8; o título de
 // cada um tem a palavra do contrato, em inglês (a língua do pacote) ou em português. Um identificador conta quando está entre crases (`user`),
 // como no contrato: a palavra «user» solta é prosa. O que cada passo tem de dizer lê-se dos literais entre crases do corpo da issue.
 import { test } from 'node:test';

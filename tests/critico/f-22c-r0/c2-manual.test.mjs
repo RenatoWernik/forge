@@ -2,7 +2,7 @@
 // Oráculos (corpo da #79): «per durable lesson» 0×; `/forge:learn` ≥ 1× nos Steps 5 e 7 e no §2; `learn.mjs gotcha` 1× no Step 5; o CLAUDE.md
 // abaixo de 80 linhas até `## Generated blocks`. O corpus de respostas («All ok.», em inglês e em português) é o scripts/corpus.test.mjs da barra.
 // O que reprova: o manual a mandar gravar a lição como texto no gotchas/, como segunda fonte.
-// LEITURA: «a lista dos gatilhos do CP, com as fontes do C1» = os 6 identificadores e as fontes que o C1 dá com nomes de campos
+// LEITURA (PERGUNTA 3, confirmada pelo orquestrador na #79): «a lista dos gatilhos do CP, com as fontes do C1» = os 6 identificadores e as fontes que o C1 dá com nomes de campos
 // (`rounds > 1`, `regressions`, `contested`, `criticNotReproduced`); a frase do CLAUDE.md lê-se na secção «## User global rules», onde está hoje.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
