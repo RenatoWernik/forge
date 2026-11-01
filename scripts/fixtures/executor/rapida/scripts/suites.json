@@ -1,0 +1,4 @@
+{ "versao": 1, "paralelo": 2, "vagas_globais": 2, "carga_sensivel": 2, "orcamento_s": 120,
+  "suites": [
+    { "nome": "s", "tipo": "node-test", "ficheiros": ["s/*.fx.mjs"], "limite_s": 60 }
+  ] }
