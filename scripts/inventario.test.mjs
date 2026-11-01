@@ -19,3 +19,9 @@ test('compara: apagado, sem execução ok e skip novo; o skip do lote só vale c
   const depois = new Map([['a', m(['skip', 'lote: satisfeito na fase 2'], ['pass'])], ['b', m(['fail'])], ['c', m(['skip', 'outro'])], ['d', m(['skip', 'x'])]]);
   assert.deepEqual(compara(antes, depois), { apagados: ['e'], semOk: ['b', 'c'], skipsNovos: ['c (skip: outro)'] });
 });
+
+test('compara: o sha no motivo de um skip não o torna novo', () => {
+  const skip = (motivo) => new Map([['f', [{ estado: 'skip', motivo }]]]);
+  assert.deepEqual(compara(skip('já está na base 8ad82bcb49b9'), skip('já está na base 0123abc')).skipsNovos, []);
+  assert.deepEqual(compara(skip('já está na base 8ad82bc'), skip('outro motivo 0123abc')).skipsNovos, ['f (skip: outro motivo 0123abc)']);
+});

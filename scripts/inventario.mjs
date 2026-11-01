@@ -52,6 +52,9 @@ function inventarioDe(json, logs) {
   return inv;
 }
 
+// o motivo de um skip pode trazer o sha da base («o F-21a já está na base 8ad82bc»): dois runs de shas diferentes dizem o mesmo skip
+const sem_sha = (m) => m.replace(/\b[0-9a-f]{7,40}\b/g, '<sha>');
+
 export function compara(antes, depois) {
   const apagados = [], semOk = [], skipsNovos = [];
   for (const [k, ea] of antes) {
@@ -60,7 +63,7 @@ export function compara(antes, depois) {
     const ok = ed.some((e) => e.estado === 'pass');
     if (ea.some((e) => e.estado === 'pass') && !ok) semOk.push(k);
     for (const e of ed.filter((x) => x.estado === 'skip')) {
-      const novo = e.motivo === MOTIVO_LOTE ? !ok : !ea.some((x) => x.estado === 'skip' && x.motivo === e.motivo);
+      const novo = e.motivo === MOTIVO_LOTE ? !ok : !ea.some((x) => x.estado === 'skip' && sem_sha(x.motivo) === sem_sha(e.motivo));
       if (novo) skipsNovos.push(`${k} (skip: ${e.motivo || 'sem motivo'})`);
     }
   }
