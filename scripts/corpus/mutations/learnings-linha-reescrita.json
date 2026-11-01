@@ -1,0 +1,13 @@
+{
+    "base":  "en-plain-pending",
+    "seed":  {
+                 "files":  {
+                               "learnings/2026-10.md":  "# Learnings 2026-10\n\n## E-001\n- DATE: 2026-10-20\n- TRIGGER: user\n- DETECTED-BY: critic, round 2 of ticket 7\n- SYMPTOM: the test port collided with a running server\n- CLASS: fixed-test-port\n- CAUSE: the harness picked a fixed port\n- CAUSE-OWNER: harness\n- FAILED-LAYER: tdd\n- MISSING-CONTEXT: none\n- PREVENTION: memory\n- PREVENTION-PATH: ai-memory:gotchas/fixed-test-port.md\n- FAILS: closed\n- REGRESSION: none\n- CLEAN-CASE: none\n- AREA: tests/**, src/net/*.js\n- SCOPE: project\n- REVIEW-BY: 2026-11-03\n- STATUS: open\n"
+                           },
+                 "commit":  true
+             },
+    "file":  "learnings/2026-10.md",
+    "find":  "- SYMPTOM: the test port collided with a running server",
+    "replace":  "- SYMPTOM: the test port was fine",
+    "line":  "learnings: learnings/ only grows (only STATUS lines change)"
+}

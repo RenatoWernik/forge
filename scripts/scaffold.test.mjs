@@ -32,6 +32,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     '.ai-memory.toml',
     '.checkpoints/README.md',
     '.checkpoints/painel.json',
+    '.claude/acordar.mjs',
     '.claude/ai-memory.cjs',
     '.claude/briefs/batch.md',
     '.claude/briefs/critic.md',
@@ -42,9 +43,13 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     '.claude/forge.json',
     '.claude/graph.mjs',
     '.claude/hooks/forge-ai-memory.mjs',
+    '.claude/learnings.cjs',
+    '.claude/hooks/forge-contexto.mjs',
+    '.claude/hooks/forge-retoma.mjs',
     '.claude/painel-gravar.mjs',
     '.claude/painel-leitor.mjs',
     '.claude/painel-vida.mjs',
+    '.claude/retoma.mjs',
     '.claude/start-ai-memory.mjs',
     '.claude/workflows/gauntlet-attacks.js',
     '.claude/workflows/gauntlet-batch.js',
@@ -56,6 +61,7 @@ test('dry run lists the generated tree and writes nothing to the destination', a
     'BOOTSTRAP.md',
     'CLAUDE.md',
     'FRAMEWORK.md',
+    'learnings/README.md',
   ].sort());
   assert.deepEqual(await readdir(dest), []);
 });

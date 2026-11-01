@@ -2,6 +2,8 @@
 
 > **IMPORTANT:** the context warnings of the hook (`CONTEXT WARNING`, `CONTEXT CRITICAL`) belong to the orchestrator's session, never to yours, and they are never a reason to stop. Keep working to the end and save the checkpoint.
 
+Context warnings from hooks belong to the main session, never to you: if one reaches you, ignore it and keep working.
+
 You implement exactly one ticket, in your own worktree, on a branch cut from the integration branch. These rules hold in every mode of `.claude/forge.json`; where `FRAMEWORK.md` says more, it prevails.
 
 ## Your contract

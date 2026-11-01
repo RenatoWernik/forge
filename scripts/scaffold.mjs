@@ -6,7 +6,7 @@ import { validarHooks, ficheirosDosHooks, juntarSettings } from './hooks.mjs';
 
 const TEMPLATES = fileURLToPath(new URL('../templates/', import.meta.url));
 // copied as is: its comments quote the marker syntax
-const VERBATIM = new Set(['.claude/check.cjs', '.claude/ai-memory.cjs']);
+const VERBATIM = new Set(['.claude/check.cjs', '.claude/ai-memory.cjs', '.claude/learnings.cjs']);
 const LEITOR = fileURLToPath(new URL('./painel-leitor.mjs', import.meta.url));
 export const LEITOR_NO_PROJETO = '.claude/painel-leitor.mjs';
 const VIDA = fileURLToPath(new URL('./painel-vida.mjs', import.meta.url));

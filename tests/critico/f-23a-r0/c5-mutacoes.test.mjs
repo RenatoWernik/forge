@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { generate, corpusAnswers, check, linesOf, state, fails, replaceIn, mutations, baseFile, step2 } from './helpers.mjs';
+import { generate, corpusAnswers, check, linesOf, state, fails, replaceIn, seedMutation, mutations, baseFile, step2 } from './helpers.mjs';
 
 const SET = 'en-plain-published';
 
@@ -26,6 +26,7 @@ test('C5 [ataque]: o check.cjs tem linhas novas e cada uma tem no corpus uma mut
   // cada mutação dessas linhas faz MESMO falhar a sua linha (como o corpus.test.mjs a verifica)
   for (const m of ms.filter((x) => fresh.some((t) => t === x.line || t.startsWith(x.line + ' (')))) {
     const d = await generate(corpusAnswers(m.base));
+    await seedMutation(d, m);
     assert.equal(state(check(d).out, m.line), 'ok', `${m.name}: a linha não está ok antes da mutação`);
     assert.ok(replaceIn(join(d, m.file), m.find, m.replace), `${m.name}: o texto a procurar não existe em ${m.file}`);
     const post = check(d);

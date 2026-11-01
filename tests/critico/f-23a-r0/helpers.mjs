@@ -187,6 +187,8 @@ export const linesOf = (out) => out.split(/\r?\n/).map((l) => l.match(/^(ok|FAIL
 // O estado da linha `name`, como o corpus.test.mjs o lê: o nome exato, com ou sem o detalhe « (...)»
 export const state = (out, name) => linesOf(out).find((l) => l.text === name || l.text.startsWith(name + ' ('))?.state;
 export const fails = (out) => out.split(/\r?\n/).filter((l) => l.startsWith('FAIL')).join('\n') || out.slice(-1500);
+// F-22a: uma mutação com `seed` ganha primeiro os ficheiros do seed (scripts/corpus-seed.mjs); sem seed, nada muda
+export const seedMutation = async (dest, m) => { if (m.seed) (await import(pathToFileURL(join(ROOT, 'scripts/corpus-seed.mjs')).href)).applySeed(dest, m.seed); };
 export const replaceIn = (file, find, replace) => { const t = readFileSync(file, 'utf8'); if (!t.includes(find)) return false; writeFileSync(file, t.replaceAll(find, replace)); return true; };
 
 // ---------- Ficheiros do pacote ----------
