@@ -6,7 +6,8 @@
 // Estado em $FORGE_GH_FALSO_DIR: cenario.json (só leitura) e chamadas.jsonl (uma linha por chamada: argv, código, efeitos e corpos lidos).
 // Servido (o resto sai com 2 e «gh falso: não suportado», incluindo --jq, --template e api graphql):
 //   pr view|ready|merge|comment · issue view|list|create|comment · repo view · auth status|token
-//   api repos/{o}/{r}[/pulls/N[/merge]|/issues[/N[/comments|/dependencies/blocked_by|/dependencies/blocking|/sub_issues|/parent]]]
+//   api repos/{o}/{r}[/pulls/N[/merge]|/issues[/N[/comments]]]; como nas issues reais do forge (resposta à P4 na #130), não há bloqueios
+//   nativos nem sub-issues: dependencies/* e sub_issues dão [], parent dá 404 e o issue_dependencies_summary vem a zeros.
 import { appendFileSync, existsSync, readFileSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, join, relative, resolve } from 'node:path';
@@ -46,11 +47,10 @@ const num = (x) => { const m = String(x).match(/(\d+)\/?$/); return m ? Number(m
 function issuesTodas(C, S) {
   return [
     ...C.issues.map((i) => ({ ...i, state: S.fecha.has(i.number) ? 'CLOSED' : i.state })),
-    ...S.criadas.map((e) => ({ number: e.number, title: e.title, body: e.corpo, state: 'OPEN', labels: e.labels, bloqueadoPor: [], pai: null })),
+    ...S.criadas.map((e) => ({ number: e.number, title: e.title, body: e.corpo, state: 'OPEN', labels: e.labels })),
   ];
 }
-const prComoIssue = (C, S) => ({ number: C.pr.number, title: C.pr.title, body: C.pr.body, state: S.merge ? 'CLOSED' : 'OPEN', labels: [],
-  bloqueadoPor: [], pai: null, pr: true });
+const prComoIssue = (C, S) => ({ number: C.pr.number, title: C.pr.title, body: C.pr.body, state: S.merge ? 'CLOSED' : 'OPEN', labels: [], pr: true });
 function acha(C, S, n) {
   const i = [...issuesTodas(C, S), prComoIssue(C, S)].find((x) => x.number === n);
   if (!i) throw new Falha(`GraphQL: Could not resolve to an issue or pull request with the number of ${n}. (repository.issue)`);
@@ -97,19 +97,13 @@ const issueCampos = (C, S, i) => ({
   comments: () => comentarios(C, S, i.number).map(gqlComentario(C, i.number)),
 });
 function issueRest(C, S, i) {
-  const todas = issuesTodas(C, S);
-  const de = i.bloqueadoPor.map((n) => todas.find((x) => x.number === n)).filter(Boolean);
-  const bloqueia = todas.filter((x) => x.bloqueadoPor.includes(i.number));
-  const filhos = todas.filter((x) => x.pai === i.number);
   return {
     id: i.number, node_id: `I_falso${i.number}`, number: i.number, title: i.title, body: i.body, state: i.state.toLowerCase(),
     state_reason: i.state === 'CLOSED' ? 'completed' : null, labels: i.labels.map((name) => ({ name })), html_url: url(C, i.number),
     user: { login: 'conta-falsa' }, comments: comentarios(C, S, i.number).length, created_at: '2026-11-01T08:00:00Z',
     closed_at: i.state === 'CLOSED' ? '2026-11-01T09:00:00Z' : null,
-    issue_dependencies_summary: { blocked_by: de.filter((x) => x.state === 'OPEN').length, total_blocked_by: de.length,
-      blocking: bloqueia.filter((x) => x.state === 'OPEN').length, total_blocking: bloqueia.length },
-    sub_issues_summary: { total: filhos.length, completed: filhos.filter((x) => x.state === 'CLOSED').length,
-      percent_completed: filhos.length ? Math.round((100 * filhos.filter((x) => x.state === 'CLOSED').length) / filhos.length) : 0 },
+    issue_dependencies_summary: { blocked_by: 0, total_blocked_by: 0, blocking: 0, total_blocking: 0 },
+    sub_issues_summary: { total: 0, completed: 0, percent_completed: 0 },
     ...(i.pr ? { pull_request: { url: url(C, i.number), html_url: url(C, i.number), merged_at: S.merge?.em ?? null } } : {}),
   };
 }
@@ -360,24 +354,15 @@ function api(C, args, reg) {
     res = pagina(l).map((i) => issueRest(C, S, i));
   } else if (r === 'issues' && metodo === 'POST') {
     const e = criaIssue(C, S, reg, dados?.title, dados?.body, dados?.labels ?? []);
-    res = issueRest(C, { ...S, criadas: [...S.criadas, e] }, { number: e.number, title: e.title, body: e.corpo, state: 'OPEN', labels: e.labels, bloqueadoPor: [], pai: null });
+    res = issueRest(C, S, { number: e.number, title: e.title, body: e.corpo, state: 'OPEN', labels: e.labels });
   } else if ((x = rota(/^issues\/(\d+)$/)) && metodo === 'GET') res = issueRest(C, S, acha(C, S, +x[1]));
   else if ((x = rota(/^issues\/(\d+)\/comments$/)) && metodo === 'GET') res = pagina(comentarios(C, S, acha(C, S, +x[1]).number).map(restComentario(C, +x[1])));
   else if ((x = rota(/^issues\/(\d+)\/comments$/)) && metodo === 'POST') {
     const e = comenta(C, S, reg, +x[1], dados?.body);
     res = restComentario(C, +x[1])({ id: e.id, autor: 'conta-falsa', corpo: e.corpo, em: e.em });
-  } else if ((x = rota(/^issues\/(\d+)\/dependencies\/(blocked_by|blocking)$/)) && metodo === 'GET') {
-    const i = acha(C, S, +x[1]), t = issuesTodas(C, S);
-    const l = x[2] === 'blocked_by' ? i.bloqueadoPor.map((n) => t.find((y) => y.number === n)).filter(Boolean) : t.filter((y) => y.bloqueadoPor.includes(i.number));
-    res = pagina(l).map((y) => issueRest(C, S, y));
-  } else if ((x = rota(/^issues\/(\d+)\/sub_issues$/)) && metodo === 'GET') {
-    const i = acha(C, S, +x[1]);
-    res = pagina(issuesTodas(C, S).filter((y) => y.pai === i.number)).map((y) => issueRest(C, S, y));
-  } else if ((x = rota(/^issues\/(\d+)\/parent$/)) && metodo === 'GET') {
-    const i = acha(C, S, +x[1]);
-    if (!i.pai) throw new Falha('gh: Not Found (HTTP 404)');
-    res = issueRest(C, S, acha(C, S, i.pai));
-  } else throw naoSuportado(`api ${metodo} ${caminho}`);
+  } else if ((x = rota(/^issues\/(\d+)\/(dependencies\/blocked_by|dependencies\/blocking|sub_issues)$/)) && metodo === 'GET') { acha(C, S, +x[1]); res = []; }
+  else if ((x = rota(/^issues\/(\d+)\/parent$/)) && metodo === 'GET') { acha(C, S, +x[1]); throw new Falha('gh: Not Found (HTTP 404)'); }
+  else throw naoSuportado(`api ${metodo} ${caminho}`);
   if (!o.tem('--silent')) json(o.tem('--slurp') ? [res] : res);
   return 0;
 }

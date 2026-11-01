@@ -1,12 +1,12 @@
 {
   "nome": "projeto-integracao",
   "criterio": null,
-  "descricao": "Controlo positivo do modo projeto: a base do PR é a branch de integração; provas certas: 1 merge --squash --match-head-commit H na integração e a main intacta (o resto do pós-merge em modo projeto não está no ticket)",
+  "descricao": "Controlo positivo do modo projeto: a base do PR é a branch de integração; provas certas: 1 merge --squash --match-head-commit H na integração, a main intacta, pós-merge verde sobre a integração e PÓS-MERGE VERDE (a fase seguinte não se verifica aqui: o ticket só fecha com o merge na branch por omissão)",
   "modo": "projeto", "integracao": "integracao-v06",
   "pr": { "isDraft": false, "base": "integracao-v06", "posMerge": "verde", "headMuda": false },
   "comentarios": [
     { "corpo": "VEREDITO: APROVADO\nHEAD: @H\nEXECUTOR: .forge/resultados/@H-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 5/5\nFALHAS (todas, numeradas): nenhuma\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" },
     { "corpo": "CHECK-TICKET: VERDE @H @SHA256" }
   ],
-  "esperado": { "codigo": null, "recusa": false, "pr_merge": 1, "merges": 1 }
+  "esperado": { "codigo": 0, "recusa": false, "pr_merge": 1, "merges": 1, "regressao": 0, "pos_merge_verde": true }
 }

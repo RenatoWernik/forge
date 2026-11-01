@@ -1,0 +1,12 @@
+{
+  "nome": "projeto-integracao-vermelho",
+  "criterio": null,
+  "descricao": "Modo projeto, base na integração, provas certas, mas o squash parte um teste: o pós-merge corre sobre a nova origin/integracao-v06 (e não sobre a main, que está verde), por isso abre a issue regressao e sai com 1; a main intacta",
+  "modo": "projeto", "integracao": "integracao-v06",
+  "pr": { "isDraft": false, "base": "integracao-v06", "posMerge": "vermelho", "headMuda": false },
+  "comentarios": [
+    { "corpo": "VEREDITO: APROVADO\nHEAD: @H\nEXECUTOR: .forge/resultados/@H-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 5/5\nFALHAS (todas, numeradas): nenhuma\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" },
+    { "corpo": "CHECK-TICKET: VERDE @H @SHA256" }
+  ],
+  "esperado": { "codigo": 1, "recusa": false, "pr_merge": 1, "merges": 1, "regressao": 1, "pos_merge_verde": false, "fase": null }
+}

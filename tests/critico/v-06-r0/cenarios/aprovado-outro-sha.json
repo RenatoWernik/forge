@@ -8,5 +8,5 @@
     { "corpo": "VEREDITO: APROVADO\nHEAD: @P1\nEXECUTOR: .forge/resultados/@P1-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 5/5\nFALHAS (todas, numeradas): nenhuma\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" },
     { "corpo": "CHECK-TICKET: VERDE @H @SHA256" }
   ],
-  "esperado": { "codigo": "naoZero", "recusa": true, "pr_merge": 0, "merges": 0, "regressao": 0, "pos_merge_verde": false, "fase": null }
+  "esperado": { "codigo": 2, "recusa": true, "pr_merge": 0, "merges": 0, "regressao": 0, "pos_merge_verde": false, "fase": null }
 }
