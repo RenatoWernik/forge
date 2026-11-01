@@ -175,6 +175,9 @@ function classify(ans) {
 }
 
 phase('Batch')
+// graph:update (B2): ONE call per run, before any other agent; no LLM. The graph is a help, so an answer that is not "graph: ..." (null included) only warns.
+const upd = await agent(`Run this command in the foreground, never in the background, and reply with its last line only, nothing else: node "${ROOT}/.claude/graph.mjs" update`, { label: 'graph:update', phase: 'Batch', model: R.aux.model, effort: R.aux.effort })
+if (!/^graph:/.test(String(upd).trim())) log(`WARNING graph:update: ${String(upd).slice(0, 100)}`)
 const ans = await agent(testerPrompt(), { label: 'batch:tester', phase: 'Batch', model: R.tester.model, effort: R.tester.effort, schema: TESTER })
 if (!ans) log('the tester gave no answer (agent skipped or API error)')
 else if (!R.tester.match.test(str(ans.model))) log(`WARNING the tester declared model "${ans.model}", expected ${R.tester.label}`)

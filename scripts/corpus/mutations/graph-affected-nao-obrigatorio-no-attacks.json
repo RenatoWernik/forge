@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/workflows/gauntlet-attacks.js",
+  "find": ".filter(x => !(x.affected && typeof x.affected === 'object' && strs(x.affected.nodes) && strs(x.affected.files)))",
+  "replace": ".filter(x => false)",
+  "line": "graph: context: with args.graph (an absolute path of graph.json) a piece of gauntlet-build and gauntlet-attacks or a unit of gauntlet-ponytail without affected {nodes: [strings], files: [strings]} is refused with incomplete args naming it and affected, and so is a relative args.graph, before any agent; without args.graph nothing is refused; with it the prompts of the developer and critic of gauntlet-build, of the Round -1 critic and of the developer and critic of gauntlet-ponytail carry --graph \"<args.graph>\" and the nodes and files of the piece, and without it they say No graph for this run."
+}
