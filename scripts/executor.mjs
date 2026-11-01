@@ -14,6 +14,9 @@ import { fileURLToPath } from 'node:url';
 const LIMITE_PADRAO_S = 240; // unidade de uma suíte sem limite_s
 const PASSO_MS = 100; // varredura do agendador e da carga global
 const FINAIS = ['pass', 'fail', 'limite', 'erro'];
+const MOTIVO_LOTE = 'lote: satisfeito na fase 2'; // o skip dos testes que usam doLote (tests/critico/_comum/lote.mjs) na fase 1
+const FASE2_LIMITE_S = 90; // a fase 2 só lê o resultado da fase 1: uma unidade nunca precisa de mais
+const regex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 class Uso extends Error {}
 
 // --- TAP do node --test: contagens das linhas `# pass|fail|skipped|todo` (a última de cada), motivos de `# SKIP`, duration_ms por teste ---
@@ -201,7 +204,9 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
   const fila = plano.filter((u) => !feitas.has(u.chave));
   const ordemChave = new Map(plano.toSorted((a, b) => a.ordem - b.ordem).map((u, i) => [u.chave, i]));
 
-  const escreve = (completo) => {
+  // por correr na fase 2: os ficheiros com testes que saltaram com o motivo do lote e ainda não tiveram a fase 2
+  const pendentesF2 = () => plano.filter((u) => { const f = feitas.get(u.chave); return f && !f.tap_fase2 && f.skips.some((s) => s.motivo === MOTIVO_LOTE); });
+  const monta = (completo) => {
     const unidades = [...feitas.values()].sort((a, b) => (ordemChave.get(`${a.ficheiro}\0${a.bloco ?? ''}`) ?? 1e9) - (ordemChave.get(`${b.ficheiro}\0${b.bloco ?? ''}`) ?? 1e9));
     const suites = {};
     for (const nome of new Set(unidades.map((u) => u.suite))) {
@@ -209,10 +214,12 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
       const faltam = plano.some((p) => p.suite.nome === nome && !feitas.has(p.chave));
       suites[nome] = { estado: estadoSuite(us.map((u) => u.estado), faltam), pass: soma('pass'), fail: soma('fail'), skip: soma('skip') };
     }
-    const dados = { versao: 1, sha, arvore, node: process.version, comando: `node scripts/executor.mjs ${argv.join(' ')}`.trim(), inicio, fim: new Date().toISOString(), completo, unidades, suites };
-    writeFileSync(`${ficheiro}.tmp`, JSON.stringify(dados, null, 2));
-    renameSync(`${ficheiro}.tmp`, ficheiro);
+    return { versao: 1, sha, arvore, node: process.version, comando: `node scripts/executor.mjs ${argv.join(' ')}`.trim(), inicio, fim: new Date().toISOString(), completo, unidades, suites };
   };
+  const grava = (f, dados) => { writeFileSync(`${f}.tmp`, JSON.stringify(dados, null, 2)); renameSync(`${f}.tmp`, f); };
+  const escreve = (completo) => grava(ficheiro, monta(completo));
+  // o resultado da fase 1 que os doLote da fase 2 leem: fica como estava quando a fase 1 acabou, sem a fase 2 a mexer-lhe
+  const fase1 = join(pasta, `${marca}.fase1.json`);
 
   const vagas = new Vagas(m.vagas_globais, m.carga_sensivel);
   const raizTmp = mkdtempSync(join(tmpdir(), 'forge-exec-'));
@@ -227,14 +234,18 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
     mkdirSync(home, { recursive: true }); mkdirSync(tmp, { recursive: true });
     const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: home, TMP: tmp, TEMP: tmp, TMPDIR: tmp, DISABLE_AUTOUPDATER: '1' };
     delete env.NODE_TEST_CONTEXT;
+    delete env.FORGE_LOTE_FASE; delete env.FORGE_LOTE_RESULTADOS;
     for (const [k, v] of Object.entries(u.suite.env ?? {})) {
       if (v !== '@real') env[k] = String(v);
       else if (process.env[k] === undefined) delete env[k];
       else env[k] = process.env[k];
     }
+    // fase 1: os testes com doLote saltam; fase 2: só eles correm, com o resultado da fase 1
+    if (u.fase === 2) env.FORGE_LOTE_RESULTADOS = fase1; else env.FORGE_LOTE_FASE = '1';
     const args = ['--test', '--test-reporter=tap'];
     if (u.suite.concorrencia) args.push(`--test-concurrency=${u.suite.concorrencia}`);
-    if (u.bloco) args.push(`--test-name-pattern=${u.bloco}`);
+    if (u.fase === 2) args.push(`--test-name-pattern=^(?:${u.nomes.map(regex).join('|')})$`);
+    else if (u.bloco) args.push(`--test-name-pattern=${u.bloco}`);
     args.push(u.ficheiro);
     const r = { u, vaga, cmax: vaga.carga, inicio: new Date(), limite: false, out: '', err: '' };
     const p = spawn(process.execPath, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' });
@@ -258,36 +269,59 @@ export async function executa(argv, { saida = (l) => console.log(l) } = {}) {
     vagas.larga(r.vaga.dirs);
     const c = lerTap(r.out), { u } = r;
     const estado = r.limite ? 'limite' : r.status === null || r.status === undefined ? 'erro' : estadoDe(r.status, c);
-    const tap = `.forge/resultados/logs/${marca}-${u.suite.nome}-${u.ficheiro.replaceAll('/', '_')}${u.bloco ? `-b${plano.indexOf(u)}` : ''}.tap`;
+    const tap = `.forge/resultados/logs/${marca}-${u.suite.nome}-${u.ficheiro.replaceAll('/', '_')}${u.bloco ? `-b${plano.indexOf(u)}` : ''}${u.fase === 2 ? '-f2' : ''}.tap`;
     writeFileSync(join(raiz, tap), r.out);
     if (r.err) writeFileSync(join(raiz, `${tap}.err`), r.err);
-    feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado, pass: c.pass ?? 0, fail: c.fail ?? 0, skip: c.skip ?? 0, todo: c.todo ?? 0,
-      skips: c.skips, duracoes: c.duracoes, duracao_s: Math.round((Date.now() - r.inicio) / 100) / 10, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap });
+    acabadas.add(u.chave);
+    if (u.fase === 2) { // a fase 2 junta-se à unidade da fase 1: os skips do lote dão lugar ao que correu
+      const a = feitas.get(u.base), lote = a.skips.filter((s) => s.motivo === MOTIVO_LOTE).length;
+      const ainda = c.skips.some((s) => s.motivo === MOTIVO_LOTE); // um teste que continua a saltar na fase 2 não foi provado
+      feitas.set(u.base, { ...a, estado: estadoSuite([a.estado, ainda && estado === 'pass' ? 'erro' : estado], false), pass: a.pass + (c.pass ?? 0), fail: a.fail + (c.fail ?? 0),
+        skip: a.skip - lote + (c.skip ?? 0), todo: a.todo + (c.todo ?? 0), skips: [...a.skips.filter((s) => s.motivo !== MOTIVO_LOTE), ...c.skips],
+        duracoes: { ...a.duracoes, ...c.duracoes }, duracao_s: Math.round((a.duracao_s + (Date.now() - r.inicio) / 1000) * 10) / 10, tap_fase2: tap });
+    } else {
+      feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado, pass: c.pass ?? 0, fail: c.fail ?? 0, skip: c.skip ?? 0, todo: c.todo ?? 0,
+        skips: c.skips, duracoes: c.duracoes, duracao_s: Math.round((Date.now() - r.inicio) / 100) / 10, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap });
+    }
     escreve(false);
-    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''} (${c.pass ?? 0} pass, ${c.fail ?? 0} fail) → ${tap}`);
+    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''}${u.fase === 2 ? ' [fase 2]' : ''} (${c.pass ?? 0} pass, ${c.fail ?? 0} fail) → ${tap}`);
   };
 
   // o agendador: lança o que cabe no orçamento e nas vagas; a carga global de cada unidade que corre é medida a cada passo
-  const naoCabem = new Set();
-  const porLancar = () => fila.filter((u) => !feitas.has(u.chave) && !naoCabem.has(u) && ![...correm].some((r) => r.u === u));
-  while (porLancar().length || correm.size) {
-    const decorrido = (Date.now() - t0) / 1000;
-    for (const u of porLancar()) {
-      if (correm.size >= paralelo) break;
-      if (decorrido + u.suite.limite_s > m.orcamento_s) {
-        naoCabem.add(u);
-        if (u.xTomado) vagas.larga([...u.dirs, vagas.slot('x')]);
-        continue;
+  const acabadas = new Set();
+  const roda = async (fila) => {
+    const naoCabem = new Set();
+    const porLancar = () => fila.filter((u) => !acabadas.has(u.chave) && !naoCabem.has(u) && ![...correm].some((r) => r.u === u));
+    while (porLancar().length || correm.size) {
+      const decorrido = (Date.now() - t0) / 1000;
+      for (const u of porLancar()) {
+        if (correm.size >= paralelo) break;
+        if (decorrido + u.suite.limite_s > m.orcamento_s) {
+          naoCabem.add(u);
+          if (u.xTomado) vagas.larga([...u.dirs, vagas.slot('x')]);
+          continue;
+        }
+        const vaga = vagas.tenta(u);
+        if (vaga) lanca(u, vaga);
+        else if (u.suite.exclusiva) break;
       }
-      const vaga = vagas.tenta(u);
-      if (vaga) lanca(u, vaga);
-      else if (u.suite.exclusiva) break;
+      if (correm.size) { const { carga } = vagas.estado(); for (const r of correm) r.cmax = Math.max(r.cmax, carga); }
+      await new Promise((r) => setTimeout(r, PASSO_MS + Math.floor(Math.random() * PASSO_MS)));
     }
-    if (correm.size) { const { carga } = vagas.estado(); for (const r of correm) r.cmax = Math.max(r.cmax, carga); }
-    await new Promise((r) => setTimeout(r, PASSO_MS + Math.floor(Math.random() * PASSO_MS)));
+  };
+
+  await roda(fila);
+  // fase 2 (spec §4.4): com a fase 1 inteira feita, os testes que saltaram com o motivo do lote voltam a correr, sozinhos, a ler o resultado dela
+  if (plano.every((u) => feitas.has(u.chave))) {
+    if (!(o.continuar && existsSync(fase1) && JSON.parse(readFileSync(fase1, 'utf8')).sha === sha)) grava(fase1, monta(true));
+    await roda(pendentesF2().map((u, i) => {
+      const f = feitas.get(u.chave), nomes = f.skips.filter((s) => s.motivo === MOTIVO_LOTE).map((s) => s.teste.replaceAll('\\#', '#'));
+      return { suite: { ...u.suite, sensivel_ao_tempo: false, exclusiva: false, limite_s: Math.min(u.suite.limite_s, FASE2_LIMITE_S) },
+        ficheiro: u.ficheiro, bloco: null, chave: `${u.chave}\0fase2`, base: u.chave, fase: 2, nomes, ordem: plano.length + i };
+    }));
   }
 
-  const completo = plano.every((u) => feitas.has(u.chave));
+  const completo = plano.every((u) => feitas.has(u.chave)) && !pendentesF2().length;
   escreve(completo);
   const sel = plano.map((u) => feitas.get(u.chave)).filter(Boolean);
   const mau = sel.filter((u) => u.estado !== 'pass');
