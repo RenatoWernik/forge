@@ -65,10 +65,11 @@ const build = async (set) => {
 // At most 2 check.cjs run at once (a slot is handed to the next waiting call, so the count never goes above 2)
 let active = 0;
 const waiting = [];
-const slot = async () => { if (active >= 2) await new Promise((r) => waiting.push(r)); else active++; };
+// `urgent` goes to the front: a seeded mutation has two more checks after its first, and at the back of the queue they would stretch the whole run
+const slot = async (urgent) => { if (active >= 2) await new Promise((r) => (urgent ? waiting.unshift(r) : waiting.push(r))); else active++; };
 const free = () => { const next = waiting.shift(); if (next) next(); else active--; };
-const check = async (cwd) => {
-  await slot();
+const check = async (cwd, urgent = false) => {
+  await slot(urgent);
   try {
     return await new Promise((done) => {
       const c = spawn(process.execPath, ['.claude/check.cjs'], { cwd, env });
@@ -102,7 +103,7 @@ async function verifyMutation(m) {
   if (m.seed) {
     try { applySeed(dest, m.seed); } catch (e) { return e.message; }
     // o caso limpo: com o seed e sem a mutação a linha continua «ok»
-    if (state((await check(dest)).out, m.line) !== 'ok') return `a linha «${m.line}» não está «ok» com o seed e sem a mutação`;
+    if (state((await check(dest, true)).out, m.line) !== 'ok') return `a linha «${m.line}» não está «ok» com o seed e sem a mutação`;
   }
   const file = resolve(dest, m.file);
   if (!file.startsWith(dest + sep)) return `${m.file} está fora do projeto gerado`;
@@ -110,7 +111,7 @@ async function verifyMutation(m) {
   const text = readFileSync(file, 'utf8');
   if (!text.includes(m.find)) return `o texto a procurar não existe em ${m.file}`;
   writeFileSync(file, text.replaceAll(m.find, m.replace));
-  const post = await check(dest);
+  const post = await check(dest, !!m.seed);
   return state(post.out, m.line) === 'FAIL' && post.status === 1 ? null : `mutação sem verificação: depois dela a linha «${m.line}» não falhou`;
 }
 
