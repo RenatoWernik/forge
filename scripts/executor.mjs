@@ -120,7 +120,7 @@ class Vagas {
   // unidades reais, e Ã© essa a contagem que se grava em concorrentes_max
   estado() {
     const infos = [];
-    for (let i = 0; i < this.n; i++) { const d = this.slot(i); if (ocupada(d)) infos.push(lerInfo(d) ?? { pid: 0 }); }
+    for (let i = 0; i < this.n; i++) { const d = this.slot(i); if (ocupada(d)) infos.push(lerInfo(d) ?? { pid: 0, estado: 'tentativa' }); } // sem info.json: outro executor está a tomá-la neste instante (conta na carga, não nas ativas)
     const conta = (is) => is.filter((i) => !i.exclusiva).length + new Set(is.filter((i) => i.exclusiva).map((i) => i.pid)).size;
     return { carga: conta(infos), ativas: conta(infos.filter((i) => i.estado !== 'tentativa')), limite: Math.min(Infinity, ...infos.filter((i) => i.sensivel).map((i) => i.carga_sensivel)) };
   }
