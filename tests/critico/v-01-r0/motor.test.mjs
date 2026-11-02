@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FIXTURES, correr, esperaAte, eventos, gitOk, inicios, intervalos, lerJson, limpa, mataArvore, pastaResultados, registaPid, resultados, saida, sobreposicaoMax,
   tempPrivado, tmp, umResultado, validaResultado, vivo } from './helpers.mjs';
-import { feitas, montar, motores } from './motor-comum.mjs';
+import { UNIDADE, feitas, montar, motores } from './motor-comum.mjs';
 
 after(limpa);
 
