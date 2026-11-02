@@ -49,6 +49,7 @@ function avalia(dados, alvos, min, dentro, final) {
   if (dados.sha !== sha) return { erro: `o resultado é de outro sha (${dados.sha} ≠ ${sha})` };
   const arvore = arvoreDe(RAIZ);
   if (dados.arvore !== arvore) return { erro: `o resultado é de outra árvore (${dados.arvore} ≠ ${arvore})` };
+  if (dados.valido === false) return { erro: `o resultado é inválido (valido:false): ${dados.motivo ?? 'sem motivo'}` }; // o motor invalidou-o: nunca serve
   if (dados.completo !== true && !(dentro && dados.fase1_completa === true)) return { erro: 'o resultado não está completo' };
   let pass = 0, fail = 0, skip = 0;
   const unidades = [];

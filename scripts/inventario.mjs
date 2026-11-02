@@ -21,6 +21,7 @@ export { testesDoTap }; // o leitor do TAP vive no executor (a fase 2 também o 
 function inventarioDe(json, logs) {
   const dados = JSON.parse(readFileSync(json, 'utf8').replace(/^﻿/, ''));
   if (dados.versao !== 1 || !Array.isArray(dados.unidades)) throw new Uso(`${json}: resultado do executor (versao 1) esperado`);
+  if (dados.valido === false) throw new Uso(`${json}: resultado inválido (valido:false: ${dados.motivo ?? 'sem motivo'}); um resultado invalidado não serve de antes nem de depois`);
   const bases = [logs, resolve(dirname(json), '..', '..'), process.cwd(), dirname(json), join(dirname(json), 'logs')].filter(Boolean);
   const achaTap = (rel) => bases.map((b) => [join(b, rel), join(b, basename(rel))]).flat().find((f) => existsSync(f));
   const inv = new Map();

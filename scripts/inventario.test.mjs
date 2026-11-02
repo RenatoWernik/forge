@@ -1,6 +1,10 @@
 // V-03 (#127): as duas peças puras do scripts/inventario.mjs: os nomes completos de um TAP e a comparação antes/depois.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { compara, testesDoTap } from './inventario.mjs';
 
 const TAP = [
@@ -36,4 +40,18 @@ test('compara (P9): um nome só aninhado em «antes» conta se o mesmo teste tem
   const r = compara(antes, depois);
   assert.deepEqual(r.aninhados, ['f-04 › t/f-04/regressao.mjs ›  > C1: alfa → f-02 › t/f-02/c1.mjs › C1: alfa']);
   assert.deepEqual(r.apagados.sort(), ['f-04 › t/f-04/regressao.mjs ›  > C2: so skip', 'f-04 › t/f-04/regressao.mjs ›  > C3: apagado', 'f-04 › t/f-04/regressao.mjs ›  > C5: falhava', 'f-04 › t/f-04/regressao.mjs › regressão: normal apagado']);
+});
+test('inventario.mjs recusa um resultado com valido:false (antes ou depois), com saída ≠ 0 e o motivo; um válido sem unidades sai 0', () => {
+  const d = mkdtempSync(join(tmpdir(), 'forge-inv-'));
+  try {
+    const grava = (n, extra) => { const f = join(d, n); writeFileSync(f, JSON.stringify({ versao: 1, unidades: [], ...extra })); return f; };
+    const bom = grava('bom.json', {}), mau = grava('mau.json', { valido: false, motivo: 'a árvore mudou durante a corrida' });
+    const corre = (a, b) => spawnSync(process.execPath, [new URL('./inventario.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'), '--antes', a, '--depois', b], { encoding: 'utf8' });
+    assert.equal(corre(bom, bom).status, 0);
+    for (const [a, b] of [[mau, bom], [bom, mau]]) {
+      const r = corre(a, b);
+      assert.notEqual(r.status, 0, r.stdout);
+      assert.match(r.stderr, /valido:false.*a árvore mudou/);
+    }
+  } finally { rmSync(d, { recursive: true, force: true }); }
 });
