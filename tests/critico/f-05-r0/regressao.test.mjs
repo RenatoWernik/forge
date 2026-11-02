@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT } from './helpers.mjs';
 import { runTests, failures, PRIOR } from './regressao-comum.mjs';
+import { doLote } from '../_comum/lote.mjs';
 
 // Número de test() de topo por ficheiro em e083b6a
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
@@ -27,8 +28,9 @@ test('regressão: nenhum ficheiro de teste do pacote perde testes', () => {
   }
 });
 
-test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os 139 testes de e083b6a', () => {
-  const r = runTests(['scripts/*.test.mjs']);
+test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os 139 testes de e083b6a', (t) => {
+  const r = doLote(t, 'scripts', { corre: () => runTests(['scripts/*.test.mjs']) });
+  if (!r) return;
   assert.equal(r.status, 0, failures(r.out));
   assert.equal(r.fail, 0, failures(r.out));
   assert.ok(r.pass >= 139, 'passaram ' + r.pass);

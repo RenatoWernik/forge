@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT, sandboxEnv } from './helpers.mjs';
+import { doLote } from '../_comum/lote.mjs';
 // Reexecutor aninhado (decisão do orquestrador, F-09): volta a correr f-01 e f-02 e não cabe nos 480 s com a máquina carregada. Fica em skip por omissão, como no f-05 e no f-06; FORGE_NESTED=1 liga-o.
 const NESTED_SKIP = process.env.FORGE_NESTED !== '1' && 'reexecutor aninhado: cada suite corre no seu comando; FORGE_NESTED=1 liga-o';
 
@@ -28,8 +29,9 @@ test('regressão: nenhum ficheiro de teste do pacote perde testes', () => {
   }
 });
 
-test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os 120 testes de d8572ed', () => {
-  const r = runTests(['scripts/*.test.mjs']);
+test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os 120 testes de d8572ed', (t) => {
+  const r = doLote(t, 'scripts', { corre: () => runTests(['scripts/*.test.mjs']) });
+  if (!r) return;
   assert.equal(r.status, 0, failures(r.out));
   assert.equal(r.fail, 0, failures(r.out));
   assert.ok(r.pass >= 120, 'passaram ' + r.pass);
@@ -51,9 +53,10 @@ test('âmbito: em relação à origin/main, dos ataques do F-01 e do F-02 só mu
   assert.equal(strip(readFileSync(join(ROOT, 'tests/critico/f-01-r0/helpers.mjs'), 'utf8')), strip(before), 'o helper do F-01 mudou fora do objeto ANSWERS');
 });
 
-test('regressão: os ataques da Ronda −1 do F-01 e do F-02 (tests/critico/f-01-r0 e f-02-r0) continuam verdes', { skip: NESTED_SKIP }, () => {
+test('regressão: os ataques da Ronda −1 do F-01 e do F-02 (tests/critico/f-01-r0 e f-02-r0) continuam verdes', { skip: NESTED_SKIP }, (t) => {
   for (const d of ['f-01-r0', 'f-02-r0']) assert.ok(existsSync(join(ROOT, 'tests/critico', d)), d + ' desapareceu');
-  const r = runTests(['tests/critico/f-01-r0/*.test.mjs', 'tests/critico/f-02-r0/*.test.mjs']);
+  const r = doLote(t, ['f-01-r0', 'f-02-r0'], { corre: () => runTests(['tests/critico/f-01-r0/*.test.mjs', 'tests/critico/f-02-r0/*.test.mjs']) });
+  if (!r) return;
   assert.equal(r.status, 0, failures(r.out));
   assert.equal(r.fail, 0, failures(r.out));
   assert.ok(r.pass >= 60, 'passaram ' + r.pass);

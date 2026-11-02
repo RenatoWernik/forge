@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT, BASE, git, sandboxEnv, readFileSync, existsSync } from './helpers.mjs';
+import { doLote } from '../_comum/lote.mjs';
 
 const PASS_BASE = 291;
 const conta = (t) => [...t.matchAll(/^\s*test\((['"`])/gm)].length;
@@ -22,8 +23,9 @@ test('regressão: nenhum scripts/*.test.mjs da base desaparece nem perde testes'
   assert.deepEqual(menos, []);
 });
 
-test('regressão: node --test "scripts/*.test.mjs" sai 0, com pelo menos os testes que passavam na base', () => {
-  const r = spawnSync(process.execPath, ['--test', '--test-concurrency=2', '--test-reporter=tap', 'scripts/*.test.mjs'], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout: 530000, maxBuffer: 1 << 27 });
+test('regressão: node --test "scripts/*.test.mjs" sai 0, com pelo menos os testes que passavam na base', (t) => {
+  const r = doLote(t, 'scripts', { corre: () => spawnSync(process.execPath, ['--test', '--test-concurrency=2', '--test-reporter=tap', 'scripts/*.test.mjs'], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout: 530000, maxBuffer: 1 << 27 }) });
+  if (!r) return;
   const out = (r.stdout ?? '') + (r.stderr ?? '');
   const n = (k) => +(out.match(new RegExp(`^# ${k} (\\d+)`, 'm')) || [])[1];
   assert.equal(r.status, 0, out.split(/\r?\n/).filter((l) => /^\s*not ok/.test(l)).join('\n') + '\n' + out.slice(-2500));

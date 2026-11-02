@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT, sandboxEnv } from './helpers.mjs';
+import { doLote } from '../_comum/lote.mjs';
 
 // Número de test() de topo por ficheiro em beb6338
 const BASELINE = { 'doctor.test.mjs': 45, 'frontmatter.test.mjs': 3, 'scaffold.test.mjs': 25, 'sync.test.mjs': 21 };
@@ -16,8 +17,9 @@ test('regressão: nenhum ficheiro de teste existente perde testes', () => {
   }
 });
 
-test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os 94 testes de beb6338', () => {
-  const r = spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'scripts/*.test.mjs'], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout: 480000 });
+test('regressão: node --test "scripts/*.test.mjs" passa, com pelo menos os 94 testes de beb6338', (t) => {
+  const r = doLote(t, 'scripts', { corre: () => spawnSync(process.execPath, ['--test', '--test-reporter=tap', 'scripts/*.test.mjs'], { cwd: ROOT, encoding: 'utf8', env: sandboxEnv(), timeout: 480000 }) });
+  if (!r) return;
   const out = (r.stdout || '') + (r.stderr || '');
   assert.equal(r.status, 0, out.slice(-3000));
   const pass = +(out.match(/^# pass (\d+)/m) || [])[1];

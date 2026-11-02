@@ -164,6 +164,47 @@ export function lint(src) {
   return v;
 }
 
+// --- L4 (V-03, #127): a test never runs the package suite or another folder of attacks in a nested `node --test`; it asks doLote
+// (tests/critico/_comum/lote.mjs) for the result of that suite in the batch. A forbidden argument is the glob `scripts/*.test.mjs`, a path under
+// `tests/critico/<another folder>` or a path that starts with the name of another folder of tests/critico/ (`f-01-r0/*.test.mjs`), and it sits
+//   - in a group (call or array) that also holds the string `--test`, or
+//   - in a call to a «runner»: a function of the folder whose body holds the string `--test`, or calls a runner (runTests, priorGreen).
+// A single file of scripts/ (`scripts/contrato.test.mjs`) and the own folder are fine. Strings that merely contain «node --test» are text. ---
+const GLOB_PACOTE = 'scripts/*.test.mjs';
+const proibidoL4 = (s, propria, outras) => s.includes(GLOB_PACOTE) || outras.some((p) => p !== propria && (s.includes(`tests/critico/${p}`) || s.startsWith(`${p}/`)));
+const fimDeCorpo = (toks, todos, k) => {
+  if (toks[k - 1]?.v === 'function') return todos.find((g) => g.open === '{' && g.from > k)?.to ?? k;
+  return toks[k + 1]?.v === '=' && !'=>'.includes(toks[k + 2]?.v ?? ' ') ? fimDaExpressao(toks, k + 2) : -1;
+};
+// `ficheiros`: [{ rel, src }] of one folder; the result is [{ regra: 'L4', ficheiro, linha, msg }]
+export function lintL4(ficheiros, propria, outras) {
+  const analisados = ficheiros.map((f) => { const toks = tokenize(f.src), { todos } = grupos(toks); return { ...f, toks, todos }; });
+  const corpos = analisados.flatMap((a) => a.toks.map((tk, k) => ({ tk, k, fim: tk.t === 'id' ? fimDeCorpo(a.toks, a.todos, k) : -1, a })).filter((d) => d.fim >= 0));
+  const temTeste = (a, de, ate) => a.toks.slice(de, ate + 1).some((tk) => tk.t === 's' && tk.v === '--test');
+  const corredores = new Set(corpos.filter((d) => temTeste(d.a, d.k, d.fim)).map((d) => d.tk.v));
+  for (let mudou = true; mudou;) {
+    mudou = false;
+    for (const d of corpos) {
+      if (!corredores.has(d.tk.v) && d.a.toks.slice(d.k + 1, d.fim + 1).some((tk, j, arr) => tk.t === 'id' && corredores.has(tk.v) && arr[j + 1]?.v === '(')) { corredores.add(d.tk.v); mudou = true; }
+    }
+  }
+  const v = [];
+  for (const a of analisados) {
+    if (propria === '_comum' && a.rel === 'lote.mjs') continue;
+    // the fallback of a lone run (`corre`) is the code the test had before, and lives inside the doLote call
+    const noLote = (g) => { for (let p = g.parent; p; p = p.parent) if (p.open === '(' && a.toks[p.from - 1]?.v === 'doLote') return true; return false; };
+    for (const g of a.todos) {
+      if (noLote(g)) continue;
+      const callee = g.open === '(' ? a.toks[g.from - 1] : null;
+      const strs = (de, ate) => a.toks.slice(de, ate + 1).filter((tk) => tk.t === 's').map((tk) => tk.v);
+      const direto = g.strs.includes('--test') && g.strs.some((s) => proibidoL4(s, propria, outras));
+      const porCorredor = callee?.t === 'id' && corredores.has(callee.v) && a.toks[g.from - 2]?.v !== 'function' && strs(g.from, g.to).some((s) => proibidoL4(s, propria, outras));
+      if (direto || porCorredor) v.push({ regra: 'L4', ficheiro: a.rel, linha: a.toks[g.from].line, msg: 'volta a correr o pacote ou outra pasta de ataques num filho node --test: use doLote(t, \'<suíte>\') (tests/critico/_comum/lote.mjs)' });
+    }
+  }
+  return v;
+}
+
 // --- the tree ---
 const ficheiros = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory()
   ? (e.name === 'node_modules' ? [] : ficheiros(join(dir, e.name))) : (/\.(?:mjs|cjs|js)$/.test(e.name) ? [join(dir, e.name)] : [])));
@@ -182,6 +223,32 @@ for (const pasta of pastas(CRITICO).filter((p) => !lista.legado.includes(p) && !
   test(`tests/critico/${pasta}: regras 8 e 9 (L1, L2, L3)`, () => {
     const falhas = lintPasta(join(CRITICO, pasta), `tests/critico/${pasta}`).map((x) => x.texto);
     assert.deepEqual(falhas, [], '\n' + falhas.join('\n'));
+  });
+}
+
+// --- L4 runs on every folder (the frozen lists do not exempt it), and its corpus is scripts/corpus/guardas-l4/ (same esperado.json) ---
+const lerPasta = (dir) => ficheiros(dir).map((f) => ({ rel: relative(dir, f).replaceAll('\\', '/'), src: readFileSync(f, 'utf8') }));
+const textoL4 = (prefixo, x) => `L4 ${prefixo}/${x.ficheiro}:${x.linha}: ${x.msg}`;
+const todasPastas = pastas(CRITICO);
+for (const pasta of todasPastas) {
+  test(`tests/critico/${pasta}: regra 10 (L4, sem execução repetida)`, () => {
+    const falhas = lintL4(lerPasta(join(CRITICO, pasta)), pasta, todasPastas).map((x) => textoL4(`tests/critico/${pasta}`, x));
+    assert.deepEqual(falhas, [], '\n' + falhas.join('\n'));
+  });
+}
+const CORPUS_L4 = join(ROOT, 'scripts/corpus/guardas-l4');
+const casosL4 = pastas(CORPUS_L4);
+test('corpus do L4: pelo menos 2 casos maus e 2 limpos', () => {
+  const esp = casosL4.map((c) => JSON.parse(readFileSync(join(CORPUS_L4, c, 'esperado.json'), 'utf8')));
+  assert.ok(esp.filter((e) => e.regra === 'L4').length >= 2, 'menos de 2 casos maus');
+  assert.ok(esp.filter((e) => e.ok === true).length >= 2, 'menos de 2 casos limpos');
+});
+for (const caso of casosL4) {
+  test(`corpus do L4 › ${caso}`, () => {
+    const esperado = JSON.parse(readFileSync(join(CORPUS_L4, caso, 'esperado.json'), 'utf8'));
+    const achados = lintL4(lerPasta(join(CORPUS_L4, caso)), caso, todasPastas);
+    if (esperado.ok === true) return assert.deepEqual(achados.map((x) => textoL4(caso, x)), [], 'falso positivo');
+    assert.ok(achados.some((x) => x.ficheiro === esperado.ficheiro), `esperava L4 em ${esperado.ficheiro}; achou: ${achados.map((x) => textoL4(caso, x)).join(' | ') || 'nada'}`);
   });
 }
 

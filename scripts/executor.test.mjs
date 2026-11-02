@@ -66,19 +66,33 @@ test('estadoSuite: o pior das unidades; «em_curso» enquanto faltar alguma por 
 // um bloco que não cobre um teste do ficheiro deixa-o por correr sem ninguém ver (risco 1 da spec): todo `test('título'` estático do ficheiro
 // com blocos tem de casar com algum bloco. O --test-name-pattern casa com o nome do teste e dos pais (a raiz tem nome vazio), por isso
 // um padrão negativo `^(?!...)` casaria tudo e não serve de «resto»: os blocos enumeram-se.
-test('blocos do manifesto: todo o teste do ficheiro casa com algum bloco, e cada bloco casa com algum teste', () => {
-  const raiz = fileURLToPath(new URL('..', import.meta.url));
-  const comBlocos = JSON.parse(readFileSync(join(raiz, 'scripts/suites.json'), 'utf8')).suites.filter((s) => s.blocos);
-  assert.ok(comBlocos.length > 0);
-  for (const s of comBlocos) {
+// Os problemas dos blocos de um manifesto lido de `raiz`: [texto]. O manifesto real já não tem blocos (o lote do V-03 tirou-os), por isso a regra
+// prova-se também sobre um manifesto de fixture.
+const problemasDeBlocos = (raiz, manifesto) => {
+  const out = [];
+  for (const s of manifesto.suites.filter((x) => x.blocos)) {
     for (const [f, blocos] of Object.entries(s.blocos)) {
       const titulos = [...readFileSync(join(raiz, f), 'utf8').matchAll(/^test\((['"`])(.*?)\1/gm)].map((m) => m[2]);
-      assert.ok(titulos.length > 0, `${f}: nenhum test('...') estático`);
+      if (!titulos.length) out.push(`${f}: nenhum test('...') estático`);
       const padroes = blocos.map((b) => b.padrao ?? b), res = padroes.map((b) => new RegExp(b));
-      assert.deepEqual(titulos.filter((t) => !res.some((r) => r.test(t))), [], `${f}: testes fora de todos os blocos`);
-      assert.deepEqual(padroes.filter((b, i) => !titulos.some((t) => res[i].test(t))), [], `${f}: blocos que não casam com nenhum teste`);
+      out.push(...titulos.filter((t) => !res.some((r) => r.test(t))).map((t) => `${f}: teste fora de todos os blocos: ${t}`));
+      out.push(...padroes.filter((b, i) => !titulos.some((t) => res[i].test(t))).map((b) => `${f}: bloco que não casa com nenhum teste: ${b}`));
     }
   }
+  return out;
+};
+test('blocos do manifesto: todo o teste do ficheiro casa com algum bloco, e cada bloco casa com algum teste', () => {
+  const raiz = fileURLToPath(new URL('..', import.meta.url));
+  assert.deepEqual(problemasDeBlocos(raiz, JSON.parse(readFileSync(join(raiz, 'scripts/suites.json'), 'utf8'))), []);
+});
+test('blocos de um manifesto de fixture: apanha o teste fora dos blocos e o bloco que não casa com nada', () => {
+  const raiz = tmp();
+  mkdirSync(join(raiz, 't'));
+  writeFileSync(join(raiz, 't', 'x.test.mjs'), "test('alfa um', () => {});\ntest('beta dois', () => {});\n");
+  const manifesto = (blocos) => ({ suites: [{ nome: 's', ficheiros: ['t/*.test.mjs'], blocos: { 't/x.test.mjs': blocos } }] });
+  assert.deepEqual(problemasDeBlocos(raiz, manifesto(['^alfa', { padrao: '^beta', limite_s: 5 }])), []);
+  assert.deepEqual(problemasDeBlocos(raiz, manifesto(['^alfa'])), ['t/x.test.mjs: teste fora de todos os blocos: beta dois']);
+  assert.deepEqual(problemasDeBlocos(raiz, manifesto(['^alfa', '^beta', '^gama'])), ['t/x.test.mjs: bloco que não casa com nenhum teste: ^gama']);
 });
 
 const executor = (raiz, ...args) => {
@@ -122,4 +136,24 @@ test('limite_s de um bloco ({padrao, limite_s}) substitui o da suíte, e o limit
   assert.equal(r.status, 0, r.stdout + r.stderr); // o bloco lento (4 s) passa o limite_s 2 da suíte porque o dele é 900
   const res = JSON.parse(readFileSync(join(d, '.forge/resultados', readdirSync(join(d, '.forge/resultados')).find((n) => n.endsWith('.json'))), 'utf8'));
   assert.deepEqual(res.unidades.map((u) => [u.bloco, u.estado]).sort(), [['^lento', 'pass'], ['^rapido', 'pass']]);
+});
+
+test('exclusiva por ficheiro (lista de globs): só esse ficheiro corre sozinho na máquina; os outros da suíte continuam em paralelo', () => {
+  const d = tmp(), reg = join(d, '.forge/intervalos.txt').replaceAll('\\', '/');
+  mkdirSync(join(d, 'scripts')); mkdirSync(join(d, 't')); mkdirSync(join(d, '.forge')); // .forge/ está no .gitignore: o registo não suja a árvore
+  for (const n of ['a', 'b', 'c']) {
+    writeFileSync(join(d, `t/${n}.test.mjs`), `import { test } from 'node:test';\nimport { appendFileSync } from 'node:fs';\n`
+      + `test('${n}', async () => { const i = Date.now(); await new Promise((r) => setTimeout(r, 1500)); appendFileSync('${reg}', '${n} ' + i + ' ' + Date.now() + '\\n'); });\n`);
+  }
+  writeFileSync(join(d, 'scripts/suites.json'), JSON.stringify({ versao: 1, paralelo: 3, vagas_globais: 3, carga_sensivel: 3, orcamento_s: 60,
+    suites: [{ nome: 's', tipo: 'node-test', ficheiros: ['t/*.test.mjs'], limite_s: 30, exclusiva: ['t/a.test.mjs'] }] }));
+  writeFileSync(join(d, '.gitignore'), '.forge/\n');
+  const g = (...a) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...a], { cwd: d, encoding: 'utf8' });
+  g('init', '-q'); g('add', '-A'); g('commit', '-q', '-m', 'x');
+  const r = executor(d, '--todas');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const iv = Object.fromEntries(readFileSync(join(d, '.forge/intervalos.txt'), 'utf8').trim().split('\n').map((l) => { const [n, i, f] = l.split(' '); return [n, [+i, +f]]; }));
+  const cruza = (x, y) => x[0] < y[1] && y[0] < x[1];
+  assert.ok(!cruza(iv.a, iv.b) && !cruza(iv.a, iv.c), `a (exclusiva) cruzou-se com outra unidade: ${JSON.stringify(iv)}`);
+  assert.ok(cruza(iv.b, iv.c), `b e c (não exclusivas) deviam correr em paralelo: ${JSON.stringify(iv)}`);
 });
