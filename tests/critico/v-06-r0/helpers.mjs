@@ -132,7 +132,7 @@ export const ROTULOS = ['spec', 'ready-for-agent', 'regressao', 'seguimento', 'f
 const MANIFESTO = { versao: 1, paralelo: 2, vagas_globais: 4, carga_sensivel: 2, orcamento_s: 300,
   suites: [{ nome: 's', tipo: 'node-test', ficheiros: ['s/*.test.mjs'], limite_s: 120 }] };
 const MAPA = { versao: 1, regras: [{ caminhos: ['**'], suites: ['*'] }] };
-const verde = (nome) => `import { test } from 'node:test';\ntest('${nome}', () => {});\n`;
+const verde = (nome, ms = 0) => `import { test } from 'node:test';\ntest('${nome}', ${ms ? `() => new Promise((r) => setTimeout(r, ${ms}))` : '() => {}'});\n`;
 const VERMELHO = `import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n`
   + `test('${NOME_REGRESSAO}', () => { assert.equal(1, 2, 'regressão introduzida pelo PR'); });\n`;
 const poe = (d, rel, txt) => { mkdirSync(dirname(join(d, rel)), { recursive: true }); writeFileSync(join(d, rel), txt); };
@@ -147,7 +147,8 @@ export function montaCenario(c) {
   gitOk(D, 'init', '-q', '-b', 'main', sem);
   for (const n of readdirSync(join(ROOT, 'scripts'))) if (n.endsWith('.mjs') && !n.endsWith('.test.mjs')) poe(sem, `scripts/${n}`, readFileSync(join(ROOT, 'scripts', n)));
   for (const n of ['executor.mjs', 'afetadas.mjs', 'check-ticket.mjs', 'avancar.mjs']) if (existsSync(join(ROOT, 'scripts', n))) poe(sem, `.claude/${n}`, readFileSync(join(ROOT, 'scripts', n)));
-  poe(sem, 'scripts/suites.json', JSON.stringify(MANIFESTO, null, 2) + '\n');
+  // c.lento: o orçamento do executor (1 s) acaba antes do teste do PR (4 s), por isso a 1.ª chamada sai com 3 e o avancar tem de usar --continuar
+  poe(sem, 'scripts/suites.json', JSON.stringify(c.lento ? { ...MANIFESTO, orcamento_s: 1 } : MANIFESTO, null, 2) + '\n');
   poe(sem, 'scripts/mapa-suites.json', JSON.stringify(MAPA, null, 2) + '\n');
   poe(sem, 's/a.test.mjs', verde('v06-base-verde'));
   poe(sem, '.gitignore', '.forge/\n');
@@ -156,7 +157,7 @@ export function montaCenario(c) {
   gitOk(sem, 'checkout', '-q', '-b', 'v-99-pr');
   poe(sem, 's/notas.md', 'primeira versão do PR\n');
   const P1 = commit(sem, 'pr: primeira versão');
-  poe(sem, 's/b.test.mjs', c.pr.posMerge === 'vermelho' ? VERMELHO : verde('v06-pr-verde'));
+  poe(sem, 's/b.test.mjs', c.pr.posMerge === 'vermelho' ? VERMELHO : verde('v06-pr-verde', c.lento ? 4000 : 0));
   const H = commit(sem, 'pr: versão julgada');
   let H2 = null;
   if (c.pr.headMuda) { poe(sem, 's/c.test.mjs', verde('v06-pr-depois')); H2 = commit(sem, 'pr: push depois do veredito'); }

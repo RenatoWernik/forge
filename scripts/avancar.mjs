@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 class Recusa extends Error {}
 const TOKENS = ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'];
 const SHA = /^[0-9a-f]{40}$/;
+const MAX_CONTINUAR = 40; // chamadas --continuar do executor (cada uma espera até orcamento_s); passado isto o pós-merge conta como vermelho
 const MERGE = (n, repo, h) => ['pr', 'merge', String(n), '-R', repo, '--squash', '--match-head-commit', h]; // a única forma de merge: pr merge --squash --match-head-commit
 
 const tira = (s) => {
@@ -132,10 +133,10 @@ function posMerge(sha) {
     if (!exec) throw new Error('o squash não tem executor (scripts/executor.mjs ou .claude/executor.mjs)');
     const env = { ...process.env };
     for (const k of TOKENS) delete env[k];
-    const corre1 = (...a) => corre(process.execPath, [exec, ...a], { cwd: pasta, env, timeout: 3600000 });
+    const corre1 = (...a) => corre(process.execPath, [exec, ...a], { cwd: pasta, env, timeout: 900000 });
+    // o executor só espera pelo motor até orcamento_s e sai com 3 (incompleto); repete-se com --continuar até 0 ou 1 (o motor nunca é morto)
     let r = corre1('--afetadas', '--base', `${sha}^`);
-    // shortcut: até o V-02 entrar o executor não conhece --afetadas (sai com 2); então corre tudo. Sai daqui quando o V-02 estiver na main.
-    if (r.status === 2 && /--afetadas ainda não existe/.test(r.stderr)) r = corre1('--todas');
+    for (let t = 0; r.status === 3 && t < MAX_CONTINUAR; t++) { diz(`pós-merge: executor incompleto (saída 3), --continuar ${t + 1}`); r = corre1('--afetadas', '--base', `${sha}^`, '--continuar'); }
     const verde = r.status === 0;
     const logs = join(pasta, '.forge', 'resultados', 'logs');
     const falhas = !existsSync(logs) ? [] : readdirSync(logs).filter((n) => n.endsWith('.tap'))
