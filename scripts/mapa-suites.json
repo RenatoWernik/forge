@@ -25,6 +25,7 @@
     "f-24-r0": "c0-pecas: git diff de scripts/scaffold.test.mjs (código, que já leva todas as suítes)",
     "f-30-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket) e olha para o diff do ticket",
     "v-01-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o c6-manifesto (nomes = pastas) cobre-se porque uma pasta fora do manifesto leva todas as suítes",
-    "v-02-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o C5 compara a saída do CLI com o diff contra a base"
+    "v-03-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o ls-files dos helpers só copia o repo para uma fixture, não guarda um diff",
+    "v-02-r0":"ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o C5 compara a saída do CLI com o diff contra a base"
   }
 }

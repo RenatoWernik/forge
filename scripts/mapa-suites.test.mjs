@@ -219,7 +219,10 @@ test('afetadas(ficheiros, { raiz }): o mesmo diff dá o resultado do mapa de cad
     assert.deepEqual(afetadas([], { raiz: da }).suites, ['a']);
     assert.deepEqual(afetadas([], { raiz: db }).suites, ['b']);
     assert.deepEqual(ordenado(afetadas(['README.md']).suites), ordenado(afetadas(['README.md'], { raiz: ROOT }).suites));
-    assert.deepEqual(ordenado(afetadas([]).suites), ordenado(sempre), 'sem raiz tem de valer o mapa do repo do módulo');
+    // sem raiz vale o mapa do repo do módulo: as `sempre`, mais só o que o fecho do lote (os alvos dos doLote delas) acrescenta
+    const sem = afetadas([]);
+    assert.deepEqual(sempre.filter((s) => !sem.suites.includes(s)), [], 'faltam `sempre`');
+    assert.deepEqual(sem.suites.filter((s) => !sempre.includes(s) && !sem.porque[s].every((p) => p.regra.startsWith('doLote:'))), [], 'uma suíte fora das `sempre` entrou sem ser pelo fecho do lote');
   } finally { for (const x of [da, db]) rmSync(x, { recursive: true, force: true }); }
 });
 
@@ -243,6 +246,20 @@ test('afetadas(): o fecho do lote segue a cadeia A → B → C pelos imports rel
     const r = afetadas(['tests/critico/a/a.test.mjs'], { raiz: d });
     assert.deepEqual(r.suites.sort(), ['a', 'b', 'c']);
     assert.deepEqual(r.porque.c, [{ regra: 'doLote:b', ficheiro: 'tests/critico/a/a.test.mjs' }]);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('afetadas(): o fecho do lote vê as formas reais do alvo (lista, objeto, lista literal nomeada, vírgulas dentro do 3.º argumento)', () => {
+  const L = 'do' + 'Lote';
+  const d = pasta_({
+    'scripts/suites.json': manif('a', 'b', 'c', 'd', 'e', 'f'),
+    'scripts/mapa-suites.json': JSON.stringify({ versao: 1 }),
+    'tests/critico/a/a.test.mjs': `const r = ${L}(t, ['b', 'c'], { corre: () => f(['x', 'y'], 1) });\nconst s = ${L}(t, { suite: 'd', ficheiros: ['tests/critico/d/*.test.mjs'] }, { min: 1 });\n`,
+    'tests/critico/e/e.test.mjs': `const dirs = ['f', 'zz'];\n${L}(t, dirs.map((x) => ({ suite: x, ficheiros: [\`tests/critico/\${x}/c*.test.mjs\`] })), { corre: () => 1 });\nfor (const x of dirs) ${L}(t, x, {});\n`,
+  });
+  try {
+    assert.deepEqual(afetadas(['tests/critico/a/a.test.mjs'], { raiz: d }).suites.sort(), ['a', 'b', 'c', 'd']);
+    assert.deepEqual(afetadas(['tests/critico/e/e.test.mjs'], { raiz: d }).suites.sort(), ['e', 'f'], 'a lista nomeada entra; o `zz` desconhecido e o `x` dinâmico não');
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 

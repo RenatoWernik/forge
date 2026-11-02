@@ -69,9 +69,36 @@ export function diretas(ficheiros, raiz = RAIZ) {
   return { nomes, porque };
 }
 
-// as suítes-alvo (literais) dos doLote dos ficheiros da suíte; um alvo montado em runtime não se vê
-const reLote = /\bdoLote\(\s*[\w$.]+\s*,\s*(['"`])([^'"`\n]+)\1/g;
-const alvosDoLote = (raiz, suite) => new Set(ficheirosDaSuite(raiz, suite).flatMap((f) => [...readFileSync(join(raiz, f), 'utf8').matchAll(reLote)].map((m) => m[2])));
+// o 2.º argumento (o alvo) de cada doLote( do texto: do 1.º ao 2.º vírgula de nível 0, sem olhar para dentro de cadeias
+function alvosEm(texto) {
+  const args = [];
+  for (const m of texto.matchAll(/\bdoLote\(/g)) {
+    let prof = 0, virgulas = 0, ini = -1, q = null;
+    for (let i = m.index + m[0].length; i < texto.length; i++) {
+      const c = texto[i];
+      if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
+      if ('\'"`'.includes(c)) q = c;
+      else if ('([{'.includes(c)) prof++;
+      else if (')]}'.includes(c)) { if (prof-- === 0) { if (ini >= 0) args.push(texto.slice(ini, i)); break; } }
+      else if (c === ',' && prof === 0 && ++virgulas === 1) ini = i + 1;
+      else if (c === ',' && prof === 0) { args.push(texto.slice(ini, i)); break; }
+    }
+  }
+  return args;
+}
+const literais = (s) => [...s.matchAll(/(['"`])((?:\\.|(?!\1).)*)\1/g)].map((m) => m[2]);
+
+// as suítes-alvo dos doLote dos ficheiros da suíte: os literais do alvo (texto, lista, `{ suite: 'x' }`) e os das listas literais que ele nomeia
+// (`dirs.map(...)` com `const dirs = ['a', 'b']` no mesmo ficheiro). shortcut: um alvo montado em runtime (o `d` de um ciclo) não se vê; o doLote
+// falha em voz alta na fase 2 com um alvo em falta, nunca em silêncio
+const alvosDoLote = (raiz, suite) => new Set(ficheirosDaSuite(raiz, suite).flatMap((f) => {
+  const texto = readFileSync(join(raiz, f), 'utf8');
+  return alvosEm(texto).flatMap((arg) => {
+    const ids = new Set(arg.replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '').match(/[A-Za-z_$][\w$]*/g) ?? []);
+    const listas = [...ids].flatMap((id) => [...texto.matchAll(new RegExp(`\\b(?:const|let|var)\\s+${id.replaceAll('$', '\\$')}\\s*=\\s*(\\[[^\\]]*\\])`, 'g'))].map((m) => m[1]));
+    return [arg, ...listas].flatMap(literais);
+  });
+}));
 
 export function afetadas(ficheiros, { raiz = RAIZ } = {}) {
   const { nomes, porque } = diretas(ficheiros, raiz), suites = json(raiz, 'scripts/suites.json').suites;
