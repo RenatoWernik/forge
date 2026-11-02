@@ -66,7 +66,10 @@ test('C3 (ponta real do F-28): o diff do commit do F-22a reaplicado sobre o pai 
   const estado = existsSync(fEstado) ? JSON.parse(readFileSync(fEstado, 'utf8')) : { chamadas: [] };
   const ambito = gitOk(repo, 'show', '--name-only', '--format=', 'HEAD').split(/\r?\n/).filter(Boolean);
   const continuar = estado.chamadas.at(-1)?.codigo === 3;
-  const r = await correr(repo, ['--ambito', ...ambito, '--base', 'origin/main', ...(continuar ? ['--continuar'] : [])], { limite_ms: 520000 });
+  // o mesmo TEMP privado em todas as chamadas: o clone do pós-merge vive lá e o --continuar só o reaproveita se o TEMP não mudar
+  const temp = join(pasta, 'temp');
+  mkdirSync(temp, { recursive: true });
+  const r = await correr(repo, ['--ambito', ...ambito, '--base', 'origin/main', ...(continuar ? ['--continuar'] : [])], { limite_ms: 520000, env: { TEMP: temp, TMP: temp, TMPDIR: temp } });
   estado.chamadas.push({ codigo: r.status, ms: r.ms, pendurado: r.pendurado });
   writeFileSync(fEstado, JSON.stringify(estado, null, 2));
   writeFileSync(join(pasta, `chamada-${estado.chamadas.length}.log`), r.out + '\n--- stderr ---\n' + r.err);
