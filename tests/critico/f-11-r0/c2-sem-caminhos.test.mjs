@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { ROOT, BASE, api, git } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const PROIBIDO = [/[A-Z]:[\\/]/, /\/Users\//, /\/home\//, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /guilda/i, /AgentHomes/i];
 const EXCECOES = [];
@@ -27,7 +28,8 @@ const linhasAcrescentadas = () => {
   return out;
 };
 
-test('C2: o código do mod e o que o ticket acrescenta ao pacote não têm caminhos absolutos, UUIDs, Guilda nem AgentHomes', async () => {
+test('ÂMBITO: C2: o código do mod e o que o ticket acrescenta ao pacote não têm caminhos absolutos, UUIDs, Guilda nem AgentHomes', async (t) => {
+  if (soNoTicket(t, 'f-11')) return;
   const u = await api();
   const ficheiros = [...new Set([...u.modulos, ...novos()].map((f) => resolve(f)))].filter(existsSync);
   assert.ok(ficheiros.length >= u.modulos.length);

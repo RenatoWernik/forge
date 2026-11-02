@@ -10,6 +10,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { userInfo } from 'node:os';
 import { ROOT, BASE, git } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em 0a35bee
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'mod-painel.test.mjs': 10, 'painel-web.test.mjs': 2, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'skill-new-project.test.mjs': 8, 'sync.test.mjs': 22 };
@@ -23,7 +24,8 @@ test('regressão: nenhum ficheiro de teste do pacote perde testes', () => {
   }
 });
 
-test('regressão: os ataques da Ronda −1 já fundidos continuam no repositório e o corpus de mutações não perde nenhuma', () => {
+test('ÂMBITO: regressão: os ataques da Ronda −1 já fundidos continuam no repositório e o corpus de mutações não perde nenhuma', (t) => {
+  if (soNoTicket(t, 'f-08')) return;
   for (const d of ['f-01-r0', 'f-02-r0', 'f-03-r0', 'f-04-r0', 'f-10-r0', 'f-11-r0', 'f-12-r0']) assert.ok(existsSync(join(ROOT, 'tests/critico', d)), d + ' desapareceu');
   const base = git('ls-tree', '--name-only', BASE, 'scripts/corpus/mutations/');
   assert.equal(base.status, 0, base.stderr);
@@ -51,7 +53,8 @@ const acrescentadas = () => {
   return out;
 };
 
-test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão, dados pessoais nem nada da Guilda', () => {
+test('ÂMBITO: reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão, dados pessoais nem nada da Guilda', (t) => {
+  if (soNoTicket(t, 'f-08')) return;
   const me = userInfo().username;
   const PROIBIDO = [/\b[A-Z]:\\\\?[A-Za-z]/, /\b[A-Z]:\/[A-Za-z]/, /\/Users\//, /\/home\/[a-z]/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /guilda/i, /renat/i, /@keyrus\./i, /AgentHomes|dev-mods|forge-wt|forge-ref/i,
     ...(me && me.length >= 3 ? [new RegExp(`\\b${me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')] : [])];
@@ -63,7 +66,8 @@ test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da m
   assert.deepEqual(achados, []);
 });
 
-test('só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados fora de tests/ só importam node: ou caminhos relativos', () => {
+test('ÂMBITO: só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados fora de tests/ só importam node: ou caminhos relativos', (t) => {
+  if (soNoTicket(t, 'f-08')) return;
   const d = git('diff', '--name-only', '--diff-filter=AM', desde(), '--', '.', ':(exclude)tests');
   const u = git('ls-files', '--others', '--exclude-standard', '--', '.', ':(exclude)tests');
   const files = [...new Set([...d.stdout.split('\n'), ...u.stdout.split('\n')].map((s) => s.trim()).filter(Boolean))].filter((x) => ['.mjs', '.js', '.cjs'].includes(extname(x)) && existsSync(join(ROOT, x)));

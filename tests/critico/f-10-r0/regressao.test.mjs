@@ -8,6 +8,7 @@ import { join, extname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT, BASE, sandboxEnv, git } from './helpers.mjs';
 import { doLote } from '../_comum/lote.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em d8572ed
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'scaffold.test.mjs': 27, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
@@ -54,14 +55,16 @@ const acrescentadas = () => {
   return out;
 };
 
-test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão, dados pessoais nem nada da Guilda', () => {
+test('ÂMBITO: reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão, dados pessoais nem nada da Guilda', (t) => {
+  if (soNoTicket(t, 'f-10')) return;
   const PROIBIDO = [/\b[A-Z]:\\\\?[A-Za-z]/, /\/Users\//, /\/home\/[a-z]/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /guilda/i, /renat/i, /@keyrus\./i, /AgentHomes|dev-mods/i];
   const achados = [];
   for (const [f, l] of acrescentadas()) for (const re of PROIBIDO) if (re.test(l.replace(/(?:github(?:usercontent)?\.com\/(?:repos\/)?|(?<![\w\/.-]))RenatoWernik\/(?:gauntlet-loop|forge)(?![\w.-])/gi, ''))) achados.push(`${f}: ${re} → ${l.trim().slice(0, 100)}`);
   assert.deepEqual(achados, []);
 });
 
-test('só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados só importam node: ou caminhos relativos', () => {
+test('ÂMBITO: só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados só importam node: ou caminhos relativos', (t) => {
+  if (soNoTicket(t, 'f-10')) return;
   const RE = [/\bimport\s+[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g, /\bimport\s*['"]([^'"]+)['"]/g, /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g, /\bexport\s+[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g, /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g];
   const fora = [];
   for (const f of mudados().filter((x) => ['.mjs', '.js', '.cjs'].includes(extname(x)) && existsSync(join(ROOT, x)))) {

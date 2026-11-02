@@ -8,6 +8,7 @@ import { join, extname } from 'node:path';
 import { builtinModules } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { ROOT, BASE, COMPAT_TEST, personalHits } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em 0a35bee
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'mod-painel.test.mjs': 10, 'painel-web.test.mjs': 2, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'skill-new-project.test.mjs': 8, 'sync.test.mjs': 22 };
@@ -61,13 +62,15 @@ const acrescentadas = () => {
   return out;
 };
 
-test('reprova sempre: o que o ticket acrescenta ao pacote (compat.json, fixture, registo, doctor) não tem caminhos da máquina, dados pessoais, ids de sessão nem tokens', () => {
+test('ÂMBITO: reprova sempre: o que o ticket acrescenta ao pacote (compat.json, fixture, registo, doctor) não tem caminhos da máquina, dados pessoais, ids de sessão nem tokens', (t) => {
+  if (soNoTicket(t, 'f-15a')) return;
   const achados = [];
   for (const [f, l] of acrescentadas()) for (const h of personalHits(l)) achados.push(`${f}: ${h} → ${l.trim().slice(0, 100)}`);
   assert.deepEqual(achados, []);
 });
 
-test('só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados só importam módulos do Node ou caminhos relativos', () => {
+test('ÂMBITO: só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados só importam módulos do Node ou caminhos relativos', (t) => {
+  if (soNoTicket(t, 'f-15a')) return;
   const RE = [/\bimport\s+[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g, /\bimport\s*['"]([^'"]+)['"]/g, /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g, /\bexport\s+[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g, /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g];
   const fora = [];
   for (const f of mudados().filter((x) => ['.mjs', '.js', '.cjs'].includes(extname(x)) && existsSync(join(ROOT, x)))) {

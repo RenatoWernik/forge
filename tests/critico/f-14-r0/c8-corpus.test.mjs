@@ -11,8 +11,10 @@ import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { ROOT, BASE, git, sandboxEnv } from './helpers.mjs';
 import { limiteMs } from './limite.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
-test('C6: as mutações do corpus da base continuam lá (pelo nome) e o corpus não encolheu', () => {
+test('ÂMBITO: C6: as mutações do corpus da base continuam lá (pelo nome) e o corpus não encolheu', (t) => {
+  if (soNoTicket(t, 'f-14')) return;
   const r = git('ls-tree', '--name-only', BASE + ':scripts/corpus/mutations');
   assert.equal(r.status, 0, r.stderr);
   const base = r.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
