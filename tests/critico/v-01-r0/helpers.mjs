@@ -11,7 +11,7 @@
 // Tudo o que um teste lança morre pelo PID (a árvore desse PID) no `after`; nunca se mata por nome.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,25 +29,67 @@ export async function esperaAte(cond, ms, passo = 100) {
 }
 
 // --- pastas temporárias e processos lançados (limpos no after de cada ficheiro) ---
-const PASTAS = new Set(), PIDS = new Set();
+const PASTAS = new Set(), PIDS = new Map();
 export const tmp = (p = 'v01-') => { const d = mkdtempSync(join(tmpdir(), p)); PASTAS.add(d); return d; };
-export const registaPid = (pid) => { if (Number.isInteger(pid) && pid > 0) PIDS.add(pid); };
+// Um PID gravado pode já ser de outro processo (o Windows recicla-os): nunca se mata um PID só porque existe. `desde` é o instante em que o
+// processo já existia (por omissão, agora; um evento gravado dá o `t` dele) e `cmd` o que a linha de comando dele tem de conter (os motores:
+// `--motor-interno` e o nonce). Só se mata o PID cuja identidade de agora coincide com isto (ver `eOQueRegistou`).
+export const registaPid = (pid, { desde = Date.now(), cmd = [] } = {}) => {
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  const antes = PIDS.get(pid);
+  PIDS.set(pid, { desde: Math.min(desde, antes?.desde ?? Infinity), cmd: [...new Set([...(antes?.cmd ?? []), ...cmd.filter(Boolean)])] });
+};
+// só diz se há UM processo com este número, não se é o que se registou: nunca autoriza matar (isso é a `identidades`)
 export const vivo = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
-// mata a árvore de um PID que este teste lançou (ou que um processo lançado por ele registou): taskkill /PID /T no Windows, o grupo em POSIX
-export function mataArvore(pid) {
-  if (!vivo(pid)) return;
+// a hora de criação e a linha de comando de cada PID que existe, numa só chamada; null se não se conseguiu ler (nesse caso não se mata nada)
+function identidades(pids) {
+  const r = new Map();
+  if (!pids.length) return r;
+  if (process.platform !== 'win32') {
+    for (const pid of pids) { try { r.set(pid, { criado: statSync(`/proc/${pid}`).ctimeMs, cmd: readFileSync(`/proc/${pid}/cmdline`, 'utf8').replaceAll('\0', ' ') }); } catch { /* já não existe */ } }
+    return r;
+  }
+  const filtro = pids.map((p) => `ProcessId=${p}`).join(' OR ');
+  const o = spawnSync('powershell', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+    `Get-CimInstance Win32_Process -Filter '${filtro}' | ForEach-Object { '{0}|{1}|{2}' -f $_.ProcessId, $_.CreationDate.ToUniversalTime().ToString('o'), $_.CommandLine }`],
+  { encoding: 'utf8', windowsHide: true, timeout: 120000 });
+  if (o.error || o.status !== 0) return null;
+  for (const l of o.stdout.split(/\r?\n/)) { const [pid, criado, ...cmd] = l.split('|'); if (pid) r.set(+pid, { criado: Date.parse(criado), cmd: cmd.join('|') }); }
+  return r;
+}
+// o processo de agora é o que se registou: já existia quando foi registado (um PID reciclado nasce depois) e a linha de comando tem o que se pediu
+// o relógio da hora de criação do Windows e o Date.now() não coincidem ao milissegundo (medido: o processo aparece criado até ~5 ms depois de o spawn voltar),
+// por isso a folga de 150 ms; um PID reciclado nasce segundos depois (o crítico mediu 2 s para 665 lançamentos)
+const FOLGA_RELOGIO_MS = 150;
+const eOQueRegistou = (id, reg) => !!id && id.criado <= reg.desde + FOLGA_RELOGIO_MS && reg.cmd.every((c) => id.cmd.includes(c));
+function mataSemVerificar(pid) {
   if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
   else { try { process.kill(-pid, 'SIGKILL'); } catch { try { process.kill(pid, 'SIGKILL'); } catch {} } }
+}
+// mata a árvore de um PID: taskkill /PID /T no Windows, o grupo em POSIX. Um PID registado só morre se ainda for o processo que se registou.
+export function mataArvore(pid) {
+  if (!vivo(pid)) return;
+  const reg = PIDS.get(pid);
+  if (reg) {
+    const ids = identidades([pid]);
+    if (!eOQueRegistou(ids?.get(pid), reg)) { console.error(`mataArvore: não matei o PID ${pid}: ${ids ? `não é o processo registado (criado ${ids.get(pid)?.criado}, registado ${PIDS.get(pid)?.desde}: ${ids.get(pid)?.cmd?.slice(0, 80)})` : 'não consegui ler a identidade'}`); return; }
+  }
+  mataSemVerificar(pid);
 }
 export async function limpa() {
   // os motores destacados (REDESENHO do V-01) não morrem com a chamada: só os dos repos temporários deste teste, pelo PID gravado em .forge/motor/*.json
   for (const d of PASTAS) {
     const m = join(d, '.forge', 'motor');
     if (!existsSync(m)) continue;
-    // só os motores que não acabaram (sem `fim`): o PID de um motor que acabou pode já ser de outro processo
-    for (const n of readdirSync(m).filter((x) => x.endsWith('.json'))) { try { const j = lerJson(join(m, n)); if (!j.fim) PIDS.add(j.pid); } catch {} }
+    // só os motores que não acabaram (sem `fim`) e só se a linha de comando do PID for a do motor: o PID gravado pode já ser de outro processo
+    for (const n of readdirSync(m).filter((x) => x.endsWith('.json'))) { try { const j = lerJson(join(m, n)); if (!j.fim) registaPid(j.pid, { cmd: ['--motor-interno', j.nonce] }); } catch {} }
   }
-  for (const pid of PIDS) mataArvore(pid);
+  const vivos = [...PIDS.keys()].filter(vivo), ids = identidades(vivos);
+  for (const pid of vivos) {
+    if (!vivo(pid)) continue; // já morreu com a árvore de outro
+    if (ids && eOQueRegistou(ids.get(pid), PIDS.get(pid))) mataSemVerificar(pid);
+    else console.error(`limpa: não matei o PID ${pid}: ${ids ? `não é o processo registado (criado ${ids.get(pid)?.criado}, registado ${PIDS.get(pid)?.desde}: ${ids.get(pid)?.cmd?.slice(0, 80)})` : 'não consegui ler a identidade'}`);
+  }
   await espera(300);
   for (const d of PASTAS) { try { rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch {} }
   PIDS.clear(); PASTAS.clear();
@@ -92,7 +134,7 @@ export function lanca(raiz, args, { env = {}, limite_ms = 120000 } = {}) {
   let out = '', pendurado = false;
   p.stdout.on('data', (b) => { out += b; });
   p.stderr.on('data', (b) => { out += b; });
-  const relogio = setTimeout(() => { pendurado = true; mataArvore(p.pid); }, limite_ms);
+  const relogio = setTimeout(() => { pendurado = true; if (p.exitCode === null && p.signalCode === null) mataSemVerificar(p.pid); }, limite_ms); // filho nosso, ainda vivo: o PID é dele
   const fim = new Promise((resolve) => {
     const acaba = (status, signal) => { clearTimeout(relogio); const ms = Date.now() - t0; setTimeout(() => { p.stdout.destroy(); p.stderr.destroy(); resolve({ status, signal, ms, out, pendurado }); }, 200); };
     p.on('exit', acaba);

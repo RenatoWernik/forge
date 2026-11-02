@@ -18,7 +18,7 @@ test('C4: uma vaga com o PID morto é recuperada: um executor morto com as vagas
   const ocupadas = existsSync(vagas) ? readdirSync(vagas).length : 0;
   mataArvore(A.pid);
   const ra = await A.fim;
-  for (const e of inicios(a)) { registaPid(e.pid); registaPid(e.ppid); }
+  for (const e of inicios(a)) { registaPid(e.pid, { desde: e.t }); registaPid(e.ppid, { desde: e.t }); }
   for (const e of inicios(a)) for (const pid of [e.pid, e.ppid]) mataArvore(pid);
   await esperaAte(() => inicios(a).every((e) => !vivo(e.pid) && !vivo(e.ppid)), 10000);
   assert.ok(cheias, 'as duas unidades presas não arrancaram em 60 s\n' + saida(ra));

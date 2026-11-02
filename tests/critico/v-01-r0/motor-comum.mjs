@@ -21,7 +21,7 @@ export function montar(nome, manifesto, unidades) {
 export const motores = (d) => {
   const pasta = join(d, '.forge', 'motor');
   const js = existsSync(pasta) ? readdirSync(pasta).filter((n) => n.endsWith('.json')).map((n) => lerJson(join(pasta, n))) : [];
-  for (const j of js) registaPid(j.pid);
+  for (const j of js) registaPid(j.pid, { cmd: ['--motor-interno', j.nonce] }); // o PID gravado pode já ser de outro processo
   return js;
 };
 export const feitas = (d) => umResultado(d).dados.unidades;

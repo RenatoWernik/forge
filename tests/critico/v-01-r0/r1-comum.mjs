@@ -29,7 +29,7 @@ export function montar(nome, manifesto, unidades) {
 export function motores(d) {
   const p = join(d, '.forge', 'motor');
   const js = existsSync(p) ? readdirSync(p).filter((n) => n.endsWith('.json')).map((n) => ({ nome: n, ...H.lerJson(join(p, n)) })) : [];
-  for (const j of js) H.registaPid(j.pid);
+  for (const j of js) H.registaPid(j.pid, { cmd: ['--motor-interno', j.nonce] }); // o PID gravado pode já ser de outro processo
   return js;
 }
 // encadeia --continuar até sair de 3 (no máximo n chamadas); devolve os códigos
