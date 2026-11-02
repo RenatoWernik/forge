@@ -1,4 +1,4 @@
-// V-02 (#126) C4: o fecho do doLote (spec §4.3). Numa fixture em que a suíte A tem doLote(t, 'B'), as afetadas de um diff que só toca em A
+// V-02 (#126) C4: o fecho do lote (spec §4.3). Numa fixture em que a suíte A chama o lote sobre a suíte B, as afetadas de um diff que só toca em A
 // incluem B; vale antes do V-03 (a fixture não tem o _comum/lote.mjs). O fecho é das suítes afetadas, venham elas da regra implícita
 // (tests/critico/<x>/**) ou de uma regra do mapa, e repete-se nas suítes que entram pelo fecho (A → B → C).
 import { test, after } from 'node:test';
@@ -11,7 +11,7 @@ after(limpa);
 
 const falta = (s, quer) => quer.filter((x) => !s.has(x));
 
-test('guarda: a fixture tem o doLote(t, ...) na alfa e na beta, nenhum na gama e na delta, e nenhum _comum/lote.mjs (antes do V-03)', () => {
+test('guarda: a fixture tem a chamada ao lote na alfa e na beta, nenhum na gama e na delta, e nenhum _comum/lote.mjs (antes do V-03)', () => {
   const d = fixtureLote();
   const le = (s, n) => readFileSync(join(d, testeDe(s, n)), 'utf8');
   assert.match(le('suite-alfa', 'a'), new RegExp(`\\b${DOLOTE}\\(t, 'suite-beta'\\)`));
@@ -20,7 +20,7 @@ test('guarda: a fixture tem o doLote(t, ...) na alfa e na beta, nenhum na gama e
   assert.equal(existsSync(join(d, 'tests/critico/_comum/lote.mjs')), false);
 });
 
-test('C4: um diff só na suíte A (com doLote(t, B)) tem B nas afetadas', () => {
+test('C4: um diff só na suíte A (com a chamada ao lote sobre B) tem B nas afetadas', () => {
   const d = fixtureLote();
   const s = nomes(afetadasEm(d, [testeDe('suite-alfa', 'a')]), SUITES_LOTE);
   assert.deepEqual(falta(s, ['suite-alfa', 'suite-beta']), [], `afetadas: ${[...s].join(', ')}`);

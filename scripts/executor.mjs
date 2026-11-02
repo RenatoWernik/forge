@@ -13,7 +13,6 @@ import { closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, read
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { desdeBase } from './afetadas.mjs';
 
 // Todo processo lançado passa por aqui: no Windows um filho de um motor destacado (sem consola) sem windowsHide abre uma consola por spawn. O
 // contador vai nos resultados (`processos`) para um teste provar que o número de spawns não cresce com o tempo.
@@ -265,7 +264,7 @@ const lerJsonSeguro = (f) => { try { return JSON.parse(readFileSync(f, 'utf8'));
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // o que a chamada e o motor partilham: manifesto, sha, árvore, plano e os caminhos do passe
-function prepara(argv) {
+async function prepara(argv) {
   const o = lerArgs(argv), raiz = o.raiz, m = lerManifesto(raiz);
   const sha = shaDe(raiz);
   if (!sha) throw new Uso(`${raiz} não é um repositório git`);
@@ -274,7 +273,7 @@ function prepara(argv) {
   let afetadas = null;
   if (o.afetadas) {
     // as afetadas resolvem-se uma vez, na chamada: o motor recebe a lista como --suites e não volta a consultar o git
-    try { afetadas = desdeBase(o.base ?? 'origin/main', raiz); } catch (e) { throw new Uso(e.message); }
+    try { afetadas = (await import('./afetadas.mjs')).desdeBase(o.base ?? 'origin/main', raiz); } catch (e) { throw new Uso(e.message); }
     // um diff vazio dá as suítes `sempre`; se o mapa nem essas tem, «correr nada» seria um falso verde: é um erro de uso
     if (!afetadas.suites.length) throw new Uso(`nenhuma suíte afetada contra ${o.base ?? 'origin/main'} (diff vazio e o mapa sem \`sempre\`)`);
     o.suites = afetadas.suites;
@@ -344,7 +343,7 @@ function reabreMortas(c, motorFicheiro) {
 const cobre = (motor, pedido) => motor === '*' || (pedido !== '*' && pedido.every((n) => motor.includes(n)));
 
 async function chamada(argv, saida) {
-  const c = prepara(argv), { o, raiz, m, plano, marca } = c, t0 = Date.now();
+  const c = await prepara(argv), { o, raiz, m, plano, marca } = c, t0 = Date.now();
   if (c.afetadas) saida(`afetadas: ${c.afetadas.suites.length} suítes (${c.afetadas.ficheiros.length} ficheiros contra ${c.afetadas.base.slice(0, 7)}): ${c.afetadas.suites.join(', ')}`);
   const motorFicheiro = join(c.motorDir, `${marca}.json`), lock = join(c.motorDir, `${marca}.lock`);
   mkdirSync(join(c.pasta, 'logs'), { recursive: true });
@@ -409,7 +408,7 @@ async function chamada(argv, saida) {
 
 // --- o motor: corre a fila inteira e sai sozinho; mata só a árvore das unidades que lançou ---
 async function motorCorre(argv, saida) {
-  const c = prepara(argv), { o, raiz, m, plano, marca, ficheiro } = c;
+  const c = await prepara(argv), { o, raiz, m, plano, marca, ficheiro } = c;
   const motorFicheiro = join(c.motorDir, `${marca}.json`);
   const raizViva = () => existsSync(join(raiz, '.git')); // apagar uma pasta no Windows pode deixar a raiz (é o cwd das unidades) sem o repo
   mkdirSync(join(c.pasta, 'logs'), { recursive: true });

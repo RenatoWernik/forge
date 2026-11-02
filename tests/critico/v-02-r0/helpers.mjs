@@ -140,8 +140,8 @@ export function fixture({ suites, regras, ficheiros }) {
 // a linha da saída onde o nome da suíte aparece como palavra inteira (não como pedaço de um caminho: «scripts» não casa «scripts/x.mjs»)
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const temSuite = (linha, nome) => new RegExp(`(?<![\\w./-])${esc(nome)}(?![\\w./-])`).test(linha);
-// --- a fixture do fecho do doLote (C4 e C5) ---
-// suite-alfa tem doLote(t, 'suite-beta'), suite-beta tem doLote(t, 'suite-gama', {...}); lib/** → suite-alfa, README.md → suite-delta.
+// --- a fixture do fecho do lote (C4 e C5) ---
+// suite-alfa chama o lote sobre a suite-beta e a suite-beta sobre a suite-gama (com { pass: 1 }); lib/** → suite-alfa, README.md → suite-delta.
 // A chamada é montada por pedaços: o texto deste ficheiro não pode parecer um consumidor do doLote a quem lê tests/critico/ à procura dele.
 export const DOLOTE = 'do' + 'Lote';
 export const SUITES_LOTE = ['suite-alfa', 'suite-beta', 'suite-gama', 'suite-delta'];

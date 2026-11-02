@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, posix } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afetadas, lerMapa } from './afetadas.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -150,6 +150,16 @@ for (const [titulo, muda, nome] of [
     } finally { rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
   });
 }
+
+// as fixtures do V-03 copiam só o executor.mjs e o lote.mjs: sem --afetadas o executor não pode precisar do afetadas.mjs (import dinâmico)
+test('executor: carrega sozinho, sem scripts/afetadas.mjs ao lado (só o --afetadas o importa)', () => {
+  const d = mkdtempSync(join(tmpdir(), 'forge-sozinho-'));
+  try {
+    copyFileSync(join(ROOT, 'scripts', 'executor.mjs'), join(d, 'executor.mjs'));
+    const r = spawnSync(process.execPath, ['-e', `import(${JSON.stringify(pathToFileURL(join(d, 'executor.mjs')).href)}).then(() => console.log('ok'))`], { encoding: 'utf8' });
+    assert.equal(r.stdout.trim(), 'ok', r.stderr);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
 
 // --- executor --afetadas, num repo temporário com duas suítes: só a que o diff afeta corre ---
 test('executor --afetadas: corre só as suítes do diff contra a base; sem nenhuma suíte afetada é erro de uso', () => {
