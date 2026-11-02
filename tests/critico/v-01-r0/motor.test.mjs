@@ -142,6 +142,38 @@ test('um leitor com o ficheiro de resultados aberto sem partilha (Windows) não 
   assert.equal(feitas(d).length, 8);
 });
 
+test('C3: a chamada à espera sai com 2 e o resultado fica valido:false se a árvore mudar com o motor vivo; nada fica pass sobre o conteúdo novo e o --continuar recomeça', { timeout: 120000 }, async () => {
+  const d = montar('invalida', { paralelo: 1, orcamento_s: 60, suites: [{ nome: 'q', limite_s: 60 }] }, { 'q-1': 3, 'q-2': 3, 'q-3': 3 });
+  const env = tempPrivado();
+  const call = correr(d, ['--todas'], { env, limite_ms: 100000 });
+  assert.ok(await esperaAte(() => inicios(d).length === 1, 30000), 'a primeira unidade não arrancou');
+  writeFileSync(join(d, 's', 'q-3.fx.mjs'), `${UNIDADE(3)}// editado com o motor vivo\n`);
+  const r = await call;
+  motores(d);
+  assert.equal(r.status, 2, saida(r));
+  assert.match(r.out, /invalidado/);
+  const res = umResultado(d).dados;
+  assert.equal(res.valido, false);
+  assert.equal(res.completo, false);
+  assert.ok(res.unidades.every((u) => u.estado === 'invalidado' || u.estado === 'pass'), JSON.stringify(res.unidades.map((u) => u.estado)));
+  assert.ok(inicios(d).length < 3, 'o motor lançou unidades depois da mudança');
+  gitOk(d, 'checkout', '--', 's/q-3.fx.mjs'); // de volta à árvore limpa: o resultado invalidado não serve ao --continuar
+  const r2 = await correr(d, ['--todas', '--continuar'], { env, limite_ms: 100000 });
+  motores(d);
+  assert.equal(r2.status, 0, saida(r2));
+  assert.equal(umResultado(d).dados.valido, undefined);
+  assert.deepEqual(feitas(d).map((u) => u.estado), ['pass', 'pass', 'pass']);
+});
+
+test('identidade(pid): hora de arranque e linha de comando do processo; um PID que não existe dá null', async () => {
+  const { identidade } = await import('../../../scripts/executor.mjs');
+  const eu = identidade(process.pid);
+  assert.ok(eu && eu.inicio && eu.cmd.includes('node'), JSON.stringify(eu));
+  assert.deepEqual(identidade(process.pid)?.inicio, eu.inicio);
+  assert.equal(identidade(2 ** 22 + 12345), null);
+  assert.equal(identidade('1; echo x'), null);
+});
+
 test('classe EPERM: 3 executores a tomar e largar vagas em ciclo não têm erro fatal nem passam de vagas_globais', { timeout: 150000 }, async () => {
   const env = tempPrivado();
   const repos = [0, 1, 2].map((i) => montar(`rajada${i}`, { paralelo: 2, vagas_globais: 2, carga_sensivel: 2, orcamento_s: 120, suites: [{ nome: 'q', limite_s: 30 }] },
