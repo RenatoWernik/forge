@@ -294,3 +294,15 @@ function motoresLog(d) {
   const pasta = join(d, '.forge', 'motor');
   return existsSync(pasta) ? readdirSync(pasta).filter((n) => n.endsWith('.log')).map((n) => readFileSync(join(pasta, n), 'utf8')).join('\n') : '';
 }
+
+// --- classe «o lançamento do motor nunca espera pelo powershell» (a causa, medida com 14 processos a arder: o powershell que lia a hora de
+// arranque do motor recém-lançado levava 60-100 s; a chamada estourava o orçamento e o motor, sem o seu ficheiro às 5 s, saía). Não se simula
+// um powershell lento (o Windows não deixa pôr um .cmd no lugar do .exe): lint por texto, como o da windowsHide ---
+test('classe powershell lento: entre o lançamento do motor e a gravação do ficheiro dele não há leitura da identidade (powershell/ps) nem outra espera síncrona', () => {
+  const src = readFileSync(EXECUTOR_SRC, 'utf8');
+  const a = src.indexOf("lancaProc(process.execPath, [fileURLToPath(import.meta.url)"), b = src.indexOf('writeFileSync(motorFicheiro', a);
+  assert.ok(a > 0 && b > a, 'o lint não encontrou o lançamento do motor: o padrão está errado');
+  const meio = src.slice(a, b);
+  assert.doesNotMatch(meio, /identidade\(|lancaProcSync\(|spawnSync\(|execSync\(|Atomics\.wait/);
+  assert.match(src, /motor = \{ pid: p\.pid, nonce, sha:/, 'o ficheiro do motor tem de ser gravado logo a seguir ao lançamento');
+});

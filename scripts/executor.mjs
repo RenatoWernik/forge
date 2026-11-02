@@ -271,8 +271,8 @@ export function identidade(pid) {
     return inicio ? { inicio: inicio.trim(), cmd: cmd.join(' ') } : null;
   } catch { return null; }
 }
-// o motor está vivo se o ficheiro dele não tem `fim` e o PID existe; no modo estrito (decisões) a hora de arranque tem de coincidir e a linha de
-// comando tem de ter `--motor-interno` e o nonce: depois de um reinício o PID gravado pode ser de outro processo
+// o motor está vivo se o ficheiro dele não tem `fim` e o PID existe; no modo estrito (decisões) a linha de comando tem de ter `--motor-interno`
+// e o nonce: depois de um reinício o PID gravado pode ser de outro processo
 const motorVivo = (f, estrito = false) => {
   const j = lerJsonSeguro(f);
   if (!j || j.fim || !(j.pid > 0) || !vivoPid(j.pid)) return null;
@@ -283,7 +283,7 @@ const motorVivo = (f, estrito = false) => {
   if (j.nonce && bat?.pid === j.pid && bat.nonce === j.nonce && Date.now() - bat.t < 30000) return j;
   const id = identidade(j.pid);
   if (id?.desconhecida) return j; // o PID existe e não se conseguiu ler quem é: fica vivo (lançar um 2.º motor seria pior que esperar)
-  return id && j.nonce && id.cmd.includes('--motor-interno') && id.cmd.includes(j.nonce) && (!j.inicio_proc || id.inicio === j.inicio_proc) ? j : null;
+  return id && j.nonce && id.cmd.includes('--motor-interno') && id.cmd.includes(j.nonce) ? j : null;
 };
 // O motor morreu (matar a árvore com /T mata as unidades primeiro): uma unidade em fail/limite desse motor (o nonce) que acabou nos 5 s antes do
 // último batimento é arrasto da morte, não um resultado: sai do ficheiro de resultados e volta a correr; o tap antigo fica como .morto. As pass e as
@@ -330,7 +330,9 @@ async function chamada(argv, saida) {
           cwd: dirname(fileURLToPath(import.meta.url)), stdio: ['ignore', log, log], detached: true });
         p.unref();
         closeSync(log);
-        motor = { pid: p.pid, nonce, inicio_proc: identidade(p.pid)?.inicio ?? null, sha: c.sha, arvore: c.arvore, passe: o.passe, suites: o.suites, inicio: new Date().toISOString() };
+        // shortcut: sem a hora de arranque do motor (o powershell que a lê levava 60-100 s numa máquina carregada e a chamada ficava presa, com o motor
+        // sem o seu ficheiro); o nonce na linha de comando já distingue o motor de um PID reutilizado
+        motor = { pid: p.pid, nonce, sha: c.sha, arvore: c.arvore, passe: o.passe, suites: o.suites, inicio: new Date().toISOString() };
         writeFileSync(motorFicheiro, JSON.stringify(motor));
       }
     } finally { rm(lock); }
