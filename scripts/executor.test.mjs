@@ -137,3 +137,23 @@ test('limite_s de um bloco ({padrao, limite_s}) substitui o da suíte, e o limit
   const res = JSON.parse(readFileSync(join(d, '.forge/resultados', readdirSync(join(d, '.forge/resultados')).find((n) => n.endsWith('.json'))), 'utf8'));
   assert.deepEqual(res.unidades.map((u) => [u.bloco, u.estado]).sort(), [['^lento', 'pass'], ['^rapido', 'pass']]);
 });
+
+test('exclusiva por ficheiro (lista de globs): só esse ficheiro corre sozinho na máquina; os outros da suíte continuam em paralelo', () => {
+  const d = tmp(), reg = join(d, '.forge/intervalos.txt').replaceAll('\\', '/');
+  mkdirSync(join(d, 'scripts')); mkdirSync(join(d, 't')); mkdirSync(join(d, '.forge')); // .forge/ está no .gitignore: o registo não suja a árvore
+  for (const n of ['a', 'b', 'c']) {
+    writeFileSync(join(d, `t/${n}.test.mjs`), `import { test } from 'node:test';\nimport { appendFileSync } from 'node:fs';\n`
+      + `test('${n}', async () => { const i = Date.now(); await new Promise((r) => setTimeout(r, 1500)); appendFileSync('${reg}', '${n} ' + i + ' ' + Date.now() + '\\n'); });\n`);
+  }
+  writeFileSync(join(d, 'scripts/suites.json'), JSON.stringify({ versao: 1, paralelo: 3, vagas_globais: 3, carga_sensivel: 3, orcamento_s: 60,
+    suites: [{ nome: 's', tipo: 'node-test', ficheiros: ['t/*.test.mjs'], limite_s: 30, exclusiva: ['t/a.test.mjs'] }] }));
+  writeFileSync(join(d, '.gitignore'), '.forge/\n');
+  const g = (...a) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...a], { cwd: d, encoding: 'utf8' });
+  g('init', '-q'); g('add', '-A'); g('commit', '-q', '-m', 'x');
+  const r = executor(d, '--todas');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const iv = Object.fromEntries(readFileSync(join(d, '.forge/intervalos.txt'), 'utf8').trim().split('\n').map((l) => { const [n, i, f] = l.split(' '); return [n, [+i, +f]]; }));
+  const cruza = (x, y) => x[0] < y[1] && y[0] < x[1];
+  assert.ok(!cruza(iv.a, iv.b) && !cruza(iv.a, iv.c), `a (exclusiva) cruzou-se com outra unidade: ${JSON.stringify(iv)}`);
+  assert.ok(cruza(iv.b, iv.c), `b e c (não exclusivas) deviam correr em paralelo: ${JSON.stringify(iv)}`);
+});

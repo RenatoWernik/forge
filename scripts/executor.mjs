@@ -152,7 +152,7 @@ class Vagas {
   }
   // uma vaga para a unidade, ou null; depois de escrever a info, relê-se tudo: quem chega por último vê os outros e desiste se passar o limite
   tenta(u) {
-    const { sensivel } = u, { exclusiva } = u.suite;
+    const { sensivel, exclusiva } = u;
     if (exclusiva) return this.tentaExclusiva(u);
     if (ocupada(this.slot('x'))) return null;
     for (let i = 0; i < this.n; i++) {
@@ -243,13 +243,16 @@ function planeia(m, escolha, raiz, medidas) {
     // um bloco é o padrão (texto) ou {padrao, limite_s}: o limite_s do bloco, se houver, substitui o da suíte
     // sensivel_ao_tempo: true (a suíte toda) ou uma lista de globs (só esses ficheiros)
     const sensiveis = new Set(Array.isArray(s.sensivel_ao_tempo) ? s.sensivel_ao_tempo.flatMap((g) => globSync(g, { cwd: raiz }).map((f) => f.replaceAll('\\', '/'))) : []);
+    // exclusiva: o mesmo (true, ou uma lista de globs de ficheiros)
+    const exclusivos = new Set(Array.isArray(s.exclusiva) ? s.exclusiva.flatMap((g) => globSync(g, { cwd: raiz }).map((f) => f.replaceAll('\\', '/'))) : []);
     for (const ficheiro of ficheiros) for (const b of s.blocos?.[ficheiro] ?? [null]) {
       const bloco = b === null || typeof b === 'string' ? b : b.padrao, limite_s = b?.limite_s ?? s.limite_s, chave = `${ficheiro}\0${bloco ?? ''}`;
-      us.push({ suite: s, ficheiro, bloco, chave, limite_s, sensivel: s.sensivel_ao_tempo === true || sensiveis.has(ficheiro), peso: medidas.get(chave) ?? limite_s });
+      us.push({ suite: s, ficheiro, bloco, chave, limite_s, sensivel: s.sensivel_ao_tempo === true || sensiveis.has(ficheiro),
+        exclusiva: s.exclusiva === true || exclusivos.has(ficheiro), peso: medidas.get(chave) ?? limite_s });
     }
   }
   us.forEach((u, i) => { u.ordem = i; });
-  const classe = (u) => (u.suite.exclusiva ? 0 : u.sensivel ? 2 : 1);
+  const classe = (u) => (u.exclusiva ? 0 : u.sensivel ? 2 : 1);
   return us.toSorted((a, b) => classe(a) - classe(b) || b.peso - a.peso || a.ordem - b.ordem);
 }
 
@@ -549,7 +552,7 @@ async function motorCorre(argv, saida) {
         if (correm.size >= paralelo) break;
         let vaga = null;
         try { vaga = vagas.tenta(u); } catch { /* o sistema de ficheiros das vagas falhou neste passo: um erro a meio da corrida não deita abaixo as unidades que correm */ }
-        if (!vaga) { if (u.suite.exclusiva) break; continue; }
+        if (!vaga) { if (u.exclusiva) break; continue; }
         if (!confere()) { vagas.larga(vaga.dirs); break; } // o HEAD ou a árvore mudaram: não se lança mais nada (o git só corre quando há vaga para lançar)
         lanca(u, vaga);
       }
@@ -564,7 +567,7 @@ async function motorCorre(argv, saida) {
   if (!fatal && !invalido && plano.every((u) => feitas.has(u.chave))) {
     escreve(false);
     await roda(plano.filter((u) => pendenteF2(feitas.get(u.chave))).map((u, i) => ({
-      suite: { ...u.suite, sensivel_ao_tempo: false, exclusiva: false }, ficheiro: u.ficheiro, bloco: null, chave: `${u.chave}\0fase2`, base: u.chave, fase: 2,
+      suite: { ...u.suite, sensivel_ao_tempo: false, exclusiva: false }, sensivel: false, exclusiva: false, ficheiro: u.ficheiro, bloco: null, chave: `${u.chave}\0fase2`, base: u.chave, fase: 2,
       limite_s: Math.min(u.limite_s, FASE2_LIMITE_S), nomes: feitas.get(u.chave).skips.filter((s) => s.motivo === MOTIVO_LOTE).map((s) => desfazTap(s.teste)), ordem: plano.length + i })));
   }
 

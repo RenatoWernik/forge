@@ -7,7 +7,7 @@
     { "nome": "f-03-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-03-r0/*.test.mjs"], "limite_s": 495 },
     { "nome": "f-04-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-04-r0/*.test.mjs"], "limite_s": 495 },
     { "nome": "f-05-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-05-r0/*.test.mjs"], "limite_s": 400 },
-    { "nome": "f-06-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-06-r0/*.test.mjs"], "limite_s": 495, "sensivel_ao_tempo": true },
+    { "nome": "f-06-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-06-r0/*.test.mjs"], "limite_s": 495, "sensivel_ao_tempo": true, "exclusiva": ["tests/critico/f-06-r0/regressao.test.mjs"] },
     { "nome": "f-07-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-07-r0/*.test.mjs"], "limite_s": 400 },
     { "nome": "f-08-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-08-r0/*.test.mjs"], "limite_s": 90 },
     { "nome": "f-09-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-09-r0/*.test.mjs"], "limite_s": 495 },

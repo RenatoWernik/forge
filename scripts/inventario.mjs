@@ -41,11 +41,22 @@ function inventarioDe(json, logs) {
 // o motivo de um skip pode trazer o sha da base («o F-21a já está na base 8ad82bc»): dois runs de shas diferentes dizem o mesmo skip
 const semSha = (m) => m.replace(/\b[0-9a-f]{7,40}\b/g, '<sha>');
 
+// um nome de «antes» com o primeiro grupo vazio (` > <nome>`) é o de um teste que correu aninhado, dentro do filho de outro ficheiro (a cópia que o
+// doLote elimina). Conta como presente só se o mesmo teste (o nome sem o prefixo) tiver `ok` no ficheiro próprio, noutra chave de «depois».
+const nomeDe = (k) => k.split(' › ').slice(2).join(' › ');
+const NESTED = ' > ';
+
 export function compara(antes, depois) {
-  const apagados = [], semOk = [], skipsNovos = [];
+  const apagados = [], semOk = [], skipsNovos = [], aninhados = [];
+  const proprios = new Map(); // nome → chaves de «depois» com pass nesse nome (ficheiro próprio)
+  for (const [k, ed] of depois) if (ed.some((e) => e.estado === 'pass')) { const n = nomeDe(k); proprios.set(n, [...(proprios.get(n) ?? []), k]); }
   for (const [k, ea] of antes) {
     const ed = depois.get(k);
-    if (!ed) { apagados.push(k); continue; }
+    if (!ed) {
+      const nome = nomeDe(k), proprio = nome.startsWith(NESTED) && ea.some((e) => e.estado === 'pass') ? proprios.get(nome.slice(NESTED.length)) : null;
+      if (proprio) aninhados.push(`${k} → ${proprio[0]}`); else apagados.push(k);
+      continue;
+    }
     const ok = ed.some((e) => e.estado === 'pass');
     if (ea.some((e) => e.estado === 'pass') && !ok) semOk.push(k);
     for (const e of ed.filter((x) => x.estado === 'skip')) {
@@ -53,7 +64,7 @@ export function compara(antes, depois) {
       if (novo) skipsNovos.push(`${k} (skip: ${e.motivo || 'sem motivo'})`);
     }
   }
-  return { apagados, semOk, skipsNovos };
+  return { apagados, semOk, skipsNovos, aninhados };
 }
 
 function lerArgs(argv) {
@@ -77,12 +88,13 @@ export function inventario(argv, saida = (l) => console.log(l)) {
   const o = lerArgs(argv);
   const antes = inventarioDe(o.antes, o.logsAntes), depois = inventarioDe(o.depois, o.logsDepois);
   if (o.lista) for (const [k, es] of depois) for (const e of es) saida(`${k.replaceAll(' › ', '\t')}\t${e.estado}`);
-  const { apagados, semOk, skipsNovos } = compara(antes, depois);
+  const { apagados, semOk, skipsNovos, aninhados } = compara(antes, depois);
   for (const [rotulo, lista] of [['APAGADO (existia em antes e não existe em depois)', apagados], ['SEM EXECUÇÃO OK (estava ok em antes)', semOk], ['SKIP NOVO', skipsNovos]]) {
     for (const k of lista) saida(`${rotulo}: ${k}`);
   }
+  for (const k of aninhados) saida(`ANINHADO COBERTO (só existia aninhado; tem ok no ficheiro próprio): ${k}`);
   const mau = apagados.length + semOk.length + skipsNovos.length;
-  saida(`inventário: ${antes.size} nomes em antes, ${depois.size} em depois; ${apagados.length} apagados, ${semOk.length} sem execução ok, ${skipsNovos.length} skips novos → ${mau ? 'FALHA' : 'OK'}`);
+  saida(`inventário: ${antes.size} nomes em antes, ${depois.size} em depois; ${apagados.length} apagados, ${semOk.length} sem execução ok, ${skipsNovos.length} skips novos, ${aninhados.length} aninhados cobertos pelo ficheiro próprio → ${mau ? 'FALHA' : 'OK'}`);
   return mau ? 1 : 0;
 }
 

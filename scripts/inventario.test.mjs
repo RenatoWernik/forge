@@ -17,11 +17,23 @@ test('compara: apagado, sem execução ok e skip novo; o skip do lote só vale c
   const m = (...es) => es.map(([estado, motivo = '']) => ({ estado, motivo }));
   const antes = new Map([['a', m(['pass'])], ['b', m(['pass'])], ['c', m(['pass'])], ['d', m(['skip', 'x'])], ['e', m(['pass'])]]);
   const depois = new Map([['a', m(['skip', 'lote: satisfeito na fase 2'], ['pass'])], ['b', m(['fail'])], ['c', m(['skip', 'outro'])], ['d', m(['skip', 'x'])]]);
-  assert.deepEqual(compara(antes, depois), { apagados: ['e'], semOk: ['b', 'c'], skipsNovos: ['c (skip: outro)'] });
+  assert.deepEqual(compara(antes, depois), { apagados: ['e'], semOk: ['b', 'c'], skipsNovos: ['c (skip: outro)'], aninhados: [] });
 });
 
 test('compara: o sha no motivo de um skip não o torna novo', () => {
   const skip = (motivo) => new Map([['f', [{ estado: 'skip', motivo }]]]);
   assert.deepEqual(compara(skip('já está na base 8ad82bcb49b9'), skip('já está na base 0123abc')).skipsNovos, []);
   assert.deepEqual(compara(skip('já está na base 8ad82bc'), skip('outro motivo 0123abc')).skipsNovos, ['f (skip: outro motivo 0123abc)']);
+});
+
+test('compara (P9): um nome só aninhado em «antes» conta se o mesmo teste tem ok no ficheiro próprio em «depois», e fica listado à parte; um apagado de verdade continua a falhar', () => {
+  const ok = [{ estado: 'pass', motivo: '' }], falha = [{ estado: 'fail', motivo: '' }];
+  const antes = new Map([
+    ['f-04 › t/f-04/regressao.mjs ›  > C1: alfa', ok], ['f-04 › t/f-04/regressao.mjs ›  > C2: so skip', ok], ['f-04 › t/f-04/regressao.mjs ›  > C3: apagado', ok],
+    ['f-04 › t/f-04/regressao.mjs › regressão: normal apagado', ok], ['f-04 › t/f-04/regressao.mjs ›  > C5: falhava', [{ estado: 'fail', motivo: '' }]]]);
+  const depois = new Map([
+    ['f-02 › t/f-02/c1.mjs › C1: alfa', ok], ['f-02 › t/f-02/c2.mjs › C2: so skip', [{ estado: 'skip', motivo: 'x' }]], ['f-02 › t/f-02/c5.mjs › C5: falhava', falha]]);
+  const r = compara(antes, depois);
+  assert.deepEqual(r.aninhados, ['f-04 › t/f-04/regressao.mjs ›  > C1: alfa → f-02 › t/f-02/c1.mjs › C1: alfa']);
+  assert.deepEqual(r.apagados.sort(), ['f-04 › t/f-04/regressao.mjs ›  > C2: so skip', 'f-04 › t/f-04/regressao.mjs ›  > C3: apagado', 'f-04 › t/f-04/regressao.mjs ›  > C5: falhava', 'f-04 › t/f-04/regressao.mjs › regressão: normal apagado']);
 });
