@@ -182,7 +182,8 @@ async function main(argv) {
   diz('esquema', p6);
 
   const falhou = passos.some((p) => p.estado === 'FAIL'), pendente = passos.some((p) => p.estado === 'pendente');
-  const codigo = falhou ? 1 : pendente ? 3 : 0;
+  // enquanto o executor não acabou (3), um FAIL de outro passo não fecha a corrida: o resultado do passo 4 ou 5 ainda pode mudar
+  const codigo = pendente ? 3 : falhou ? 1 : 0;
   const pasta = join(raiz, '.forge', 'check-ticket'), rel = join(pasta, `${sha}.json`);
   mkdirSync(pasta, { recursive: true });
   writeFileSync(`${rel}.tmp`, JSON.stringify({ versao: 1, sha, base: o.base, ambito: o.ambito, ficheiros, suites, resultado: falhou ? 'VERMELHO' : pendente ? 'INCOMPLETO' : 'VERDE',
