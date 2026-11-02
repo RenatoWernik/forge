@@ -256,6 +256,40 @@ test('classe spawns: o número de processos que o motor lança não cresce com o
   assert.ok(res.processos <= 2 * 8 + 5, `o motor lançou ${res.processos} processos para 2 unidades`);
 });
 
+test('C9 (batimento): um fail real, longe da morte do motor (> 5 s antes do último batimento), continua final e a unidade não volta a correr', { timeout: 150000 }, async () => {
+  const d = montar('failreal', { paralelo: 2, orcamento_s: 6, suites: [{ nome: 'q', limite_s: 60 }] }, { 'q-1': 1, 'q-2': 25 });
+  writeFileSync(join(d, 's', 'q-1.fx.mjs'), `import { test } from 'node:test';\nimport { marca } from '../sonda.mjs';\ntest('falha a sério', () => { marca(import.meta.url, 'inicio'); throw new Error('falha real'); });\n`);
+  gitOk(d, 'commit', '-qam', 'q-1 falha');
+  const env = tempPrivado();
+  const r1 = await correr(d, ['--todas'], { env, limite_ms: 60000 });
+  const [motor] = motores(d);
+  assert.equal(r1.status, 3, saida(r1));
+  assert.ok(await esperaAte(() => feitas(d).find((u) => u.ficheiro === 's/q-1.fx.mjs')?.estado === 'fail', 15000), 'o q-1 não ficou em fail');
+  const fimFail = Date.parse(feitas(d).find((u) => u.ficheiro === 's/q-1.fx.mjs').fim);
+  assert.ok(await esperaAte(() => Date.parse(motores(d)[0].batimento) - fimFail > 6000, 20000), 'o batimento não avançou 6 s depois do fail');
+  mataArvore(motor.pid);
+  assert.ok(await esperaAte(() => !vivo(motor.pid), 10000), 'o motor não morreu');
+  const codigos = [];
+  for (let i = 0; i < 4; i++) { codigos.push((await correr(d, ['--todas', '--continuar'], { env, limite_ms: 90000 })).status); motores(d); if (codigos.at(-1) !== 3) break; }
+  assert.equal(codigos.at(-1), 1, `a cadeia devia acabar com 1 (um fail real): ${codigos.join(', ')}`);
+  const us = Object.fromEntries(feitas(d).map((u) => [u.ficheiro, u.estado]));
+  assert.deepEqual(us, { 's/q-1.fx.mjs': 'fail', 's/q-2.fx.mjs': 'pass' });
+  assert.equal(inicios(d, 's/q-1.fx.mjs').length, 1, 'o fail real voltou a correr');
+});
+
+test('faixa sensível por ficheiro: sensivel_ao_tempo com uma lista de ficheiros prende a carga só enquanto esses correm; os outros da suíte correm juntos', { timeout: 90000 }, async () => {
+  const d = montar('sensivelficheiro', { paralelo: 4, vagas_globais: 4, carga_sensivel: 1, orcamento_s: 60,
+    suites: [{ nome: 'q', limite_s: 60, sensivel_ao_tempo: ['s/q-a.fx.mjs', 's/q-b.fx.mjs'] }] }, { 'q-a': 3, 'q-b': 3, 'q-c': 3, 'q-d': 3 });
+  const r = await correr(d, ['--todas'], { env: tempPrivado(), limite_ms: 80000 });
+  motores(d);
+  assert.equal(r.status, 0, saida(r));
+  const ints = intervalos(eventos(d)), por = (f) => ints.find((i) => i.f === `s/${f}.fx.mjs`);
+  assert.equal(ints.length, 4);
+  assert.ok(sobreposicaoMax([por('q-c'), por('q-d')]) >= 2, 'as unidades não marcadas deviam correr juntas');
+  for (const f of ['q-a', 'q-b']) assert.equal(sobreposicaoMax(ints, por(f).ini, por(f).fim), 1, `${f} (sensível) correu com outras unidades`);
+  assert.equal(Object.fromEntries(feitas(d).map((u) => [u.ficheiro, u.concorrentes_max]))['s/q-a.fx.mjs'], 1);
+});
+
 function motoresLog(d) {
   const pasta = join(d, '.forge', 'motor');
   return existsSync(pasta) ? readdirSync(pasta).filter((n) => n.endsWith('.log')).map((n) => readFileSync(join(pasta, n), 'utf8')).join('\n') : '';
