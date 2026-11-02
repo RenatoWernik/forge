@@ -93,6 +93,8 @@ async function corre(prefixo, raiz, suites, sha, continuar) {
   try { codigo = await executa(['--suites', suites.join(','), '--raiz', raiz, ...(continuar ? ['--continuar'] : [])], { saida: (l) => { saidas.push(l); console.log(`  [${prefixo}] ${l}`); } }); }
   catch (e) { return { estado: 'FAIL', detalhe: curto(`executor: ${e.message}`), suites: {} }; }
   const ficheiro = /→ (.+)$/.exec(saidas.at(-1) ?? '')?.[1];
+  // código 3 sem ficheiro: o motor ainda corre e a chamada só disse «repita com --continuar»
+  if (codigo === 3 && !(ficheiro && existsSync(ficheiro))) return { estado: 'pendente', detalhe: curto(`incompleto: repetir com --continuar (${suites.join(', ')})`), suites: {} };
   if (!ficheiro || !existsSync(ficheiro)) return { estado: 'FAIL', detalhe: 'o executor não deixou resultados', suites: {} };
   const res = lerJson(ficheiro);
   if (res.valido === false) return { estado: 'FAIL', detalhe: curto(`resultado invalidado: ${res.motivo ?? 'a árvore ou o HEAD mudaram'}`), suites: {}, ficheiro };

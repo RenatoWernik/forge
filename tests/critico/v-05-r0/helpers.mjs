@@ -161,9 +161,10 @@ export function cenario(ramo = () => {}, sujo = () => {}) {
   escreve(d, 'scripts/mapa-suites.test.mjs', LINT_MAPA);
   copyFileSync(join(ROOT, 'scripts/guardas-critico.test.mjs'), join(d, 'scripts/guardas-critico.test.mjs'));
   escreve(d, 'scripts/guardas-legado.json', JSON.stringify({ legado: [], emCurso: [] }) + '\n');
-  cpSync(join(ROOT, 'scripts/corpus/guardas'), join(d, 'scripts/corpus/guardas'), { recursive: true });
+  for (const c of ['guardas', 'guardas-l4']) cpSync(join(ROOT, 'scripts/corpus', c), join(d, 'scripts/corpus', c), { recursive: true }); // o lint (V-03) lê os dois corpora
   escreve(d, 'scripts/corpus/mutations/m1.json', FX.mutacao);
   escreve(d, 'tests/critico/_comum/ambito.mjs', readFileSync(join(ROOT, 'tests/critico/_comum/ambito.mjs'), 'utf8'));
+  escreve(d, 'tests/critico/f-01-r0/.gitkeep', ''); // o L4 (V-03) só reconhece «outra pasta» se ela existir, e o corpus dele usa a f-01-r0
   escreve(d, 'tests/critico/a-r0/x.test.mjs', FX.x);
   escreve(d, 'tests/critico/c-r0/z.test.mjs', FX.consumidor(['file', 'find', 'replace']));
   gitOk(d, 'init', '-q', '-b', 'main');

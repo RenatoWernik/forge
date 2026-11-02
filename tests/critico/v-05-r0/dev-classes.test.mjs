@@ -51,11 +51,11 @@ test('classe: erros de uso dão 2 e não chamam o gh (sem --ambito, --publicar q
 test('classe: o orçamento do executor não chega: código 3 sem publicar; com --continuar acaba o que falta e dá 0, com os 6 ok', async () => {
   const d = cenario((r) => {
     const m = JSON.parse(readFileSync(join(r, 'scripts/suites.json'), 'utf8'));
-    Object.assign(m, { paralelo: 1, orcamento_s: 7 });
-    m.suites = m.suites.map((s) => ({ ...s, limite_s: 6 }));
-    m.suites.push({ nome: 'b-r0', tipo: 'node-test', ficheiros: ['tests/critico/b-r0/*.test.mjs'], limite_s: 6 });
+    Object.assign(m, { orcamento_s: 4 });
+    m.suites.push({ nome: 'b-r0', tipo: 'node-test', ficheiros: ['tests/critico/b-r0/*.test.mjs'], limite_s: 60 });
     escreve(r, 'scripts/suites.json', JSON.stringify(m, null, 2) + '\n');
-    escreve(r, 'tests/critico/b-r0/y.test.mjs', 'import test from "node:test";\ntest("b: verde", () => {});\n');
+    // uma suíte lenta (10 s) com o orçamento a 4 s: a 1.ª chamada não chega; o motor continua e o --continuar liga-se a ele
+    escreve(r, 'tests/critico/b-r0/y.test.mjs', 'import test from "node:test";\ntest("b: lento", async () => { await new Promise((f) => setTimeout(f, 10000)); });\n');
   });
   const args = ['--ambito', ...A, 'tests/critico/b-r0/**', 'scripts/suites.json', '--base', 'origin/main', '--publicar', '7'];
   const gh = ghFalso(), temp = tmp('v05-temp-'); // o mesmo TEMP nas chamadas: o clone do pós-merge vive lá e o --continuar reaproveita-o
