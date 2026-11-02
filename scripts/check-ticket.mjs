@@ -95,6 +95,7 @@ async function corre(prefixo, raiz, suites, sha, continuar) {
   const ficheiro = /→ (.+)$/.exec(saidas.at(-1) ?? '')?.[1];
   if (!ficheiro || !existsSync(ficheiro)) return { estado: 'FAIL', detalhe: 'o executor não deixou resultados', suites: {} };
   const res = lerJson(ficheiro);
+  if (res.valido === false) return { estado: 'FAIL', detalhe: curto(`resultado invalidado: ${res.motivo ?? 'a árvore ou o HEAD mudaram'}`), suites: {}, ficheiro };
   const maus = res.unidades.filter((u) => u.estado !== 'pass').map((u) => `${u.suite}: ${u.estado} ${u.ficheiro}`);
   const estados = Object.fromEntries(Object.entries(res.suites).map(([n, s]) => [n, s.estado]));
   if (maus.length) return { estado: 'FAIL', detalhe: curto(maus.join('; ')), suites: estados, ficheiro };
