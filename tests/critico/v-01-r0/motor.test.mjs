@@ -3,37 +3,15 @@
 // o início e o fim em .sonda/); cada cenário tem um TEMP privado, por isso as vagas da máquina ficam intactas. Reutiliza o arnês dos ataques.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FIXTURES, correr, esperaAte, eventos, gitOk, inicios, intervalos, lerJson, limpa, mataArvore, registaPid, resultados, saida, sobreposicaoMax,
+import { FIXTURES, correr, esperaAte, eventos, gitOk, inicios, intervalos, lerJson, limpa, mataArvore, pastaResultados, registaPid, resultados, saida, sobreposicaoMax,
   tempPrivado, tmp, umResultado, validaResultado, vivo } from './helpers.mjs';
+import { feitas, montar, motores } from './motor-comum.mjs';
 
 after(limpa);
-
-const UNIDADE = (seg) => `import { test } from 'node:test';\nimport { marca, dorme } from '../sonda.mjs';\n`
-  + `test('dorme', async () => { marca(import.meta.url, 'inicio'); await dorme(${seg}); marca(import.meta.url, 'fim'); });\n`;
-// um repo git temporário: scripts/suites.json (as suites vêm como [{nome, limite_s, ...}] sobre os ficheiros s/<nome>.*.fx.mjs) e uma unidade por nome
-function montar(nome, manifesto, unidades) {
-  const d = tmp(`motor-${nome}-`);
-  mkdirSync(join(d, 'scripts')); mkdirSync(join(d, 's'));
-  copyFileSync(join(FIXTURES, 'sonda.mjs'), join(d, 'sonda.mjs'));
-  copyFileSync(join(FIXTURES, 'gitignore'), join(d, '.gitignore'));
-  for (const [n, seg] of Object.entries(unidades)) writeFileSync(join(d, 's', `${n}.fx.mjs`), UNIDADE(seg));
-  const suites = manifesto.suites.map((s) => ({ tipo: 'node-test', ficheiros: [`s/${s.nome}*.fx.mjs`], ...s }));
-  writeFileSync(join(d, 'scripts', 'suites.json'), JSON.stringify({ versao: 1, vagas_globais: 4, carga_sensivel: 4, ...manifesto, suites }));
-  gitOk(d, 'init', '-q', '-b', 'main'); gitOk(d, 'config', 'core.autocrlf', 'false'); gitOk(d, 'add', '-A'); gitOk(d, 'commit', '-q', '-m', 'fixture');
-  return d;
-}
-// os motores deste repo (o PID de cada .forge/motor/*.json); regista-os para o `limpa` os matar pela árvore
-const motores = (d) => {
-  const pasta = join(d, '.forge', 'motor');
-  const js = existsSync(pasta) ? readdirSync(pasta).filter((n) => n.endsWith('.json')).map((n) => lerJson(join(pasta, n))) : [];
-  for (const j of js) registaPid(j.pid);
-  return js;
-};
-const feitas = (d) => umResultado(d).dados.unidades;
 
 test('C8: a chamada não mata: 4 unidades de 60 s com orcamento_s 20 saem com 3 em ≤ 30 s e acabam todas em pass, sem limite', { timeout: 150000 }, async () => {
   const d = montar('c8', { paralelo: 4, orcamento_s: 20, suites: [{ nome: 'q', limite_s: 480 }] }, { 'q-1': 60, 'q-2': 60, 'q-3': 60, 'q-4': 60 });
@@ -305,4 +283,54 @@ test('classe powershell lento: entre o lançamento do motor e a gravação do fi
   const meio = src.slice(a, b);
   assert.doesNotMatch(meio, /identidade\(|lancaProcSync\(|spawnSync\(|execSync\(|Atomics\.wait/);
   assert.match(src, /motor = \{ pid: p\.pid, nonce, sha:/, 'o ficheiro do motor tem de ser gravado logo a seguir ao lançamento');
+});
+
+// --- C9-a (determinístico, sem queimar CPU): reproduz a corrida exata. Corre-se a fila até ao fim, e depois forja-se o que a morte do motor deixa:
+// o ficheiro do motor sem `fim` com um PID morto, o batimento e uma unidade com o estado, o nonce_motor e o fim indicados. Um `--continuar` decide ---
+const pidMorto = () => spawnSync(process.execPath, ['-e', ''], { windowsHide: true }).pid;
+async function cenarioMorte({ nome, estado, nonce = 'dele', deslocamento = 1000 }) {
+  const d = montar(`c9a-${nome}`, { paralelo: 2, orcamento_s: 40, suites: [{ nome: 'q', limite_s: 60 }] }, { 'q-1': 1, 'q-2': 1 });
+  const env = tempPrivado();
+  const r0 = await correr(d, ['--todas'], { env, limite_ms: 70000 });
+  motores(d);
+  assert.equal(r0.status, 0, saida(r0));
+  const pasta = join(d, '.forge', 'motor'), mf = join(pasta, readdirSync(pasta).find((n) => n.endsWith('.json')));
+  const mot = lerJson(mf), t = Date.now();
+  const nonceMorto = 'a1'.repeat(8);
+  // o motor «morto»: sem fim, PID que já não existe, batimento de agora
+  writeFileSync(mf, JSON.stringify({ ...mot, pid: pidMorto(), nonce: nonceMorto, fim: undefined }));
+  writeFileSync(`${mf}.bat`, JSON.stringify({ pid: 1, nonce: nonceMorto, t }));
+  const res = umResultado(d), r = res.dados;
+  const forjada = r.unidades.find((u) => u.ficheiro === 's/q-1.fx.mjs'), outra = r.unidades.find((u) => u.ficheiro === 's/q-2.fx.mjs');
+  Object.assign(forjada, { estado, nonce_motor: nonce === 'dele' ? nonceMorto : nonce, fim: new Date(t - deslocamento).toISOString() });
+  Object.assign(outra, { estado: 'pass', nonce_motor: nonceMorto, fim: new Date(t - 500).toISOString() });
+  writeFileSync(join(pastaResultados(d), res.nome), JSON.stringify(r, null, 2));
+  const codigos = [];
+  for (let i = 0; i < 4; i++) { codigos.push((await correr(d, ['--todas', '--continuar'], { env, limite_ms: 70000 })).status); motores(d); if (codigos.at(-1) !== 3) break; }
+  return { d, codigos, estados: Object.fromEntries(feitas(d).map((u) => [u.ficheiro, u.estado])), corridas: (f) => inicios(d, f).length };
+}
+test('C9-a (i): uma unidade fail do motor morto, acabada nos 5 s antes do último batimento, volta a correr e a cadeia acaba em 0; a pass não volta (v)', { timeout: 200000 }, async () => {
+  const c = await cenarioMorte({ nome: 'fail', estado: 'fail' });
+  assert.equal(c.codigos.at(-1), 0, `cadeia: ${c.codigos}`);
+  assert.deepEqual(c.estados, { 's/q-1.fx.mjs': 'pass', 's/q-2.fx.mjs': 'pass' });
+  assert.equal(c.corridas('s/q-1.fx.mjs'), 2, 'a unidade fail devia ter voltado a correr');
+  assert.equal(c.corridas('s/q-2.fx.mjs'), 1, 'a pass não pode voltar a correr (v)');
+});
+test('C9-a (ii): o mesmo com limite', { timeout: 200000 }, async () => {
+  const c = await cenarioMorte({ nome: 'limite', estado: 'limite' });
+  assert.equal(c.codigos.at(-1), 0, `cadeia: ${c.codigos}`);
+  assert.equal(c.corridas('s/q-1.fx.mjs'), 2);
+  assert.equal(c.corridas('s/q-2.fx.mjs'), 1);
+});
+test('C9-a (iii): uma unidade fail com fim mais de 5 s antes do último batimento continua final (a cadeia acaba em 1, sem a relançar)', { timeout: 200000 }, async () => {
+  const c = await cenarioMorte({ nome: 'antiga', estado: 'fail', deslocamento: 6000 });
+  assert.equal(c.codigos.at(-1), 1, `cadeia: ${c.codigos}`);
+  assert.equal(c.estados['s/q-1.fx.mjs'], 'fail');
+  assert.equal(c.corridas('s/q-1.fx.mjs'), 1, 'um fail antigo não pode voltar a correr');
+});
+test('C9-a (iv): uma unidade fail com o nonce de outro motor continua final', { timeout: 200000 }, async () => {
+  const c = await cenarioMorte({ nome: 'outro', estado: 'fail', nonce: 'b2'.repeat(8) });
+  assert.equal(c.codigos.at(-1), 1, `cadeia: ${c.codigos}`);
+  assert.equal(c.estados['s/q-1.fx.mjs'], 'fail');
+  assert.equal(c.corridas('s/q-1.fx.mjs'), 1);
 });
