@@ -46,7 +46,8 @@ function prepara(repo) {
   const nomes = new Set(m.suites.map((s) => s.nome));
   escreve(repo, 'scripts/suites.json', JSON.stringify(m, null, 2) + '\n');
   const mapa = JSON.parse(gitOk(ROOT, 'show', 'HEAD:scripts/mapa-suites.json'));
-  mapa.regras = mapa.regras.map((r) => ({ ...r, suites: r.suites.filter((s) => s === '*' || nomes.has(s)) })).filter((r) => r.suites.length);
+  // o mapa do V-02 (versao 1): `sempre` só pode nomear suítes do manifesto; `foraDaLista` pode nomear pastas que ainda não existem
+  mapa.sempre = Object.fromEntries(Object.entries(mapa.sempre ?? {}).filter(([s]) => nomes.has(s)));
   escreve(repo, 'scripts/mapa-suites.json', JSON.stringify(mapa, null, 2) + '\n');
   appendFileSync(join(repo, '.gitignore'), '\n.forge/\n');
   gitOk(repo, 'add', '-A');

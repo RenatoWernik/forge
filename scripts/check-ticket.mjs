@@ -100,6 +100,8 @@ async function corre(prefixo, raiz, suites, sha, continuar) {
   if (res.valido === false) return { estado: 'FAIL', detalhe: curto(`resultado invalidado: ${res.motivo ?? 'a árvore ou o HEAD mudaram'}`), suites: {}, ficheiro };
   const maus = res.unidades.filter((u) => u.estado !== 'pass').map((u) => `${u.suite}: ${u.estado} ${u.ficheiro}`);
   const estados = Object.fromEntries(Object.entries(res.suites).map(([n, s]) => [n, s.estado]));
+  // o executor dá 1 com uma falha mesmo com o resultado incompleto, e as unidades por correr ainda podem falhar: só um resultado completo fecha o passo
+  if (!res.completo) return { estado: 'pendente', detalhe: curto(`incompleto${maus.length ? `, com falhas até agora (${maus.join('; ')})` : ''}: repetir com --continuar`), suites: estados, ficheiro };
   if (maus.length) return { estado: 'FAIL', detalhe: curto(maus.join('; ')), suites: estados, ficheiro };
   if (codigo === 3) return { estado: 'pendente', detalhe: curto(`incompleto: repetir com --continuar (${suites.filter((s) => estados[s] !== 'pass').join(', ')})`), suites: estados, ficheiro };
   const faltam = suites.filter((s) => estados[s] !== 'pass');
@@ -124,7 +126,8 @@ function clona(raiz, sha, continuar) {
 
 // 6: as regras `esquema: true` tocadas pelo diff e os consumidores delas (as suítes da regra) têm de ter `pass` no passo 4
 function esquema(raiz, ficheiros, todas, p4) {
-  const regras = lerJson(join(raiz, 'scripts', 'mapa-suites.json')).regras.filter((r) => r.esquema === true && ficheiros.some((f) => casa(f, r.caminhos)));
+  // o mapa do V-02 (versao 1: sempre, foraDaLista) não tem `regras`: sem regras `esquema: true` o passo não tem nada a exigir
+  const regras = (lerJson(join(raiz, 'scripts', 'mapa-suites.json')).regras ?? []).filter((r) => r.esquema === true && ficheiros.some((f) => casa(f, r.caminhos)));
   const consumidores = [...new Set(regras.flatMap((r) => (r.suites.includes('*') ? todas : r.suites)))];
   const maus = consumidores.filter((s) => ['fail', 'limite', 'erro'].includes(p4.suites[s]) || (p4.estado !== 'pendente' && p4.suites[s] !== 'pass'));
   if (maus.length) return { estado: 'FAIL', detalhe: curto(`${maus.map((s) => `${s}: ${p4.suites[s] ?? 'não correu'}`).join(', ')} (esquema de ${regras.map((r) => r.caminhos[0]).join(', ')})`) };
