@@ -1,0 +1,5 @@
+{ "versao": 1, "paralelo": 2, "vagas_globais": 4, "carga_sensivel": 3, "orcamento_s": 120,
+  "suites": [
+    { "nome": "mista", "tipo": "node-test", "ficheiros": ["mista/*.fx.mjs"], "limite_s": 60 },
+    { "nome": "verde", "tipo": "node-test", "ficheiros": ["verde/*.fx.mjs"], "limite_s": 60 }
+  ] }

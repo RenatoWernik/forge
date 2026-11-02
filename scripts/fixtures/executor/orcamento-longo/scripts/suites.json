@@ -1,0 +1,4 @@
+{ "versao": 1, "paralelo": 2, "vagas_globais": 4, "carga_sensivel": 3, "orcamento_s": 300,
+  "suites": [
+    { "nome": "longa", "tipo": "node-test", "ficheiros": ["longa/*.fx.mjs"], "limite_s": 230 }
+  ] }

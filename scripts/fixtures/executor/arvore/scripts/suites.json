@@ -1,0 +1,5 @@
+{ "versao": 1, "paralelo": 2, "vagas_globais": 4, "carga_sensivel": 3, "orcamento_s": 120,
+  "suites": [
+    { "nome": "pendura", "tipo": "node-test", "ficheiros": ["pendura/*.fx.mjs"], "limite_s": 3 },
+    { "nome": "vizinha", "tipo": "node-test", "ficheiros": ["vizinha/*.fx.mjs"], "limite_s": 60 }
+  ] }

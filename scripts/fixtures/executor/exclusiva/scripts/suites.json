@@ -1,0 +1,5 @@
+{ "versao": 1, "paralelo": 4, "vagas_globais": 6, "carga_sensivel": 3, "orcamento_s": 120,
+  "suites": [
+    { "nome": "sozinha", "tipo": "node-test", "ficheiros": ["sozinha/*.fx.mjs"], "limite_s": 30, "concorrencia": 1, "exclusiva": true },
+    { "nome": "outras", "tipo": "node-test", "ficheiros": ["outras/*.fx.mjs"], "limite_s": 30 }
+  ] }
