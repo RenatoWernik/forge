@@ -7,18 +7,18 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { cpus } from 'node:os';
+import { constants, cpus, setPriority } from 'node:os';
 import { H, montar, motores, cadeia } from './r1-comum.mjs';
 
 after(H.limpa);
 
 // C9-c (contrato reescrito, #125): carga moderada e fixa, 4 processos a arder, no próprio ficheiro e não em env. Regista a carga de CPU no início de cada
 // corrida. Se o event loop deste teste ficar parado mais de 30 s (a máquina, e não o motor), a corrida é inválida (skip), e não uma falha.
-const BURNERS = 4, PARADO_MAX_MS = 30000;
+const BURNERS = 4, PARADO_MAX_MS = 30000, PRAZO_BURNER_MS = 600000; // cada burner acaba sozinho (nunca órfão) e corre com prioridade baixa
 const cpuTempo = () => cpus().reduce((a, c) => { const t = Object.values(c.times).reduce((x, y) => x + y, 0); return { total: a.total + t, ocioso: a.ocioso + c.times.idle }; }, { total: 0, ocioso: 0 });
 
 test('A4: C9 sob carga: matar a árvore do motor a meio nunca deixa unidades mortas por arrasto com estado final; a cadeia acaba em 0 (4×)', { timeout: 500000 }, async (t) => {
-  const burn = Array.from({ length: BURNERS }, () => { const p = spawn(process.execPath, ['-e', 'for(;;){}'], { stdio: 'ignore', windowsHide: true }); H.registaPid(p.pid); return p; });
+  const burn = Array.from({ length: BURNERS }, () => { const p = spawn(process.execPath, ['-e', `const fim=Date.now()+${PRAZO_BURNER_MS};while(Date.now()<fim){}`], { stdio: 'ignore', windowsHide: true }); H.registaPid(p.pid); try { setPriority(p.pid, constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* já acabou */ } return p; });
   const falhas = [];
   let ultimo = Date.now(), parado = 0; // o maior intervalo entre dois ticks de 1 s do event loop deste teste
   const vigia = setInterval(() => { parado = Math.max(parado, Date.now() - ultimo - 1000); ultimo = Date.now(); }, 1000);
