@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Executor paralelo (V-01, #125; spec #123 §4.1 e §4.2): corre as suítes de scripts/suites.json em paralelo, cada ficheiro de teste (ou bloco)
-// num filho `node --test` com home e tmp próprios, limite de tempo que mata só a árvore do PID lançado, vagas partilhadas por todos os
-// executores da máquina e resultados ligados ao sha e à árvore em .forge/resultados/. Só biblioteca padrão.
+// Executor paralelo (V-01, #125; spec #123 Â§4.1 e Â§4.2): corre as suÃ­tes de scripts/suites.json em paralelo, cada ficheiro de teste (ou bloco)
+// num filho `node --test` com home e tmp prÃ³prios, limite de tempo que mata sÃ³ a Ã¡rvore do PID lanÃ§ado, vagas partilhadas por todos os
+// executores da mÃ¡quina e resultados ligados ao sha e Ã  Ã¡rvore em .forge/resultados/. SÃ³ biblioteca padrÃ£o.
 //   node scripts/executor.mjs (--todas | --suites a,b) [--passe 1|2] [--continuar] [--paralelo N] [--raiz <dir>]
-// Um MOTOR destacado (o próprio script com --motor-interno; PID em .forge/motor/<sha>-<árvore>-p<passe>.json) corre a fila inteira até ao fim e
-// grava cada unidade logo que acaba. A chamada só espera pelo motor até orcamento_s e nunca mata unidades; --continuar volta a ligar-se ao
-// motor vivo ou, se ele morreu, lança outro só com as unidades sem estado final. O limite_s é só o kill de uma unidade.
-// Saída: 0 tudo verde; 1 falha, limite ou erro; 2 erro de uso; 3 incompleto (o motor ainda corre ou morreu: repetir com --continuar).
+// Um MOTOR destacado (o prÃ³prio script com --motor-interno; PID em .forge/motor/<sha>-<Ã¡rvore>-p<passe>.json) corre a fila inteira atÃ© ao fim e
+// grava cada unidade logo que acaba. A chamada sÃ³ espera pelo motor atÃ© orcamento_s e nunca mata unidades; --continuar volta a ligar-se ao
+// motor vivo ou, se ele morreu, lanÃ§a outro sÃ³ com as unidades sem estado final. O limite_s Ã© sÃ³ o kill de uma unidade.
+// SaÃ­da: 0 tudo verde; 1 falha, limite ou erro; 2 erro de uso; 3 incompleto (o motor ainda corre ou morreu: repetir com --continuar).
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -14,12 +14,18 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const LIMITE_PADRAO_S = 240; // unidade de uma suíte sem limite_s
+// Todo processo lanÃ§ado passa por aqui: no Windows um filho de um motor destacado (sem consola) sem windowsHide abre uma consola por spawn. O
+// contador vai nos resultados (`processos`) para um teste provar que o nÃºmero de spawns nÃ£o cresce com o tempo.
+let processos = 0;
+const lancaProc = (cmd, args, o) => { processos++; return spawn(cmd, args, { ...o, windowsHide: true }); };
+const lancaProcSync = (cmd, args, o) => { processos++; return spawnSync(cmd, args, { ...o, windowsHide: true }); };
+
+const LIMITE_PADRAO_S = 240; // unidade de uma suÃ­te sem limite_s
 const PASSO_MS = 100; // varredura do agendador e da carga global
 const FINAIS = ['pass', 'fail', 'limite', 'erro'];
 class Uso extends Error {}
 
-// --- TAP do node --test: contagens das linhas `# pass|fail|skipped|todo` (a última de cada), motivos de `# SKIP`, duration_ms por teste ---
+// --- TAP do node --test: contagens das linhas `# pass|fail|skipped|todo` (a Ãºltima de cada), motivos de `# SKIP`, duration_ms por teste ---
 export function lerTap(texto) {
   const ult = (k) => { const m = [...texto.matchAll(new RegExp(`^# ${k} (\\d+)\\s*$`, 'gm'))]; return m.length ? +m[m.length - 1][1] : null; };
   const skips = [], duracoes = {};
@@ -33,38 +39,44 @@ export function lerTap(texto) {
   return { pass: ult('pass'), fail: ult('fail'), skip: ult('skipped'), todo: ult('todo'), skips, duracoes };
 }
 
-// o estado de uma unidade que acabou sozinha: um filho sem contagens, ou que não correu nenhum teste, é um falso verde, por isso é «erro»
+// o estado de uma unidade que acabou sozinha: um filho sem contagens, ou que nÃ£o correu nenhum teste, Ã© um falso verde, por isso Ã© Â«erroÂ»
 export function estadoDe(status, c) {
   if (c.pass === null || c.fail === null) return 'erro';
   if (c.fail > 0) return 'fail';
   return status === 0 && c.pass + c.skip + c.todo > 0 ? 'pass' : 'erro';
 }
 
-// o estado de uma suíte: o pior das unidades; «em_curso» enquanto faltar alguma por correr
+// o estado de uma suÃ­te: o pior das unidades; Â«em_cursoÂ» enquanto faltar alguma por correr
 export function estadoSuite(estados, faltam) {
   for (const e of ['invalidado', 'fail', 'limite', 'erro']) if (estados.includes(e)) return e;
   return faltam || estados.includes('em_curso') ? 'em_curso' : 'pass';
 }
 
+// o stdout de um git, ou um erro se o git nÃ£o arranca ou sai com cÃ³digo â‰  0 (raiz inexistente, repo estragado): nunca um resultado vazio
+function git(raiz, ...a) {
+  const r = lancaProcSync('git', a, { cwd: raiz, maxBuffer: 1 << 30 });
+  if (r.error || r.status !== 0) throw new Error(`git ${a[0]}: ${r.error?.message ?? `saÃ­da ${r.status}`}`);
+  return r.stdout;
+}
+
 export function arvoreDe(raiz) {
-  const g = (...a) => spawnSync('git', a, { cwd: raiz, maxBuffer: 1 << 30 });
-  const diff = g('diff', 'HEAD', '--binary').stdout;
-  const novos = g('ls-files', '-o', '--exclude-standard', '-z').stdout.toString().split('\0').filter((f) => f && !f.startsWith('.forge/')).sort();
+  const diff = git(raiz, 'diff', 'HEAD', '--binary');
+  const novos = git(raiz, 'ls-files', '-o', '--exclude-standard', '-z').toString().split('\0').filter((f) => f && !f.startsWith('.forge/')).sort();
   if (!diff.length && !novos.length) return 'limpa';
   const h = createHash('sha256').update(diff);
   for (const f of novos) {
     let conteudo = '';
-    try { conteudo = createHash('sha256').update(readFileSync(join(raiz, f))).digest('hex'); } catch { /* pasta ou ligação: só o nome conta */ }
+    try { conteudo = createHash('sha256').update(readFileSync(join(raiz, f))).digest('hex'); } catch { /* pasta ou ligaÃ§Ã£o: sÃ³ o nome conta */ }
     h.update(`\0${f}\0${conteudo}`);
   }
   return `suja:${h.digest('hex')}`;
 }
 
-// --- vagas globais: os.tmpdir()/forge-vagas/<n> (mkdir atómico, info.json com o PID do executor); `x` é a exclusiva ---
+// --- vagas globais: os.tmpdir()/forge-vagas/<n> (mkdir atÃ³mico, info.json com o PID do executor); `x` Ã© a exclusiva ---
 const vivoPid = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 const lerInfo = (dir) => { try { return JSON.parse(readFileSync(join(dir, 'info.json'), 'utf8')); } catch { return null; } };
-const rm = (d) => { try { rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* ocupada por outro processo: fica para a próxima recuperação */ } };
-// um dono vivo, ou uma pasta acabada de criar (sem info.json há < 10 s)
+const rm = (d) => { try { rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* ocupada por outro processo: fica para a prÃ³xima recuperaÃ§Ã£o */ } };
+// um dono vivo, ou uma pasta acabada de criar (sem info.json hÃ¡ < 10 s)
 function ocupada(dir) {
   const i = lerInfo(dir);
   if (i) return vivoPid(i.pid);
@@ -78,7 +90,7 @@ class Vagas {
     mkdirSync(this.dir, { recursive: true });
   }
   slot(i) { return join(this.dir, i === 'x' ? 'x' : String(i)); }
-  // só quem tem o `recupera` apaga pastas de donos mortos, por isso um dono vivo nunca perde a sua
+  // sÃ³ quem tem o `recupera` apaga pastas de donos mortos, por isso um dono vivo nunca perde a sua
   recupera(dir) {
     const lock = join(this.dir, 'recupera');
     try { mkdirSync(lock); } catch { try { if (Date.now() - statSync(lock).mtimeMs > 10000) rm(lock); } catch { /* outro executor */ } return; }
@@ -92,7 +104,7 @@ class Vagas {
         this.minhas.add(dir);
         return true;
       } catch (e) {
-        if (['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) return false; // Windows: a pasta de outro executor está a ser apagada
+        if (['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) return false; // Windows: a pasta de outro executor estÃ¡ a ser apagada
         if (e.code === 'ENOENT') { mkdirSync(this.dir, { recursive: true }); continue; }
         if (e.code !== 'EEXIST') throw e;
         if (ocupada(dir)) return false;
@@ -103,16 +115,16 @@ class Vagas {
   }
   larga(dirs) { for (const d of dirs) { this.minhas.delete(d); rm(d); } }
   largaTudo() { this.larga([...this.minhas]); }
-  // as vagas vivas e o que dizem: a carga conta uma exclusiva uma só vez; o limite é o menor carga_sensivel de uma unidade sensível. A carga inclui as
-  // tentativas (uma vaga que outro executor toma por um instante e larga se passar o limite: a admissão é conservadora); as `ativas` são só as
-  // unidades reais, e é essa a contagem que se grava em concorrentes_max
+  // as vagas vivas e o que dizem: a carga conta uma exclusiva uma sÃ³ vez; o limite Ã© o menor carga_sensivel de uma unidade sensÃ­vel. A carga inclui as
+  // tentativas (uma vaga que outro executor toma por um instante e larga se passar o limite: a admissÃ£o Ã© conservadora); as `ativas` sÃ£o sÃ³ as
+  // unidades reais, e Ã© essa a contagem que se grava em concorrentes_max
   estado() {
     const infos = [];
     for (let i = 0; i < this.n; i++) { const d = this.slot(i); if (ocupada(d)) infos.push(lerInfo(d) ?? { pid: 0 }); }
     const conta = (is) => is.filter((i) => !i.exclusiva).length + new Set(is.filter((i) => i.exclusiva).map((i) => i.pid)).size;
     return { carga: conta(infos), ativas: conta(infos.filter((i) => i.estado !== 'tentativa')), limite: Math.min(Infinity, ...infos.filter((i) => i.sensivel).map((i) => i.carga_sensivel)) };
   }
-  // uma vaga para a unidade, ou null; depois de escrever a info, relê-se tudo: quem chega por último vê os outros e desiste se passar o limite
+  // uma vaga para a unidade, ou null; depois de escrever a info, relÃª-se tudo: quem chega por Ãºltimo vÃª os outros e desiste se passar o limite
   tenta(u) {
     const { sensivel_ao_tempo: sensivel, exclusiva } = u.suite;
     if (exclusiva) return this.tentaExclusiva(u);
@@ -128,7 +140,7 @@ class Vagas {
     }
     return null;
   }
-  // a exclusiva toma o `x` (ninguém mais arranca) e depois todas as vagas, à medida que se libertam
+  // a exclusiva toma o `x` (ninguÃ©m mais arranca) e depois todas as vagas, Ã  medida que se libertam
   tentaExclusiva(u) {
     u.dirs ??= [];
     if (!u.xTomado) { if (!this.toma(this.slot('x'), { pid: process.pid })) return null; u.xTomado = true; }
@@ -140,10 +152,10 @@ class Vagas {
   }
 }
 
-// --- processos: só a árvore do PID que este executor lançou, nunca por nome ---
+// --- processos: sÃ³ a Ã¡rvore do PID que este executor lanÃ§ou, nunca por nome ---
 function mataArvore(pid) {
-  if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
-  else { try { process.kill(-pid, 'SIGKILL'); } catch { try { process.kill(pid, 'SIGKILL'); } catch { /* já morreu */ } } }
+  if (process.platform === 'win32') lancaProcSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+  else { try { process.kill(-pid, 'SIGKILL'); } catch { try { process.kill(pid, 'SIGKILL'); } catch { /* jÃ¡ morreu */ } } }
 }
 
 function lerArgs(argv) {
@@ -155,11 +167,11 @@ function lerArgs(argv) {
     else if (a === '--suites') o.suites = valor(i++, a).split(',').filter(Boolean);
     else if (a === '--passe') { o.passe = +valor(i++, a); if (![1, 2].includes(o.passe)) throw new Uso('--passe: 1 ou 2'); }
     else if (a === '--continuar') o.continuar = true;
-    else if (a === '--paralelo') { o.paralelo = +valor(i++, a); if (!Number.isInteger(o.paralelo) || o.paralelo < 1) throw new Uso('--paralelo: inteiro ≥ 1'); }
+    else if (a === '--paralelo') { o.paralelo = +valor(i++, a); if (!Number.isInteger(o.paralelo) || o.paralelo < 1) throw new Uso('--paralelo: inteiro â‰¥ 1'); }
     else if (a === '--raiz') o.raiz = resolve(valor(i++, a));
-    else if (a === '--motor-interno') o.arvoreMotor = valor(i++, a); // só a chamada o passa ao motor: a árvore com que a chamada decidiu
-    else if (a === '--nonce') valor(i++, a); // só a chamada o passa ao motor: fica na linha de comando dele, para se reconhecer o processo
-    else if (a === '--afetadas') throw new Uso('--afetadas ainda não existe (V-02)');
+    else if (a === '--motor-interno') o.arvoreMotor = valor(i++, a); // sÃ³ a chamada o passa ao motor: a Ã¡rvore com que a chamada decidiu
+    else if (a === '--nonce') valor(i++, a); // sÃ³ a chamada o passa ao motor: fica na linha de comando dele, para se reconhecer o processo
+    else if (a === '--afetadas') throw new Uso('--afetadas ainda nÃ£o existe (V-02)');
     else throw new Uso(`argumento desconhecido: ${a}`);
   }
   if (!o.suites) throw new Uso('indique --todas ou --suites a,b');
@@ -171,20 +183,20 @@ function lerManifesto(raiz) {
   if (!existsSync(f)) throw new Uso(`falta ${f}`);
   const texto = readFileSync(f, 'utf8'), m = JSON.parse(texto);
   if (m.versao !== 1 || !Array.isArray(m.suites)) throw new Uso('suites.json: versao 1 com suites[] esperada');
-  for (const k of ['paralelo', 'vagas_globais', 'carga_sensivel', 'orcamento_s']) if (!(m[k] > 0)) throw new Uso(`suites.json: ${k} inválido`);
+  for (const k of ['paralelo', 'vagas_globais', 'carga_sensivel', 'orcamento_s']) if (!(m[k] > 0)) throw new Uso(`suites.json: ${k} invÃ¡lido`);
   for (const s of m.suites) {
-    if (s.tipo !== 'node-test') throw new Uso(`suite ${s.nome}: tipo ${s.tipo} não suportado (só node-test)`);
+    if (s.tipo !== 'node-test') throw new Uso(`suite ${s.nome}: tipo ${s.tipo} nÃ£o suportado (sÃ³ node-test)`);
     s.limite_s ??= LIMITE_PADRAO_S;
   }
   m.hash = createHash('sha256').update(texto).digest('hex');
   return m;
 }
 
-// a duração (s) de cada unidade no último resultado com o mesmo manifesto; as unidades sem medida contam pelo limite_s (o pior caso)
+// a duraÃ§Ã£o (s) de cada unidade no Ãºltimo resultado com o mesmo manifesto; as unidades sem medida contam pelo limite_s (o pior caso)
 function duracoesAnteriores(pasta, hash) {
   let melhor = null;
-  const recentes = (existsSync(pasta) ? readdirSync(pasta) : []).filter((n) => n.endsWith('.json') || n.endsWith('.json.ant')) // .ant: o resultado que uma corrida nova da mesma árvore substituiu
-    .map((n) => ({ n, t: statSync(join(pasta, n)).mtimeMs })).sort((a, b) => b.t - a.t).slice(0, 5); // só os 5 mais recentes: a pasta cresce com cada sha
+  const recentes = (existsSync(pasta) ? readdirSync(pasta) : []).filter((n) => n.endsWith('.json') || n.endsWith('.json.ant')) // .ant: o resultado que uma corrida nova da mesma Ã¡rvore substituiu
+    .map((n) => ({ n, t: statSync(join(pasta, n)).mtimeMs })).sort((a, b) => b.t - a.t).slice(0, 5); // sÃ³ os 5 mais recentes: a pasta cresce com cada sha
   for (const { n } of recentes) {
     const r = lerJsonSeguro(join(pasta, n));
     if (r?.manifesto === hash && (!melhor || Date.parse(r.fim) > Date.parse(melhor.fim))) melhor = r;
@@ -192,9 +204,9 @@ function duracoesAnteriores(pasta, hash) {
   return new Map((melhor?.unidades ?? []).filter((u) => u.estado === 'pass').map((u) => [`${u.ficheiro}\0${u.bloco ?? ''}`, u.duracao_s]));
 }
 
-// as unidades por correr, pela ordem do agendamento: as exclusivas primeiro (com a máquina vazia correm seguidas; no fim, cada uma esperava
-// pelas outras), depois as normais e por fim as sensíveis ao tempo (cada uma prende a carga global a carga_sensivel enquanto corre); dentro
-// de cada classe, as mais longas primeiro (a duração medida, ou o limite_s), para encurtar o fim do passe
+// as unidades por correr, pela ordem do agendamento: as exclusivas primeiro (com a mÃ¡quina vazia correm seguidas; no fim, cada uma esperava
+// pelas outras), depois as normais e por fim as sensÃ­veis ao tempo (cada uma prende a carga global a carga_sensivel enquanto corre); dentro
+// de cada classe, as mais longas primeiro (a duraÃ§Ã£o medida, ou o limite_s), para encurtar o fim do passe
 function planeia(m, escolha, raiz, medidas) {
   const nomes = m.suites.map((s) => s.nome);
   if (escolha !== '*') { const f = escolha.filter((n) => !nomes.includes(n)); if (f.length) throw new Uso(`suites desconhecidas: ${f.join(', ')}`); }
@@ -202,7 +214,7 @@ function planeia(m, escolha, raiz, medidas) {
   for (const s of m.suites.filter((x) => escolha === '*' || escolha.includes(x.nome))) {
     const ficheiros = [...new Set(s.ficheiros.flatMap((g) => globSync(g, { cwd: raiz }).map((f) => f.replaceAll('\\', '/'))))].sort();
     if (!ficheiros.length) throw new Uso(`suite ${s.nome}: nenhum ficheiro casa`);
-    // um bloco é o padrão (texto) ou {padrao, limite_s}: o limite_s do bloco, se houver, substitui o da suíte
+    // um bloco Ã© o padrÃ£o (texto) ou {padrao, limite_s}: o limite_s do bloco, se houver, substitui o da suÃ­te
     for (const ficheiro of ficheiros) for (const b of s.blocos?.[ficheiro] ?? [null]) {
       const bloco = b === null || typeof b === 'string' ? b : b.padrao, limite_s = b?.limite_s ?? s.limite_s, chave = `${ficheiro}\0${bloco ?? ''}`;
       us.push({ suite: s, ficheiro, bloco, chave, limite_s, peso: medidas.get(chave) ?? limite_s });
@@ -213,15 +225,15 @@ function planeia(m, escolha, raiz, medidas) {
   return us.toSorted((a, b) => classe(a) - classe(b) || b.peso - a.peso || a.ordem - b.ordem);
 }
 
-const shaDe = (raiz) => { const r = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: raiz, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; };
+const shaDe = (raiz) => { try { return git(raiz, 'rev-parse', 'HEAD').toString().trim(); } catch { return null; } };
 const lerJsonSeguro = (f) => { try { return JSON.parse(readFileSync(f, 'utf8')); } catch { return null; } };
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// o que a chamada e o motor partilham: manifesto, sha, árvore, plano e os caminhos do passe
+// o que a chamada e o motor partilham: manifesto, sha, Ã¡rvore, plano e os caminhos do passe
 function prepara(argv) {
   const o = lerArgs(argv), raiz = o.raiz, m = lerManifesto(raiz);
   const sha = shaDe(raiz);
-  if (!sha) throw new Uso(`${raiz} não é um repositório git`);
+  if (!sha) throw new Uso(`${raiz} nÃ£o Ã© um repositÃ³rio git`);
   const arvore = o.arvoreMotor ?? arvoreDe(raiz);
   const pasta = join(raiz, '.forge', 'resultados');
   const plano = planeia(m, o.suites, raiz, duracoesAnteriores(pasta, m.hash));
@@ -229,18 +241,18 @@ function prepara(argv) {
   return { o, raiz, m, sha, arvore, plano, pasta, marca, ficheiro: join(pasta, `${marca}.json`), motorDir: join(raiz, '.forge', 'motor') };
 }
 
-// as unidades do ficheiro de resultados com estado final (só as deste sha e desta árvore)
+// as unidades do ficheiro de resultados com estado final (sÃ³ as deste sha e desta Ã¡rvore)
 function lerFeitas(c) {
   const feitas = new Map();
   const antigo = existsSync(c.ficheiro) ? lerJsonSeguro(c.ficheiro) : null;
-  // um resultado invalidado (a árvore ou o HEAD mudaram com o motor vivo) nunca é reutilizado: as unidades dele correram sobre outro conteúdo
+  // um resultado invalidado (a Ã¡rvore ou o HEAD mudaram com o motor vivo) nunca Ã© reutilizado: as unidades dele correram sobre outro conteÃºdo
   if (antigo?.sha !== c.sha || antigo?.arvore !== c.arvore || antigo.valido === false) return { feitas, inicio: null };
   for (const u of antigo.unidades) if (FINAIS.includes(u.estado)) feitas.set(`${u.ficheiro}\0${u.bloco ?? ''}`, u);
   return { feitas, inicio: antigo.inicio };
 }
 
-// --- a chamada: liga-se ao motor (ou lança-o), espera até orcamento_s e devolve o código; nunca mata unidades ---
-// quem é o processo `pid`: a hora de arranque e a linha de comando, ou null se não existe ou não se consegue ler
+// --- a chamada: liga-se ao motor (ou lanÃ§a-o), espera atÃ© orcamento_s e devolve o cÃ³digo; nunca mata unidades ---
+// quem Ã© o processo `pid`: a hora de arranque e a linha de comando, ou null se nÃ£o existe ou nÃ£o se consegue ler
 export function identidade(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try {
@@ -249,15 +261,15 @@ export function identidade(pid) {
       return { inicio: stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19], cmd: readFileSync(`/proc/${pid}/cmdline`, 'utf8').replaceAll('\0', ' ') };
     }
     const r = process.platform === 'win32'
-      ? spawnSync('powershell', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-        `$p = Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}'; if ($p) { $p.CreationDate.ToUniversalTime().ToString('o'); $p.CommandLine }`], { encoding: 'utf8', windowsHide: true, timeout: 20000 })
-      : spawnSync('sh', ['-c', `ps -o lstart= -p ${pid}; ps -o command= -p ${pid}`], { encoding: 'utf8', timeout: 20000 });
+      ? lancaProcSync('powershell', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+        `$p = Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}'; if ($p) { $p.CreationDate.ToUniversalTime().ToString('o'); $p.CommandLine }`], { encoding: 'utf8', timeout: 20000 })
+      : lancaProcSync('sh', ['-c', `ps -o lstart= -p ${pid}; ps -o command= -p ${pid}`], { encoding: 'utf8', timeout: 20000 });
     const [inicio, ...cmd] = r.stdout.split(/\r?\n/);
     return inicio ? { inicio: inicio.trim(), cmd: cmd.join(' ') } : null;
   } catch { return null; }
 }
-// o motor está vivo se o ficheiro dele não tem `fim` e o PID existe; no modo estrito (decisões) a hora de arranque tem de coincidir e a linha de
-// comando tem de ter `--motor-interno` e o nonce: depois de um reinício o PID gravado pode ser de outro processo
+// o motor estÃ¡ vivo se o ficheiro dele nÃ£o tem `fim` e o PID existe; no modo estrito (decisÃµes) a hora de arranque tem de coincidir e a linha de
+// comando tem de ter `--motor-interno` e o nonce: depois de um reinÃ­cio o PID gravado pode ser de outro processo
 const motorVivo = (f, estrito = false) => {
   const j = lerJsonSeguro(f);
   if (!j || j.fim || !(j.pid > 0) || !vivoPid(j.pid)) return null;
@@ -274,7 +286,7 @@ async function chamada(argv, saida) {
   mkdirSync(c.motorDir, { recursive: true });
   const faltam = () => { const { feitas } = lerFeitas(c); return plano.filter((u) => !feitas.has(u.chave)).length; };
 
-  // um só motor por sha, árvore e passe: quem toma o lock (mkdir atómico) decide e lança; os outros esperam e ligam-se ao que ele deixou
+  // um sÃ³ motor por sha, Ã¡rvore e passe: quem toma o lock (mkdir atÃ³mico) decide e lanÃ§a; os outros esperam e ligam-se ao que ele deixou
   let motor = null;
   for (let i = 0; !motor && i < 300; i++) {
     motor = motorVivo(motorFicheiro, true);
@@ -288,11 +300,11 @@ async function chamada(argv, saida) {
       motor = motorVivo(motorFicheiro, true);
       if (!motor) {
         const nonce = randomBytes(8).toString('hex');
-        if (!o.continuar) { try { renameSync(c.ficheiro, `${c.ficheiro}.ant`); } catch { /* ainda não havia */ } } // uma corrida nova não herda o resultado antigo, mas o motor aproveita as durações dele
+        if (!o.continuar) { try { renameSync(c.ficheiro, `${c.ficheiro}.ant`); } catch { /* ainda nÃ£o havia */ } } // uma corrida nova nÃ£o herda o resultado antigo, mas o motor aproveita as duraÃ§Ãµes dele
         const log = openSync(join(c.motorDir, `${marca}.log`), 'a');
-        // o cwd do motor é a pasta deste script: uma pasta de teste apagada pelo utilizador nunca fica presa ao processo
-        const p = spawn(process.execPath, [fileURLToPath(import.meta.url), ...argv, '--raiz', raiz, '--motor-interno', c.arvore, '--nonce', nonce], {
-          cwd: dirname(fileURLToPath(import.meta.url)), stdio: ['ignore', log, log], windowsHide: true, detached: true });
+        // o cwd do motor Ã© a pasta deste script: uma pasta de teste apagada pelo utilizador nunca fica presa ao processo
+        const p = lancaProc(process.execPath, [fileURLToPath(import.meta.url), ...argv, '--raiz', raiz, '--motor-interno', c.arvore, '--nonce', nonce], {
+          cwd: dirname(fileURLToPath(import.meta.url)), stdio: ['ignore', log, log], detached: true });
         p.unref();
         closeSync(log);
         motor = { pid: p.pid, nonce, inicio_proc: identidade(p.pid)?.inicio ?? null, sha: c.sha, arvore: c.arvore, passe: o.passe, suites: o.suites, inicio: new Date().toISOString() };
@@ -301,15 +313,16 @@ async function chamada(argv, saida) {
     } finally { rm(lock); }
   }
 
-  if (motor && !cobre(motor.suites, o.suites)) saida(`executor: o motor ${motor.pid} corre outra seleção de suítes; a esperar por ele`);
+  if (motor && !cobre(motor.suites, o.suites)) saida(`executor: o motor ${motor.pid} corre outra seleÃ§Ã£o de suÃ­tes; a esperar por ele`);
   while (motorVivo(motorFicheiro) && Date.now() - t0 < m.orcamento_s * 1000) await dorme(250);
   const vivo = !!motorVivo(motorFicheiro, true);
 
-  // a árvore ou o HEAD mudaram, ou o motor invalidou o resultado: nunca se devolve 0/1 nem se reutiliza (C3)
+  // a Ã¡rvore ou o HEAD mudaram, ou o motor invalidou o resultado: nunca se devolve 0/1 nem se reutiliza (C3)
   const bruto = existsSync(c.ficheiro) ? lerJsonSeguro(c.ficheiro) : null;
-  const agora = shaDe(raiz) === c.sha ? arvoreDe(raiz) : null;
+  let agora = null; // um git que falha aqui conta como Â«mudouÂ»: nunca se devolve 0/1 sem o confirmar
+  try { agora = shaDe(raiz) === c.sha ? arvoreDe(raiz) : null; } catch { /* agora fica null */ }
   if (bruto?.valido === false || agora !== c.arvore) {
-    saida(`executor: resultado invalidado: ${bruto?.valido === false ? bruto.motivo : `o HEAD ou a árvore mudaram durante a corrida (${c.arvore.slice(0, 12)} → ${(agora ?? 'outro HEAD').slice(0, 12)})`}; corra de novo na árvore atual`);
+    saida(`executor: resultado invalidado: ${bruto?.valido === false ? bruto.motivo : `o HEAD ou a Ã¡rvore mudaram durante a corrida (${c.arvore.slice(0, 12)} â†’ ${(agora ?? 'outro HEAD').slice(0, 12)})`}; corra de novo na Ã¡rvore atual`);
     return 2;
   }
   const { feitas } = lerFeitas(c);
@@ -317,21 +330,22 @@ async function chamada(argv, saida) {
   const resto = plano.length - sel.length, seg = Math.round((Date.now() - t0) / 1000);
   if (resto) {
     saida(`executor: ${sel.length}/${plano.length} unidades, ${mau.length} com falha, limite ou erro, ${resto} por acabar em ${seg} s`
-      + (vivo ? `; o motor ${motor.pid} continua a correr: repita com --continuar` : '; o motor morreu antes de acabar: repita com --continuar para relançar o resto'));
+      + (vivo ? `; o motor ${motor.pid} continua a correr: repita com --continuar` : '; o motor morreu antes de acabar: repita com --continuar para relanÃ§ar o resto'));
     if (!vivo && existsSync(join(c.motorDir, `${marca}.log`))) saida(readFileSync(join(c.motorDir, `${marca}.log`), 'utf8').split(/\r?\n/).slice(-6).join('\n'));
     return 3;
   }
-  saida(`executor: ${sel.length}/${plano.length} unidades, ${sel.length - mau.length} pass, ${mau.length} com falha, limite ou erro em ${seg} s → ${c.ficheiro}`);
+  saida(`executor: ${sel.length}/${plano.length} unidades, ${sel.length - mau.length} pass, ${mau.length} com falha, limite ou erro em ${seg} s â†’ ${c.ficheiro}`);
   return mau.length ? 1 : 0;
 }
 
-// --- o motor: corre a fila inteira e sai sozinho; mata só a árvore das unidades que lançou ---
+// --- o motor: corre a fila inteira e sai sozinho; mata sÃ³ a Ã¡rvore das unidades que lanÃ§ou ---
 async function motorCorre(argv, saida) {
   const c = prepara(argv), { o, raiz, m, plano, marca, ficheiro } = c;
   const motorFicheiro = join(c.motorDir, `${marca}.json`);
+  const raizViva = () => existsSync(join(raiz, '.git')); // apagar uma pasta no Windows pode deixar a raiz (é o cwd das unidades) sem o repo
   mkdirSync(join(c.pasta, 'logs'), { recursive: true });
 
-  // retoma: as unidades com estado final deste mesmo sha e árvore não voltam a correr
+  // retoma: as unidades com estado final deste mesmo sha e Ã¡rvore nÃ£o voltam a correr
   const { feitas, inicio: inicioAntigo } = o.continuar ? lerFeitas(c) : { feitas: new Map(), inicio: null };
   const inicio = inicioAntigo ?? new Date().toISOString();
   const fila = plano.filter((u) => !feitas.has(u.chave));
@@ -341,18 +355,23 @@ async function motorCorre(argv, saida) {
   const emCurso = (r) => ({ suite: r.u.suite.nome, ficheiro: r.u.ficheiro, bloco: r.u.bloco, estado: 'em_curso', pass: 0, fail: 0, skip: 0, todo: 0, skips: [],
     duracoes: {}, duracao_s: 0, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap: tapDe(r.u) });
 
-  // o HEAD e a árvore são os do arranque; se mudarem, o motor deixa de lançar, as unidades em curso acabam como «invalidado» e o resultado fica
-  // com valido: false (nunca dá 0 nem é reutilizado)
-  let invalido = null;
-  let ultimaOk = 0; // shortcut: uma verificação com menos de 250 ms vale (evita um git por passo do agendador)
+  // o HEAD e a Ã¡rvore sÃ£o os do arranque; se mudarem, o motor deixa de lanÃ§ar, as unidades em curso acabam como Â«invalidadoÂ» e o resultado fica
+  // com valido: false (nunca dÃ¡ 0 nem Ã© reutilizado)
+  // Se o git falhar (raiz inexistente, repo estragado) o resultado tambÃ©m fica invÃ¡lido, e o motor sai (`fatal`): sem retry em ciclo.
+  let invalido = null, fatal = false;
+  let ultimaOk = 0; // shortcut: uma verificaÃ§Ã£o com menos de 250 ms vale (evita 3 git por unidade que acaba logo a seguir a outra)
   const confere = () => {
     if (invalido) return false;
     if (Date.now() - ultimaOk < 250) return true;
-    const le = () => { const sha = shaDe(raiz); return { sha, arvore: sha === c.sha ? arvoreDe(raiz) : null }; };
-    let { sha, arvore } = le();
-    if (sha !== c.sha || arvore !== c.arvore) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300); ({ sha, arvore } = le()); } // um git que falha por um lock não invalida
-    if (sha === c.sha && arvore === c.arvore) { ultimaOk = Date.now(); return true; }
-    invalido = sha === c.sha ? `a árvore mudou durante a corrida (${c.arvore.slice(0, 12)} → ${arvore.slice(0, 12)})` : `o HEAD mudou durante a corrida (${c.sha.slice(0, 7)} → ${(sha ?? 'desconhecido').slice(0, 7)})`;
+    const le = () => {
+      try { const sha = git(raiz, 'rev-parse', 'HEAD').toString().trim(); return { sha, arvore: sha === c.sha ? arvoreDe(raiz) : null }; } catch (e) { return { erro: e.message }; }
+    };
+    let r = le();
+    if (r.erro || r.sha !== c.sha || r.arvore !== c.arvore) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300); r = le(); } // um git que falha por um lock nÃ£o invalida
+    if (!r.erro && r.sha === c.sha && r.arvore === c.arvore) { ultimaOk = Date.now(); return true; }
+    fatal = !!r.erro;
+    invalido = r.erro ? `nÃ£o foi possÃ­vel verificar o HEAD e a Ã¡rvore (${r.erro})`
+      : r.sha === c.sha ? `a Ã¡rvore mudou durante a corrida (${c.arvore.slice(0, 12)} â†’ ${r.arvore.slice(0, 12)})` : `o HEAD mudou durante a corrida (${c.sha.slice(0, 7)} â†’ ${r.sha.slice(0, 7)})`;
     saida(`INVALIDADO: ${invalido}`);
     return false;
   };
@@ -367,9 +386,9 @@ async function motorCorre(argv, saida) {
     }
     const cmd = argv.slice(0, argv.indexOf('--motor-interno')).join(' ');
     const dados = { versao: 1, sha: c.sha, arvore: c.arvore, node: process.version, comando: `node scripts/executor.mjs ${cmd}`.trim(), manifesto: m.hash,
-      inicio, fim: new Date().toISOString(), completo: completo && !invalido, ...(invalido ? { valido: false, motivo: invalido } : {}), unidades, suites };
-    // Windows: renomear sobre um ficheiro que um leitor (a chamada, uma ferramenta) tem aberto dá EPERM/EBUSY/EACCES; tenta-se algumas vezes e,
-    // se continuar preso, o próximo escreve grava o estado todo, por isso um leitor nunca deita o motor abaixo
+      inicio, fim: new Date().toISOString(), completo: completo && !invalido, ...(invalido ? { valido: false, motivo: invalido } : {}), processos, unidades, suites };
+    // Windows: renomear sobre um ficheiro que um leitor (a chamada, uma ferramenta) tem aberto dÃ¡ EPERM/EBUSY/EACCES; tenta-se algumas vezes e,
+    // se continuar preso, o prÃ³ximo escreve grava o estado todo, por isso um leitor nunca deita o motor abaixo
     for (let i = 0; i < 20; i++) {
       try { writeFileSync(`${ficheiro}.tmp`, JSON.stringify(dados, null, 2)); renameSync(`${ficheiro}.tmp`, ficheiro); return; } catch (e) {
         if (!['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
@@ -405,7 +424,7 @@ async function motorCorre(argv, saida) {
     if (u.bloco) args.push(`--test-name-pattern=${u.bloco}`);
     args.push(u.ficheiro);
     const r = { u, vaga, cmax: vaga.carga, inicio: new Date(), limite: false, out: '', err: '' };
-    const p = spawn(process.execPath, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' });
+    const p = lancaProc(process.execPath, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     r.pid = p.pid;
     p.stdout.on('data', (b) => { r.out += b; });
     p.stderr.on('data', (b) => { r.err += b; });
@@ -414,7 +433,7 @@ async function motorCorre(argv, saida) {
       let feito = false;
       const acaba = () => { if (!feito) { feito = true; clearTimeout(r.relogio); p.stdout.destroy(); p.stderr.destroy(); resolver(); } };
       p.on('close', acaba);
-      p.on('exit', (status) => { r.status = status; setTimeout(acaba, 2000); }); // um neto com o stdio herdado não prende a unidade
+      p.on('exit', (status) => { r.status = status; setTimeout(acaba, 2000); }); // um neto com o stdio herdado nÃ£o prende a unidade
       p.on('error', (e) => { r.err += String(e); acaba(); });
     });
     correm.add(r);
@@ -423,38 +442,40 @@ async function motorCorre(argv, saida) {
   };
 
   const termina = (r) => {
+    if (!raizViva()) process.exit(1); // a raiz desapareceu: nada a gravar
     correm.delete(r);
     vagas.larga(r.vaga.dirs);
     const cont = lerTap(r.out), { u } = r;
     const estadoReal = r.limite ? 'limite' : r.status === null || r.status === undefined ? 'erro' : estadoDe(r.status, cont);
-    const estado = confere() ? estadoReal : 'invalidado'; // a unidade correu (ou acabou) sobre outro conteúdo
+    const estado = confere() ? estadoReal : 'invalidado'; // a unidade correu (ou acabou) sobre outro conteÃºdo
     const tap = tapDe(u);
     writeFileSync(join(raiz, tap), r.out);
     if (r.err) writeFileSync(join(raiz, `${tap}.err`), r.err);
     feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado, pass: cont.pass ?? 0, fail: cont.fail ?? 0, skip: cont.skip ?? 0, todo: cont.todo ?? 0,
       skips: cont.skips, duracoes: cont.duracoes, duracao_s: Math.round((Date.now() - r.inicio) / 100) / 10, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap });
     escreve(false);
-    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''} (${cont.pass ?? 0} pass, ${cont.fail ?? 0} fail) → ${tap}`);
+    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''} (${cont.pass ?? 0} pass, ${cont.fail ?? 0} fail) â†’ ${tap}`);
   };
 
-  // o agendador: lança o que cabe nas vagas e nas faixas (o limite_s não entra); a carga global de cada unidade que corre é medida a cada passo
+  // o agendador: lanÃ§a o que cabe nas vagas e nas faixas (o limite_s nÃ£o entra); a carga global de cada unidade que corre Ã© medida a cada passo
   const porLancar = () => (invalido ? [] : fila.filter((u) => !feitas.has(u.chave) && ![...correm].some((r) => r.u === u)));
-  while (porLancar().length || correm.size) {
-    // o ficheiro do motor desapareceu (a pasta foi apagada): sai e mata a sua árvore; os primeiros 5 s dão tempo à chamada que o lançou de o gravar
-    if (Date.now() - t0 > 5000 && !existsSync(motorFicheiro)) process.exit(1);
+  while (!fatal && (porLancar().length || correm.size)) {
+    // a raiz ou o ficheiro do motor desapareceram (a pasta foi apagada): sai e mata a sua Ã¡rvore; os primeiros 5 s dÃ£o tempo Ã  chamada que o lanÃ§ou de o gravar
+    if (!raizViva() || (Date.now() - t0 > 5000 && !existsSync(motorFicheiro))) process.exit(1);
     for (const u of porLancar()) {
       if (correm.size >= paralelo) break;
-      if (!confere()) break; // o HEAD ou a árvore mudaram: não se lança mais nada
       let vaga = null;
-      try { vaga = vagas.tenta(u); } catch { /* o sistema de ficheiros das vagas falhou neste passo: um erro a meio da corrida não deita abaixo as unidades que correm */ }
-      if (vaga) lanca(u, vaga);
-      else if (u.suite.exclusiva) break;
+      try { vaga = vagas.tenta(u); } catch { /* o sistema de ficheiros das vagas falhou neste passo: um erro a meio da corrida nÃ£o deita abaixo as unidades que correm */ }
+      if (!vaga) { if (u.suite.exclusiva) break; continue; }
+      if (!confere()) { vagas.larga(vaga.dirs); break; } // o HEAD ou a Ã¡rvore mudaram: nÃ£o se lanÃ§a mais nada (o git sÃ³ corre quando hÃ¡ vaga para lanÃ§ar)
+      lanca(u, vaga);
     }
     if (correm.size) { const { ativas } = vagas.estado(); for (const r of correm) r.cmax = Math.max(r.cmax, ativas); }
     await dorme(PASSO_MS + Math.floor(Math.random() * PASSO_MS));
   }
 
-  escreve(plano.every((u) => feitas.has(u.chave)));
+  if (fatal) { for (const r of correm) mataArvore(r.pid); try { escreve(false); } catch { /* a raiz desapareceu */ } }
+  else escreve(plano.every((u) => feitas.has(u.chave)));
   saida(`motor ${process.pid}: ${plano.length} unidades em ${Math.round((Date.now() - t0) / 1000)} s${invalido ? ` (invalidado: ${invalido})` : ''}`);
   return invalido ? 2 : 0;
 }

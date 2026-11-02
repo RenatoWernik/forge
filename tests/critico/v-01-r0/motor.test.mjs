@@ -5,7 +5,8 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { FIXTURES, correr, esperaAte, eventos, gitOk, inicios, intervalos, lerJson, limpa, mataArvore, registaPid, resultados, saida, sobreposicaoMax,
   tempPrivado, tmp, umResultado, validaResultado, vivo } from './helpers.mjs';
 
@@ -187,6 +188,72 @@ test('classe EPERM: 3 executores a tomar e largar vagas em ciclo não têm erro 
   const ints = repos.flatMap((d) => intervalos(eventos(d)));
   assert.equal(ints.length, 30);
   assert.ok(sobreposicaoMax(ints) <= 2, `${sobreposicaoMax(ints)} unidades ao mesmo tempo com vagas_globais 2`);
+});
+
+// --- classe «um motor destacado nunca abre consolas nem fica em ciclo» (a causa: um spawn sem windowsHide num processo sem consola abre uma janela por chamada) ---
+const EXECUTOR_SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'scripts', 'executor.mjs');
+
+test('classe windowsHide: todo spawn, spawnSync, execFile, exec e fork de scripts/executor.mjs leva windowsHide: true nos argumentos', () => {
+  const src = readFileSync(EXECUTOR_SRC, 'utf8');
+  const falhas = [], vistos = [];
+  for (const m of src.matchAll(/(?<![.\w])(spawn|spawnSync|execFile|execFileSync|exec|execSync|fork)\(/g)) {
+    let fundo = 1, i = m.index + m[0].length;
+    while (i < src.length && fundo > 0) { const ch = src[i++]; if (ch === '(') fundo++; else if (ch === ')') fundo--; }
+    const chamada = src.slice(m.index, i), linha = src.slice(0, m.index).split('\n').length;
+    vistos.push(linha);
+    if (!/windowsHide:\s*true/.test(chamada)) falhas.push(`linha ${linha}: ${chamada.slice(0, 70)}`);
+  }
+  assert.ok(vistos.length >= 2, `o lint não encontrou chamadas de spawn (${vistos.length}): o padrão está errado`);
+  assert.deepEqual(falhas, []);
+});
+
+test('classe git falha: se o git não consegue verificar o HEAD e a árvore, o motor marca valido:false com o motivo e sai (sem retry em ciclo)', { timeout: 90000 }, async () => {
+  const d = montar('gitfalha', { paralelo: 1, orcamento_s: 4, suites: [{ nome: 'q', limite_s: 60 }] }, { 'q-1': 5, 'q-2': 5, 'q-3': 5 });
+  const r = await correr(d, ['--todas'], { env: tempPrivado(), limite_ms: 40000 });
+  const [motor] = motores(d);
+  assert.equal(r.status, 3, saida(r));
+  assert.ok(motor && vivo(motor.pid), 'o motor tem de estar vivo depois da 1.ª chamada');
+  writeFileSync(join(d, '.git', 'HEAD'), 'lixo\n'); // o git passa a sair com 128
+  assert.ok(await esperaAte(() => !vivo(motor.pid), 20000), 'o motor continuou vivo com o git a falhar');
+  const res = umResultado(d).dados;
+  assert.equal(res.valido, false);
+  assert.equal(res.completo, false);
+  assert.match(res.motivo, /git|verificar/);
+  assert.ok(inicios(d).length < 3, 'o motor lançou unidades com o git a falhar');
+});
+
+test('classe raiz apagada: um motor cuja raiz é apagada a meio sai em ≤ 10 s e não deixa unidades vivas', { timeout: 90000 }, async () => {
+  const d = montar('raizapagada', { paralelo: 2, orcamento_s: 6, suites: [{ nome: 'q', limite_s: 120 }] }, { 'q-1': 100, 'q-2': 100 });
+  const r = await correr(d, ['--todas'], { env: tempPrivado(), limite_ms: 30000 });
+  const [motor] = motores(d);
+  assert.equal(r.status, 3, saida(r));
+  assert.ok(motor && vivo(motor.pid));
+  const unidades = feitas(d).map((u) => u.pid);
+  assert.equal(unidades.length, 2);
+  for (const p of unidades) registaPid(p);
+  // Windows: a pasta que é cwd de uma unidade não se apaga; apaga-se tudo o que está dentro, entrada a entrada, e o que falhar fica
+  for (const n of readdirSync(d)) { try { rmSync(join(d, n), { recursive: true, force: true }); } catch { /* preso por uma unidade */ } }
+  try { rmSync(d, { recursive: true, force: true }); } catch { /* idem */ }
+  assert.ok(!existsSync(join(d, '.git')), 'o teste não conseguiu apagar o .git');
+  const t0 = Date.now();
+  assert.ok(await esperaAte(() => !vivo(motor.pid), 10000), 'o motor continuou vivo mais de 10 s depois de a raiz ser apagada');
+  assert.ok(Date.now() - t0 <= 10000);
+  assert.ok(await esperaAte(() => unidades.every((p) => !vivo(p)), 10000), 'as unidades do motor ficaram vivas');
+});
+
+test('classe spawns: o número de processos que o motor lança não cresce com o tempo de espera por vagas (sem git a cada passo do agendador)', { timeout: 90000 }, async () => {
+  const env = tempPrivado();
+  const vagas = join(env.TEMP, 'forge-vagas', '0'); // a única vaga global fica presa durante ~6 s por um dono vivo (este processo)
+  mkdirSync(vagas, { recursive: true });
+  writeFileSync(join(vagas, 'info.json'), JSON.stringify({ pid: process.pid, sensivel: false, carga_sensivel: 1 }));
+  const d = montar('spawns', { paralelo: 2, vagas_globais: 1, carga_sensivel: 1, orcamento_s: 40, suites: [{ nome: 'q', limite_s: 60 }] }, { 'q-1': 2, 'q-2': 2 });
+  setTimeout(() => rmSync(vagas, { recursive: true, force: true }), 6000);
+  const r = await correr(d, ['--todas'], { env, limite_ms: 60000 });
+  motores(d);
+  assert.equal(r.status, 0, saida(r));
+  const res = umResultado(d).dados;
+  assert.ok(Number.isInteger(res.processos), `o resultado não traz o contador de processos: ${res.processos}`);
+  assert.ok(res.processos <= 2 * 8 + 5, `o motor lançou ${res.processos} processos para 2 unidades`);
 });
 
 function motoresLog(d) {

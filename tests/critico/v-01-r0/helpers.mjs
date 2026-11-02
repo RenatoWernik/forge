@@ -44,7 +44,8 @@ export async function limpa() {
   for (const d of PASTAS) {
     const m = join(d, '.forge', 'motor');
     if (!existsSync(m)) continue;
-    for (const n of readdirSync(m).filter((x) => x.endsWith('.json'))) { try { PIDS.add(lerJson(join(m, n)).pid); } catch {} }
+    // só os motores que não acabaram (sem `fim`): o PID de um motor que acabou pode já ser de outro processo
+    for (const n of readdirSync(m).filter((x) => x.endsWith('.json'))) { try { const j = lerJson(join(m, n)); if (!j.fim) PIDS.add(j.pid); } catch {} }
   }
   for (const pid of PIDS) mataArvore(pid);
   await espera(300);
