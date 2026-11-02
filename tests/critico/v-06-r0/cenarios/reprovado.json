@@ -1,0 +1,13 @@
+{
+  "nome": "reprovado",
+  "criterio": "reprovado",
+  "descricao": "O último comentário com VEREDITO é REPROVADO para o head (havia um APROVADO antes): recusa, 0 merges",
+  "modo": "forge",
+  "pr": { "isDraft": false, "base": "main", "posMerge": "verde", "headMuda": false },
+  "comentarios": [
+    { "corpo": "VEREDITO: APROVADO\nHEAD: @H\nEXECUTOR: .forge/resultados/@H-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 5/5\nFALHAS (todas, numeradas): nenhuma\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" },
+    { "corpo": "CHECK-TICKET: VERDE @H @SHA256" },
+    { "corpo": "VEREDITO: REPROVADO\nHEAD: @H\nEXECUTOR: .forge/resultados/@H-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 4/5\nFALHAS (todas, numeradas): 1. C2 — falha — tests/critico/v-99-r0/c2.test.mjs\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" }
+  ],
+  "esperado": { "codigo": 2, "recusa": true, "pr_merge": 0, "merges": 0, "regressao": 0, "pos_merge_verde": false, "fase": null }
+}

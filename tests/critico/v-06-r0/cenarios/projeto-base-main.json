@@ -1,0 +1,12 @@
+{
+  "nome": "projeto-base-main",
+  "criterio": "projeto-base-main",
+  "descricao": "Modo projeto com --integracao integracao-v06, mas a base do PR é a main (a branch por omissão); provas certas: recusa, 0 merges",
+  "modo": "projeto", "integracao": "integracao-v06",
+  "pr": { "isDraft": false, "base": "main", "posMerge": "verde", "headMuda": false },
+  "comentarios": [
+    { "corpo": "VEREDITO: APROVADO\nHEAD: @H\nEXECUTOR: .forge/resultados/@H-limpa-p1.json @SHA256\nBARRA: critérios de aceite — critérios visuais 0/0 — vencedor cego: empate (nosso era A)\nCRITÉRIOS: 5/5\nFALHAS (todas, numeradas): nenhuma\nMAIOR LACUNA: nenhuma\nOUTRAS LACUNAS: nenhuma\nSEGUIMENTO: nenhum\nPERGUNTA À BARRA: nenhuma" },
+    { "corpo": "CHECK-TICKET: VERDE @H @SHA256" }
+  ],
+  "esperado": { "codigo": 2, "recusa": true, "pr_merge": 0, "merges": 0, "regressao": 0, "pos_merge_verde": false, "fase": null }
+}
