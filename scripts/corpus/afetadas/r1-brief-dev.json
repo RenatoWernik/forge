@@ -1,0 +1,10 @@
+{
+  "commit": null,
+  "ficheiros": [
+    "templates/.claude/briefs/dev.md"
+  ],
+  "devem_incluir": [
+    "f-15a-r0",
+    "f-01-r0"
+  ]
+}

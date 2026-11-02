@@ -1,0 +1,11 @@
+{
+  "commit": null,
+  "ficheiros": [
+    "skills/learn/SKILL.md"
+  ],
+  "devem_incluir": [
+    "f-14-r0",
+    "f-11-r0",
+    "f-01-r0"
+  ]
+}

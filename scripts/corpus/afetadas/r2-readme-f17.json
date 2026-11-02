@@ -1,0 +1,11 @@
+{
+  "commit": null,
+  "ficheiros": [
+    "README.md",
+    "README.pt-BR.md"
+  ],
+  "devem_incluir": [
+    "f-17-r0",
+    "f-01-r0"
+  ]
+}
