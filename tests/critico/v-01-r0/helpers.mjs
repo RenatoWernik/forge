@@ -36,8 +36,7 @@ export const tmp = (p = 'v01-') => { const d = mkdtempSync(join(tmpdir(), p)); P
 // `--motor-interno` e o nonce). Só se mata o PID cuja identidade de agora coincide com isto (ver `eOQueRegistou`).
 export const registaPid = (pid, { desde = Date.now(), cmd = [] } = {}) => {
   if (!Number.isInteger(pid) || pid <= 0) return;
-  const antes = PIDS.get(pid);
-  PIDS.set(pid, { desde: Math.min(desde, antes?.desde ?? Infinity), cmd: [...new Set([...(antes?.cmd ?? []), ...cmd.filter(Boolean)])] });
+  PIDS.set(pid, { desde, cmd: cmd.filter(Boolean) }); // um registo novo SUBSTITUI o anterior com o mesmo número: o número pode ser de um processo novo (nosso)
 };
 // só diz se há UM processo com este número, não se é o que se registou: nunca autoriza matar (isso é a `identidades`)
 export const vivo = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };

@@ -34,7 +34,7 @@ test('A4: C9 sob carga: matar a árvore do motor a meio nunca deixa unidades mor
       await H.esperaAte(() => H.inicios(d).length === 4, 40000);
       const antes = Object.fromEntries(H.umResultado(d).dados.unidades.map((u) => [u.ficheiro, u.estado]));
       H.mataArvore(m.pid);
-      await H.esperaAte(() => !H.vivo(m.pid), 10000);
+      assert.ok(await H.esperaAte(() => !H.vivo(m.pid), 10000), `#${k}: o motor ${m.pid} não morreu depois do mataArvore`);
       const cod = await cadeia(d, env, 5, 90000);
       const res = H.umResultado(d).dados;
       const arrasto = res.unidades.filter((u) => antes[u.ficheiro] === 'em_curso' && u.estado !== 'pass').map((u) => `${u.ficheiro}=${u.estado}`);
