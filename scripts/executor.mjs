@@ -279,7 +279,8 @@ const motorVivo = (f, estrito = false) => {
   if (!estrito) return j;
   // atalho: um batimento de há menos de 30 s com o PID existente basta (um PID reutilizado depois de um reinício tem o batimento do motor morto,
   // velho); o powershell/ps que lê a hora de arranque demora dezenas de segundos numa máquina carregada, por isso só se chama sem batimento recente
-  if (j.nonce && Date.now() - Date.parse(j.batimento ?? 0) < 30000) return j;
+  const bat = lerJsonSeguro(`${f}.bat`);
+  if (j.nonce && bat?.pid === j.pid && bat.nonce === j.nonce && Date.now() - bat.t < 30000) return j;
   const id = identidade(j.pid);
   if (id?.desconhecida) return j; // o PID existe e não se conseguiu ler quem é: fica vivo (lançar um 2.º motor seria pior que esperar)
   return id && j.nonce && id.cmd.includes('--motor-interno') && id.cmd.includes(j.nonce) && (!j.inicio_proc || id.inicio === j.inicio_proc) ? j : null;
@@ -288,9 +289,9 @@ const motorVivo = (f, estrito = false) => {
 // último batimento é arrasto da morte, não um resultado: sai do ficheiro de resultados e volta a correr; o tap antigo fica como .morto. As pass e as
 // falhas mais antigas ficam finais.
 function reabreMortas(c, motorFicheiro) {
-  const mot = lerJsonSeguro(motorFicheiro), r = existsSync(c.ficheiro) ? lerJsonSeguro(c.ficheiro) : null;
-  if (!mot || mot.fim || !mot.nonce || !mot.batimento || !r || r.sha !== c.sha || r.arvore !== c.arvore || r.valido === false) return;
-  const corte = Date.parse(mot.batimento) - 5000;
+  const mot = lerJsonSeguro(motorFicheiro), bat = lerJsonSeguro(`${motorFicheiro}.bat`), r = existsSync(c.ficheiro) ? lerJsonSeguro(c.ficheiro) : null;
+  if (!mot || mot.fim || !mot.nonce || bat?.nonce !== mot.nonce || !r || r.sha !== c.sha || r.arvore !== c.arvore || r.valido === false) return;
+  const corte = bat.t - 5000;
   const arrasto = (u) => (u.estado === 'fail' || u.estado === 'limite') && u.nonce_motor === mot.nonce && Date.parse(u.fim) >= corte;
   const mortas = r.unidades.filter(arrasto);
   if (!mortas.length) return;
@@ -486,10 +487,8 @@ async function motorCorre(argv, saida) {
   while (!fatal && (porLancar().length || correm.size)) {
     // o batimento (1 s) diz até quando o motor viveu: uma unidade que falhou nos últimos 5 s antes dele é arrasto da morte do motor (ver reabreMortas)
     if (Date.now() - ultimoBatimento >= 1000) {
-      const j = lerJsonSeguro(motorFicheiro);
-      if (j?.pid === process.pid && !j.fim) {
-        try { writeFileSync(`${motorFicheiro}.tmp`, JSON.stringify({ ...j, batimento: new Date().toISOString() })); renameSync(`${motorFicheiro}.tmp`, motorFicheiro); ultimoBatimento = Date.now(); } catch { /* um leitor tem-no aberto: o próximo batimento */ }
-      }
+      // o batimento vai num ficheiro só do motor (PID e nonce dele): quem forja o PID do ficheiro do motor não o herda
+      try { writeFileSync(`${motorFicheiro}.bat`, JSON.stringify({ pid: process.pid, nonce: o.nonce, t: Date.now() })); ultimoBatimento = Date.now(); } catch { /* um leitor tem-no aberto: o próximo batimento */ }
     }
     // a raiz ou o ficheiro do motor desapareceram (a pasta foi apagada): sai e mata a sua árvore; os primeiros 5 s dão tempo à chamada que o lançou de o gravar
     if (!raizViva() || (Date.now() - t0 > 5000 && !existsSync(motorFicheiro) && (Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500), !existsSync(motorFicheiro)))) process.exit(1); // duas leituras: o rename do batimento não conta

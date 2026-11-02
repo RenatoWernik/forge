@@ -266,7 +266,7 @@ test('C9 (batimento): um fail real, longe da morte do motor (> 5 s antes do últ
   assert.equal(r1.status, 3, saida(r1));
   assert.ok(await esperaAte(() => feitas(d).find((u) => u.ficheiro === 's/q-1.fx.mjs')?.estado === 'fail', 15000), 'o q-1 não ficou em fail');
   const fimFail = Date.parse(feitas(d).find((u) => u.ficheiro === 's/q-1.fx.mjs').fim);
-  assert.ok(await esperaAte(() => Date.parse(motores(d)[0].batimento) - fimFail > 6000, 20000), 'o batimento não avançou 6 s depois do fail');
+  assert.ok(await esperaAte(() => lerJson(join(d, '.forge', 'motor', readdirSync(join(d, '.forge', 'motor')).find((n) => n.endsWith('.json.bat')))).t - fimFail > 6000, 20000), 'o batimento não avançou 6 s depois do fail');
   mataArvore(motor.pid);
   assert.ok(await esperaAte(() => !vivo(motor.pid), 10000), 'o motor não morreu');
   const codigos = [];
