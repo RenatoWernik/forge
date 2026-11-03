@@ -304,7 +304,8 @@ export async function sessao() {
     // os processos filhos do Chrome largam o perfil uns instantes depois, por isso a remoção tenta durante até 20 s
     async fechar() {
       const saida = p.exitCode !== null ? Promise.resolve() : new Promise((r) => p.once('exit', r));
-      if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' });
+      // só se o browser ainda corre: um PID que já saiu pode ter sido reciclado para um processo alheio (F-31)
+      if (process.platform === 'win32') { if (p.exitCode === null && p.signalCode === null) spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' }); }
       else { try { await Promise.race([send('Browser.close'), esperarMs(5000)]); } catch { /* já fechado */ } if (p.exitCode === null) p.kill('SIGKILL'); }
       await Promise.race([saida, esperarMs(10000)]);
       for (let i = 0; ; i++) {

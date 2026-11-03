@@ -194,6 +194,7 @@ export function correAvancar(m, { limite_ms = 240000 } = {}) {
     const acaba = (status) => {
       if (feito) return; feito = true;
       clearTimeout(relogio);
+      PIDS.delete(p.pid); // um PID que já saiu deixa de ser nosso: o Windows recicla-o em segundos e a limpeza mataria o processo alheio que o herdou (F-31)
       setTimeout(() => {
         p.stdout.destroy(); p.stderr.destroy();
         const f = join(m.trab, '.forge', 'proxima-fase.json');
