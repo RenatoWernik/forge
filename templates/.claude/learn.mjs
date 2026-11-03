@@ -68,7 +68,8 @@ function add() {
   let fd // shortcut: a lock left by a killed process stays until someone deletes learnings/.lock (the contract has no timeout); upgrade: store the pid and take over a dead one
   try { fd = openSync(lock, 'wx') } catch (e) {
     if (made) try { rmdirSync(dir) } catch {}
-    stop(e.code === 'EEXIST' ? 3 : 1, e.code === 'EEXIST' ? 'learnings: busy, try again' : 'add: ' + e.message)
+    const busy = ['EEXIST', 'EPERM', 'EACCES'].includes(e.code) // on Windows a lock another process is deleting answers EPERM or EACCES, not EEXIST
+    stop(busy ? 3 : 1, busy ? 'learnings: busy, try again' : 'add: ' + e.message)
   }
   let wrote = false, refusal // stop() would skip the finally: the refusal is reported after the lock is gone
   try {
