@@ -34,6 +34,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 const PASTAS = new Set(), PIDS = new Set();
 export const tmp = (p = 'v05-') => { const d = mkdtempSync(join(tmpdir(), p)); PASTAS.add(d); return d; };
 const vivo = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+export const pidsLancados = () => [...PIDS]; // só os que ainda não saíram (ver lanca)
 export function mataArvore(pid) {
   if (!vivo(pid)) return;
   if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
@@ -208,7 +209,8 @@ export function lanca(raiz, args, { env = {}, limite_ms = 240000, tempReal = fal
   p.stderr.on('data', (b) => { err += b; });
   const relogio = setTimeout(() => { pendurado = true; mataArvore(p.pid); }, limite_ms);
   const fim = new Promise((resolve) => {
-    const acaba = (status) => { clearTimeout(relogio); const ms = Date.now() - t0; setTimeout(() => { p.stdout.destroy(); p.stderr.destroy(); resolve({ status, out, err, ms, pendurado }); }, 200); };
+    // um PID que já saiu deixa de ser nosso: o Windows recicla-o em segundos e o limpa() do fim do ficheiro matava o processo alheio que o herdou
+    const acaba = (status) => { clearTimeout(relogio); PIDS.delete(p.pid); const ms = Date.now() - t0; setTimeout(() => { p.stdout.destroy(); p.stderr.destroy(); resolve({ status, out, err, ms, pendurado }); }, 200); };
     p.on('exit', acaba);
     p.on('error', (e) => { err += String(e); acaba(null); });
   });

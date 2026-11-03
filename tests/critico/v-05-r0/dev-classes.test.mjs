@@ -7,7 +7,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cenario, correr, ghFalso, gitOk, linhas, PASSOS, escreve, saida, tmp, limpa } from './helpers.mjs';
+import { cenario, correr, ghFalso, gitOk, lanca, linhas, PASSOS, pidsLancados, escreve, saida, tmp, limpa } from './helpers.mjs';
 
 after(limpa);
 
@@ -69,6 +69,17 @@ const dorme = (ms) => new Promise((f) => setTimeout(f, ms));
   assert.equal(t('lint', 'ini').length, 1, JSON.stringify(reg));
   assert.ok(t('unidade', 'ini').length >= 2, `a unidade corre no ramo e no pós-merge: ${JSON.stringify(reg)}`);
   assert.ok(Math.max(...t('lint', 'fim')) <= Math.min(...t('unidade', 'ini')), `o lint e uma unidade sobrepuseram-se: ${JSON.stringify(reg)}`);
+});
+
+// medido com um espião de taskkill no combinado v-05-r0+v-01-r0: o limpa() deste ficheiro de helpers matava PIDs de check-tickets que já tinham saído, e o Windows
+// já os tinha reciclado (conhost.exe; e, noutra corrida, o executor de outra worktree). Sem esperar uma reciclagem: só se mata o que ainda corre.
+test('classe: o limpa() só mata o que lançou e ainda corre: o PID de um check-ticket que já saiu deixa de estar registado', async () => {
+  const d = cenario();
+  const l = lanca(d, ['--nada']); // erro de uso: sai logo com 2
+  assert.ok(pidsLancados().includes(l.pid), 'um processo que corre está registado');
+  const r = await l.fim;
+  assert.equal(r.status, 2, saida(r));
+  assert.ok(!pidsLancados().includes(l.pid), `o PID ${l.pid} já saiu e continua registado: o limpa() mataria quem o herdar`);
 });
 
 test('classe: o orçamento do executor não chega: código 3 sem publicar; com --continuar acaba o que falta e dá 0, com os 6 ok', async () => {
