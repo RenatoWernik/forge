@@ -178,6 +178,10 @@ class Vagas {
   }
 }
 
+// F-31: depois de o filho sair o PID já não é nosso (o Windows recicla-o em segundos) e um taskkill /T por ele já não alcança os netos;
+// `r.saiu` (evento exit/close/error) vale até aos 2 s de folga em que o relógio, a limpa e o caminho fatal ainda veem a unidade em `correm`
+const mataUnidade = (r) => { if (!r.saiu) mataArvore(r.pid); };
+
 // --- processos: só a árvore do PID que este executor lançou, nunca por nome ---
 function mataArvore(pid) {
   if (process.platform === 'win32') lancaProcSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
@@ -470,7 +474,7 @@ async function motorCorre(argv, saida) {
   const vagas = new Vagas(m.vagas_globais, m.carga_sensivel);
   const raizTmp = mkdtempSync(join(tmpdir(), 'forge-exec-'));
   const limpa = () => {
-    for (const r of correm) mataArvore(r.pid);
+    for (const r of correm) mataUnidade(r);
     vagas.largaTudo(); rm(raizTmp);
     const j = lerJsonSeguro(motorFicheiro);
     if (j?.pid === process.pid) { try { writeFileSync(motorFicheiro, JSON.stringify({ ...j, fim: new Date().toISOString() })); } catch { /* a pasta desapareceu */ } }
@@ -502,13 +506,13 @@ async function motorCorre(argv, saida) {
     r.pid = p.pid;
     p.stdout.on('data', (b) => { r.out += b; });
     p.stderr.on('data', (b) => { r.err += b; });
-    r.relogio = setTimeout(() => { r.limite = true; mataArvore(p.pid); }, u.limite_s * 1000);
+    r.relogio = setTimeout(() => { r.limite = true; mataUnidade(r); }, u.limite_s * 1000);
     r.fim = new Promise((resolver) => {
       let feito = false;
       const acaba = () => { if (!feito) { feito = true; clearTimeout(r.relogio); p.stdout.destroy(); p.stderr.destroy(); resolver(); } };
-      p.on('close', acaba);
-      p.on('exit', (status) => { r.status = status; setTimeout(acaba, 2000); }); // um neto com o stdio herdado não prende a unidade
-      p.on('error', (e) => { r.err += String(e); acaba(); });
+      p.on('close', () => { r.saiu = true; acaba(); });
+      p.on('exit', (status) => { r.status = status; r.saiu = true; setTimeout(acaba, 2000); }); // um neto com o stdio herdado não prende a unidade
+      p.on('error', (e) => { r.err += String(e); r.saiu = true; acaba(); });
     });
     correm.add(r);
     escreve(false);
@@ -584,7 +588,7 @@ async function motorCorre(argv, saida) {
       limite_s: Math.min(u.limite_s, FASE2_LIMITE_S), nomes: feitas.get(u.chave).skips.filter((s) => s.motivo === MOTIVO_LOTE).map((s) => desfazTap(s.teste)), ordem: plano.length + i })));
   }
 
-  if (fatal) { for (const r of correm) mataArvore(r.pid); try { escreve(false); } catch { /* a raiz desapareceu */ } }
+  if (fatal) { for (const r of correm) mataUnidade(r); try { escreve(false); } catch { /* a raiz desapareceu */ } }
   else escreve(plano.every((u) => feitas.has(u.chave)) && !plano.some((u) => pendenteF2(feitas.get(u.chave))));
   saida(`motor ${process.pid}: ${plano.length} unidades em ${Math.round((Date.now() - t0) / 1000)} s${invalido ? ` (invalidado: ${invalido})` : ''}`);
   return invalido ? 2 : 0;
