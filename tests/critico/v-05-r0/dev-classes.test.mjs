@@ -5,11 +5,11 @@
 // - o orçamento: o executor deixa uma unidade por correr, o check-ticket dá 3 (sem publicar) e o --continuar acaba o que falta e dá 0.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { cenario, correr, ROOT, ghFalso, gitOk, lanca, linhas, PASSOS, pidsLancados, escreve, saida, tmp, limpa } from './helpers.mjs';
+import { ambiente, cenario, correr, FX, RAMO, ROOT, ghFalso, gitOk, lanca, linhas, PASSOS, pidsLancados, escreve, saida, tmp, limpa } from './helpers.mjs';
 
 after(limpa);
 
@@ -198,3 +198,61 @@ for (const [codigo, saidaEsperada, texto] of [['EEXIST', 3, 'learnings: busy, tr
     assert.ok(r.stderr.includes(texto), r.stderr);
   });
 }
+
+// V-05 (#129, Ronda 2): o passo 6 com o mapa do V-02 (sem `regras`). Um ficheiro fora de tests/critico dá TODAS as suítes: o passo 4 tem de as ter corrido e
+// passado; um diff só de testes dá «n/a» por extenso. Nunca um `ok esquema` mudo.
+const MAPA_REAL = JSON.stringify({ versao: 1, sempre: { 'a-r0': 'sempre' } }, null, 2) + '\n'; // o do repo real não tem `regras`
+function cenarioMapaReal(ramo) {
+  const d = cenario();
+  gitOk(d, 'checkout', '-q', 'main'); // a base do cenário passa a ter o mapa real; o lint do mapa do cenário só lia `regras`, por isso troca-se por um trivial
+  escreve(d, 'scripts/mapa-suites.json', MAPA_REAL);
+  escreve(d, 'scripts/mapa-suites.test.mjs', 'import test from "node:test";\ntest("mapa do cenário: sem regras", () => {});\n');
+  gitOk(d, 'add', '-A');
+  gitOk(d, 'commit', '-q', '-m', 'mapa real');
+  gitOk(d, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  gitOk(d, 'checkout', '-q', '-B', RAMO);
+  ramo(d);
+  gitOk(d, 'add', '-A');
+  gitOk(d, 'commit', '-q', '-m', 'o ticket do cenário');
+  return d;
+}
+const TUDO = ['scripts/**', 'tests/critico/**'];
+const esquema = (r) => passo(r, 'esquema');
+
+test('classe (passo 6, mapa real): um diff em scripts/ com todas as suítes a passar dá ok esquema, sem n/a', async () => {
+  const d = cenarioMapaReal((r) => escreve(r, 'scripts/novo.mjs', 'export const x = 1;\n'));
+  const r = await correr(d, ['--ambito', ...TUDO, '--base', 'origin/main']);
+  assert.equal(esquema(r).estado, 'ok', saida(r));
+  assert.ok(!esquema(r).linha.includes('n/a'), esquema(r).linha);
+  assert.equal(passo(r, 'afetadas no ramo').estado, 'ok', saida(r));
+});
+
+test('classe (passo 6, mapa real): um diff só em tests/critico dá a linha «n/a: o diff só toca em testes»', async () => {
+  const d = cenarioMapaReal((r) => escreve(r, 'tests/critico/a-r0/x.test.mjs', FX.xMais));
+  const r = await correr(d, ['--ambito', ...TUDO, '--base', 'origin/main']);
+  assert.equal(esquema(r).estado, 'ok', saida(r));
+  assert.ok(esquema(r).linha.includes('n/a: o diff só toca em testes'), esquema(r).linha);
+});
+
+test('classe (passo 6, mapa real): uma suíte que não passa no passo 4 dá FAIL esquema, que a nomeia (nunca ok)', async () => {
+  const d = cenarioMapaReal((r) => { escreve(r, 'scripts/novo.mjs', 'export const x = 1;\n'); escreve(r, 'tests/critico/a-r0/x.test.mjs', FX.xVermelho); });
+  const r = await correr(d, ['--ambito', ...TUDO, '--base', 'origin/main']);
+  assert.equal(passo(r, 'afetadas no ramo').estado, 'FAIL', saida(r));
+  assert.equal(esquema(r).estado, 'FAIL', saida(r));
+  assert.ok(esquema(r).linha.includes('a-r0'), esquema(r).linha);
+});
+
+test('classe (passo 6, mapa real): com a seleção reduzida à força (um afetadas falso) o passo 4 dá ok mas o esquema dá FAIL e nomeia as suítes em falta', async () => {
+  const d = cenarioMapaReal((r) => escreve(r, 'scripts/novo.mjs', 'export const x = 1;\n'));
+  const cop = join(tmp('v05-copia-'), 'scripts'); // uma cópia do check-ticket e do executor, com o afetadas trocado
+  mkdirSync(cop, { recursive: true });
+  for (const f of ['check-ticket.mjs', 'executor.mjs']) copyFileSync(join(ROOT, 'scripts', f), join(cop, f));
+  writeFileSync(join(cop, 'afetadas.mjs'), "export const afetadas = () => ({ suites: ['a-r0'], porque: { 'a-r0': [{ regra: 'falso', ficheiro: 'scripts/novo.mjs' }] } });\n");
+  const r = spawnSync(process.execPath, [join(cop, 'check-ticket.mjs'), '--ambito', ...TUDO, '--base', 'origin/main', '--raiz', d],
+    { cwd: d, env: ambiente(), encoding: 'utf8', windowsHide: true, timeout: 240000, maxBuffer: 1 << 26 });
+  const saida_ = { out: r.stdout, err: r.stderr, status: r.status, ms: 0 };
+  assert.equal(passo(saida_, 'afetadas no ramo').estado, 'ok', saida(saida_));
+  assert.equal(passo(saida_, 'esquema').estado, 'FAIL', saida(saida_));
+  for (const s of ['scripts', 'c-r0']) assert.ok(passo(saida_, 'esquema').linha.includes(s), passo(saida_, 'esquema').linha);
+  assert.equal(r.status, 1, saida(saida_));
+});

@@ -126,10 +126,20 @@ function clona(raiz, sha, continuar) {
   return dir;
 }
 
-// 6: as regras `esquema: true` tocadas pelo diff e os consumidores delas (as suítes da regra) têm de ter `pass` no passo 4
+// 6: uma mudança de esquema tem de ser apanhada pelas suítes que a consomem.
+//   Mapa com `regras` (o das fixtures): as regras `esquema: true` tocadas pelo diff e os consumidores delas têm de ter `pass` no passo 4.
+//   Mapa do V-02 (sem `regras`, #126): um ficheiro fora de tests/critico dá TODAS as suítes (regra 3 do afetadas), por isso o passo exige o manifesto inteiro
+//   no passo 4, completo e a `pass`; um diff só de testes não tem nada a exigir (n/a, dito por extenso, nunca um ok mudo).
 function esquema(raiz, ficheiros, todas, p4) {
-  // o mapa do V-02 (versao 1: sempre, foraDaLista) não tem `regras`: sem regras `esquema: true` o passo não tem nada a exigir
-  const regras = (lerJson(join(raiz, 'scripts', 'mapa-suites.json')).regras ?? []).filter((r) => r.esquema === true && ficheiros.some((f) => casa(f, r.caminhos)));
+  const mapa = lerJson(join(raiz, 'scripts', 'mapa-suites.json'));
+  if (!('regras' in mapa)) {
+    if (ficheiros.every((f) => f.startsWith('tests/critico/'))) return { estado: 'ok', detalhe: 'n/a: o diff só toca em testes' };
+    if (p4.estado === 'pendente') return { estado: 'pendente', detalhe: 'incompleto: repetir com --continuar' };
+    const faltam = todas.filter((s) => !(s in p4.suites)), maus = todas.filter((s) => s in p4.suites && p4.suites[s] !== 'pass');
+    if (faltam.length || maus.length) return { estado: 'FAIL', detalhe: curto([faltam.length && `faltam: ${faltam.join(', ')}`, maus.length && `sem pass: ${maus.map((s) => `${s}: ${p4.suites[s]}`).join(', ')}`].filter(Boolean).join('; ') + ' (diff fora de tests/critico: o passo 4 tem de correr o manifesto inteiro)') };
+    return { estado: 'ok', detalhe: `manifesto inteiro: ${todas.length} suítes` };
+  }
+  const regras = (mapa.regras ?? []).filter((r) => r.esquema === true && ficheiros.some((f) => casa(f, r.caminhos)));
   const consumidores = [...new Set(regras.flatMap((r) => (r.suites.includes('*') ? todas : r.suites)))];
   const maus = consumidores.filter((s) => ['fail', 'limite', 'erro'].includes(p4.suites[s]) || (p4.estado !== 'pendente' && p4.suites[s] !== 'pass'));
   if (maus.length) return { estado: 'FAIL', detalhe: curto(`${maus.map((s) => `${s}: ${p4.suites[s] ?? 'não correu'}`).join(', ')} (esquema de ${regras.map((r) => r.caminhos[0]).join(', ')})`) };
