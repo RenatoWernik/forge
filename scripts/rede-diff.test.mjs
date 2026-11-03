@@ -17,9 +17,10 @@ import { base } from '../tests/critico/_comum/base.mjs';
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const P = (...a) => a.join('');
 
-// dados pessoais e caminhos da máquina (a lista do f-07, que contém as do f-04 e do f-10; a do f-11 é mais curta)
+// dados pessoais e caminhos da máquina: a união das listas do f-04, f-07, f-10 e f-11. As três primeiras são as mais largas dessas listas
+// (a da unidade com `\b` apanha também as de dígito e a raiz, e a de «home» apanha as com maiúscula); o `\b` evita `VEREDITO:\s` e `FAIL:\n`, que o literal do f-11 apanhava.
 const eu = userInfo().username;
-const PROIBIDO = [/\b[A-Z]:\\\\?[A-Za-z]/, /\b[A-Z]:\/[A-Za-z]/, /\/Users\//, /\/home\/[a-z]/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+const PROIBIDO = [/\b[A-Z]:[\\/]/, /\/Users\//, /\/home\//, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
   new RegExp(P('gui', 'lda'), 'i'), new RegExp(P('re', 'nat'), 'i'), new RegExp(P('@key', 'rus\\.'), 'i'), new RegExp(P('Agent', 'Homes|dev-', 'mods|forge-', 'wt|forge-', 'ref'), 'i'),
   ...(eu && eu.length >= 3 ? [new RegExp(`\\b${eu.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')] : [])];
 // os repositórios do próprio projeto não contam como dado pessoal
@@ -30,21 +31,38 @@ const CODIGO = ['.mjs', '.js', '.cjs', '.ts', '.tsx'];
 
 const git = (cwd, ...a) => spawnSync('git', ['-c', 'core.quotepath=off', ...a], { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
 
-// ficheiro → [[nº da linha, texto]] do que o diff contra `desde` acrescenta fora de tests/ (e dos ficheiros novos por seguir)
+// ficheiro → [[nº da linha, texto]] do que o diff contra `desde` acrescenta fora de tests/ (e dos ficheiros novos por seguir).
+// Os ficheiros vêm de `--name-only -z` (nomes com espaços ou acentos) e as linhas de um diff por ficheiro, sem prefixos nem opções do utilizador
+// (diff.mnemonicPrefix, diff.noprefix, diff.external); contam-se pelos números do `@@`, porque `+++ x` dentro de um hunk é uma linha acrescentada.
+const HUNK = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+const OPCOES_DIFF = ['-c', 'diff.mnemonicPrefix=false', '-c', 'diff.noprefix=false', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=0'];
+const nulos = (s) => s.split('\0').filter(Boolean);
+
+function linhasDoDiff(texto) {
+  const out = [], ls = texto.split('\n');
+  for (let i = 0; i < ls.length; i++) {
+    const h = HUNK.exec(ls[i]);
+    if (!h) continue; // fora de um hunk: cabeçalhos
+    let velhas = h[1] === undefined ? 1 : +h[1], n = +h[2], novas = h[3] === undefined ? 1 : +h[3];
+    while ((velhas > 0 || novas > 0) && ++i < ls.length) {
+      const l = ls[i];
+      if (l[0] === '+') { out.push([n++, l.slice(1)]); novas--; } else if (l[0] === '-') velhas--; else if (l[0] !== '\\') { velhas--; novas--; n++; }
+    }
+  }
+  return out;
+}
+
 function acrescentado(raiz, desde) {
   const out = new Map();
-  const add = (f, n, l) => { if (!out.has(f)) out.set(f, []); out.get(f).push([n, l]); };
-  const d = git(raiz, 'diff', '-U0', '--no-color', desde, '--', '.', ':(exclude)tests');
-  assert.equal(d.status, 0, d.stderr);
-  let f = null, n = 0;
-  for (const l of d.stdout.split('\n')) {
-    const h = /^@@ -\S+ \+(\d+)/.exec(l);
-    if (l.startsWith('+++ ')) f = l.startsWith('+++ b/') ? l.slice(6) : null;
-    else if (h) n = +h[1];
-    else if (f && l.startsWith('+')) add(f, n++, l.slice(1));
+  const gitOk = (...a) => { const r = git(raiz, '--literal-pathspecs', ...a); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  const foraDeTests = (f) => !f.startsWith('tests/');
+  for (const f of nulos(gitOk('diff', '--name-only', '-z', '--diff-filter=ACMR', desde)).filter(foraDeTests)) {
+    const ls = linhasDoDiff(gitOk(...OPCOES_DIFF, desde, '--', f));
+    if (ls.length) out.set(f, ls);
   }
-  const u = git(raiz, 'ls-files', '--others', '--exclude-standard', '--', '.', ':(exclude)tests');
-  for (const novo of u.stdout.split('\n').map((s) => s.trim()).filter(Boolean)) readFileSync(join(raiz, novo), 'utf8').split(/\r?\n/).forEach((l, i) => add(novo, i + 1, l));
+  for (const f of nulos(gitOk('ls-files', '-z', '--others', '--exclude-standard')).filter(foraDeTests)) {
+    try { out.set(f, readFileSync(join(raiz, f), 'utf8').split(/\r?\n/).map((l, i) => [i + 1, l])); } catch { /* shortcut: uma pasta (repo aninhado) não tem linhas */ }
+  }
   return out;
 }
 
@@ -92,9 +110,12 @@ function repo() {
   return { d, sha: gitT(d, 'rev-parse', 'HEAD') };
 }
 const COISAS = {
-  'um caminho /home/…': P('ver ', '/home', '/alguem/x'),
+  'um caminho de home': P('ver ', '/home', '/alguem/x'),
   'um UUID': P('id ', '0123abcd', '-0123-4567-', '89ab-0123456789ab'),
   [P('Agent', 'Homes')]: P('pasta ', 'Agent', 'Homes'),
+  'um caminho de home com maiúscula (o do f-11)': P('ver ', '/home', '/Alguem'),
+  'uma unidade com dígito (o do f-11)': P('ver D', ':', '\\1x'),
+  'a raiz de uma unidade (o do f-11)': P('ver E', ':', '/'),
 };
 const FORA = P('lo', 'dash'); // um pacote de fora da biblioteca padrão
 
@@ -135,6 +156,39 @@ test('rede do diff, oráculo: um import de fora da biblioteca padrão acrescenta
   const sha2 = gitT(d, 'rev-parse', 'HEAD');
   escreve(d, 'scripts/b.mjs', "import x from '" + FORA + "';\nexport default x;\nexport const c = 1;\n");
   assert.deepEqual(rede(d, sha2), [], 'o import antigo de um ficheiro tocado não é do ticket');
+});
+
+// classe: o que o parser do diff não pode confundir (linhas que parecem cabeçalhos, nomes de ficheiro, opções do git do utilizador)
+test('rede do diff, oráculo: uma linha acrescentada que começa por `++ ` ou `@@` não faz o parser perder as linhas seguintes', () => {
+  const { d, sha } = repo();
+  const sujo = P('/home', '/abc');
+  for (const [i, cabeca] of ['++ nota', '++ b/x', '-- nota', '@@ -1 +1 @@', '+++ x', 'diff --git a/x b/x'].entries()) {
+    escreve(d, 'docs/velho.md', `# velho\n\n${P('/home', '/antigo/dados')} já estava na base.\n${cabeca}\n${sujo}\n`);
+    const f = rede(d, sha);
+    assert.ok(f.some((x) => x.startsWith('docs/velho.md:') && x.includes(sujo)), `caso ${i} (${cabeca}): ${f.join(' | ') || 'nada'}`);
+  }
+});
+
+test('rede do diff, oráculo: um nome de ficheiro com espaço ou acento não faz saltar o ficheiro (importa de fora, commitado ou não)', () => {
+  const { d, sha } = repo();
+  for (const nome of ['scripts/zz a.mjs', 'scripts/açã b.mjs', 'scripts/[x] c.mjs']) {
+    escreve(d, nome, "import { join } from 'node:path';\nexport const a = require('" + FORA + "');\n");
+    gitT(d, 'add', '-A');
+    const f = rede(d, sha);
+    assert.ok(f.some((x) => x.startsWith(nome + ':') && x.includes(FORA)), `${nome}: ${f.join(' | ') || 'nada'}`);
+  }
+});
+
+test('rede do diff, oráculo: as opções de diff do git do utilizador (diff.mnemonicPrefix, diff.noprefix, diff.external) não escondem ficheiros', () => {
+  for (const [chave, valor] of [['diff.mnemonicPrefix', 'true'], ['diff.noprefix', 'true'], ['diff.external', 'false']]) {
+    const { d, sha } = repo();
+    gitT(d, 'config', chave, valor);
+    escreve(d, 'docs/velho.md', `# velho\n\n${P('/home', '/antigo/dados')} já estava na base.\n${P('/home', '/abc')}\n`);
+    escreve(d, 'scripts/a.mjs', "import { join } from 'node:path';\nexport const a = join('x', 'y');\nimport x from '" + FORA + "';\n");
+    const f = rede(d, sha);
+    assert.ok(f.some((x) => x.startsWith('docs/velho.md:')), `${chave}: ${f.join(' | ') || 'nada'}`);
+    assert.ok(f.some((x) => x.startsWith('scripts/a.mjs:') && x.includes(FORA)), `${chave}: ${f.join(' | ') || 'nada'}`);
+  }
 });
 
 test('rede do diff, oráculo: os repositórios do próprio projeto não contam como dado pessoal', () => {
