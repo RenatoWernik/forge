@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { ROOT, BASE, ANSWERS, apaga } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const ler = (rel) => readFileSync(join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 const conta = (t, s) => t.split(s).length - 1;
@@ -51,12 +52,18 @@ test('C6 FRAMEWORK §9 Known failures: uma linha com o sintoma «ai-memory: OFF�
 
 test('C6 compat.json › ai-memory › surface.commands ganha serve, init e mcp-bridge (nomes da fixture 3.2.10); o verifiedWith não muda; os antigos ficam', () => {
   const c = JSON.parse(ler('compat.json')).components['ai-memory'];
-  const base = JSON.parse(spawnSync('git', ['show', BASE + ':compat.json'], { cwd: ROOT, encoding: 'utf8' }).stdout).components['ai-memory'];
   for (const k of ['ai-memory serve', 'ai-memory init', 'ai-memory mcp-bridge']) assert.ok(c.surface.commands.includes(k), 'falta ' + k);
-  for (const k of base.surface.commands) assert.ok(c.surface.commands.includes(k), 'perdeu ' + k);
-  assert.equal(c.verifiedWith, base.verifiedWith);
   const fx = JSON.parse(ler('scripts/fixtures/compat/surface-2026-10-29.json')).sources.find((s) => s.id === 'ai-memory');
   for (const k of ['serve', 'init', 'mcp-bridge']) assert.ok(fx.names.includes(k), 'a fixture não tem ' + k);
+});
+
+// V-11 (#135): a comparação com o compat.json da base fixa só vale no ramo do F-20b; os asserts acima correm em todos
+test('ÂMBITO: C6 compat.json › ai-memory › o verifiedWith não muda e os comandos antigos ficam (contra a base do F-20b)', (t) => {
+  if (soNoTicket(t, 'f-20b')) return;
+  const c = JSON.parse(ler('compat.json')).components['ai-memory'];
+  const base = JSON.parse(spawnSync('git', ['show', BASE + ':compat.json'], { cwd: ROOT, encoding: 'utf8' }).stdout).components['ai-memory'];
+  for (const k of base.surface.commands) assert.ok(c.surface.commands.includes(k), 'perdeu ' + k);
+  assert.equal(c.verifiedWith, base.verifiedWith);
 });
 
 test('C6 o scaffold (dry run) lista .claude/start-ai-memory.mjs e .claude/hooks/forge-ai-memory.mjs', async () => {

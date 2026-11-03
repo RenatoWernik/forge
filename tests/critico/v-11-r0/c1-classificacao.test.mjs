@@ -62,13 +62,15 @@ const normaliza = (texto) => texto.replace(/\r\n/g, '\n')
   .replace(/^((?:test|it|describe)\s*\(\s*['"`])\u00C2MBITO: /, '$1')
   .replace(/^[ \t]*if \(soNoTicket\(t, (['"])[^'"\n]+\1\)\) return;[^\n]*\n/m, '')
   .replace(/(,\s*(?:async\s+)?)\(\s*t?\s*\)(\s*=>)/, '$1()$2');
+// RESPOSTA da Ronda 2 (#135): nestes 2 ficheiros a comparação com a base fixa sai do teste original para um teste ÂMBITO novo (o original mantém o nome)
+const SEPARADOS = ['tests/critico/f-25-r0/c2-gravar.test.mjs', 'tests/critico/f-20b-r0/c6-manual.test.mjs'];
 test('ÂMBITO: C1 cada teste convertido pelo ticket (pastas de legado e g-guardas do f-26) fica byte a byte, salvo o prefixo, o (t) e a linha do soNoTicket', (t) => {
   if (soNoTicket(t, 'v-11')) return;
   const mb = base();
   if (!mb) return t.skip('sem origin/main');
-  const fs = [...LEGADO.flatMap((p) => listaNaBase(mb, `tests/critico/${p}`)), 'tests/critico/f-26-r0/g-guardas.test.mjs'].filter((f) => /\.(?:mjs|cjs|js)$/.test(f));
+  const fs = [...LEGADO.flatMap((p) => listaNaBase(mb, `tests/critico/${p}`)), 'tests/critico/f-26-r0/g-guardas.test.mjs', 'tests/critico/v-03-r0/guardas.test.mjs'].filter((f) => /\.(?:mjs|cjs|js)$/.test(f));
   const antes = naRevisao(mb, fs), mudados = [];
-  let convertidos = 0;
+  let convertidos = 0, separados = 0;
   for (const f of fs) {
     if (!arvore().includes(f) || antes.get(f) === null) continue;
     const velhos = testes(antes.get(f));
@@ -77,11 +79,13 @@ test('ÂMBITO: C1 cada teste convertido pelo ticket (pastas de legado e g-guarda
       if (!deAmbito(te, id)) continue;
       const v = velhos.filter((x) => semPrefixo(x.titulo) === semPrefixo(te.titulo));
       if (v.length && v.every((x) => x.ids.includes(id))) continue; // já era de âmbito no merge-base (o f-20a do F-29)
+      if (!v.length && SEPARADOS.includes(f)) { separados++; continue; } // RESPOSTA da Ronda 2: a guarda separada do comportamento é um teste novo
       convertidos++;
       if (!v.some((x) => normaliza(x.texto) === normaliza(te.texto))) mudados.push(`${f}:${te.linha}: «${te.titulo.slice(0, 90)}»${v.length ? '' : ' (sem teste com este título no merge-base)'}`);
     }
   }
-  t.diagnostic(`testes convertidos pelo ticket: ${convertidos}`);
+  t.diagnostic(`testes convertidos pelo ticket: ${convertidos}; guardas separadas (testes novos): ${separados}`);
+  assert.equal(separados, 3, `controlo: ${separados} guardas separadas nos ficheiros do f-25 e do f-20b (devem ser 3: o §6, o SAME_DATA (num ciclo de 3 workflows) e o verifiedWith)`);
   assert.deepEqual(mudados, [], 'testes convertidos que mudaram além da transformação do F-29:\n' + mudados.join('\n'));
 });
 // RESPOSTA 6563406653: os títulos «âmbito:» antigos sem soNoTicket (os 11 do L2, com a opção skip do ramo exato ou de comportamento) ficam byte a byte

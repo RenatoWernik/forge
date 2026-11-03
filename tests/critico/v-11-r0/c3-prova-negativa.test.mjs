@@ -39,10 +39,19 @@ export const TABELA = [
   ...C4('f-16-r0/c4-corpus-e-regressao.test.mjs'), ...C4('f-17-r0/c4-regressao.test.mjs'),
   T('f-20a-r0/c4-projeto.test.mjs', 'scripts/scaffold.test.mjs mantém todas as linhas da base', 'em scripts/scaffold.test.mjs'),
   T('f-20a-r0/c4-projeto.test.mjs', 'os ataques de tests/critico/ que existiam na base ficam byte a byte', MC),
+  // RESPOSTA da Ronda 2 (#135): as guardas separadas do comportamento (f-25, f-20b), o f-23a (a mutação do desfecho do gauntlet-build.js partia-o
+  // fora do ramo) e as duas guardas do v-03-r0, cada uma com a sua mutação
+  T('f-25-r0/c2-gravar.test.mjs', 'o §6 do FRAMEWORK mantém', 'o §6 perdeu ou mudou esta linha'),
+  ...['gauntlet-build.js', 'gauntlet-batch.js', 'gauntlet-ponytail.js'].map((wf) => T('f-25-r0/c2-gravar.test.mjs', `o SAME_DATA de ${wf} mantém`, 'o texto existente do SAME_DATA mudou', 'o SAME_DATA de ${wf} mantém')),
+  T('f-20b-r0/c6-manual.test.mjs', 'o verifiedWith não muda e os comandos antigos ficam', '3.2.11'),
+  T('f-23a-r0/c1-pre-existente.test.mjs', 'guarda, propriedade', 'rounds'), T('f-23a-r0/regressao.test.mjs', 'regra geral [guarda]', 'rounds'),
+  T('v-03-r0/guardas.test.mjs', 'os ficheiros de tests/critico/ da base fora da lista', 'f-01-r0/c3-check-env.test.mjs'),
+  T('v-03-r0/guardas.test.mjs', 'nos ficheiros da lista autorizada, os asserts', 'f-01-r0/regressao.test.mjs'),
 ];
 
-// os testes de âmbito (título «ÂMBITO:» e soNoTicket com o id da pasta) dos ficheiros das pastas de legado: {ficheiro, id, te}
-const convertidos = () => arvore().filter((f) => LEGADO.includes(pastaDe(f)) && f.endsWith('.test.mjs'))
+// os testes de âmbito (título «ÂMBITO:» e soNoTicket com o id da pasta) dos ficheiros das pastas de legado e das guardas do v-03-r0: {ficheiro, id, te}
+const V03_GUARDAS = 'tests/critico/v-03-r0/guardas.test.mjs';
+const convertidos = () => arvore().filter((f) => (LEGADO.includes(pastaDe(f)) && f.endsWith('.test.mjs')) || f === V03_GUARDAS)
   .flatMap((f) => testes(ler(f)).filter((te) => deAmbito(te, idDaPasta(pastaDe(f)))).map((te) => ({ ficheiro: f, id: idDaPasta(pastaDe(f)), te })));
 const naTabela = (c) => TABELA.some((e) => e.ficheiro === c.ficheiro && c.te.titulo.includes(e.estatico));
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -60,7 +69,31 @@ function muta(d) {
   const md = lista(sha('f-08-r0')).find((n) => f14.has(n) && existsSync(join(d, 'scripts/corpus/mutations', n)));
   assert.ok(md, 'controlo: nenhuma mutação comum às BASE do f-08 e do f-14');
   rmSync(join(d, 'scripts/corpus/mutations', md));
+  mutaRonda2(d);
   return md;
+}
+
+// RESPOSTA da Ronda 2 (#135): as mutações das guardas separadas, do f-23a e do v-03-r0 (a base de cada uma é o sha do helpers.mjs da pasta)
+const CMD = 'node .claude/painel-gravar.mjs';
+const naBaseDe = (p, rel) => gitRaiz('show', `${DECL.exec(ler(`tests/critico/${p}/helpers.mjs`))[1]}:${rel}`).stdout.replace(/\r\n/g, '\n');
+const edita = (d, rel, f) => { const p = join(d, rel), s = readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), n = f(s); assert.notEqual(n, s, 'controlo: a mutação não mudou ' + rel); writeFileSync(p, n); };
+const sec6 = (t) => { const i = t.indexOf('\n## 6.'); const j = t.indexOf('\n## ', i + 1); return t.slice(i, j < 0 ? undefined : j); };
+const sameData = (t) => { const m = /const SAME_DATA = (['"`])((?:\\.|(?!\1).)*)\1/s.exec(t); return m ? m[2] : null; };
+function mutaRonda2(d) {
+  // f-25: uma linha do §6 do FRAMEWORK perde uma letra; o texto da base de cada SAME_DATA perde uma letra
+  const l6 = sec6(naBaseDe('f-25-r0', 'templates/FRAMEWORK.md')).split('\n').filter((x) => x.trim() && !x.includes(CMD) && /[a-z]/.test(x)).sort((a, b) => b.length - a.length)[0];
+  edita(d, 'templates/FRAMEWORK.md', (s) => s.replaceAll(l6, l6.replace(/[a-z]/, 'Q')));
+  for (const wf of ['gauntlet-build.js', 'gauntlet-batch.js', 'gauntlet-ponytail.js']) {
+    const rel = `templates/.claude/workflows/${wf}`, velho = sameData(naBaseDe('f-25-r0', rel));
+    edita(d, rel, (s) => { const k = s.indexOf(velho) + velho.search(/[a-z]/); return s.slice(0, k) + 'Q' + s.slice(k + 1); });
+  }
+  // f-20b: o verifiedWith do ai-memory sobe
+  edita(d, 'compat.json', (s) => { const j = JSON.parse(s); j.components['ai-memory'].verifiedWith = '3.2.11'; return JSON.stringify(j, null, 2) + '\n'; });
+  // f-23a: o desfecho do gauntlet-build.js muda (uma ronda a mais antes de parar, nos dois modos)
+  edita(d, 'templates/.claude/workflows/gauntlet-build.js', (s) => s.replace("MODE === 'rigorous' && round >= CAP) stop('contract')", "MODE === 'rigorous' && round >= CAP + 1) stop('contract')")
+    .replace("else if (round >= CAP) stop({ reason: 'maxRounds' })", "else if (round >= CAP + 1) stop({ reason: 'maxRounds' })"));
+  // v-03: um assert de uma regressao.test.mjs autorizada desaparece
+  edita(d, 'tests/critico/f-01-r0/regressao.test.mjs', (s) => s.replace(/\bassert\.\w+\(/, 'void('));
 }
 
 test('ÂMBITO: C3 cada teste que o ticket converte nas pastas de legado tem prova negativa na TABELA (os outros usos de BASE ficam em referencia)', (t) => {
