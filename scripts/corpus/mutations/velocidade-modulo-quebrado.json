@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/avancar.mjs",
+  "find": "#!/usr/bin/env node",
+  "replace": "#!/usr/bin/env node\n((((",
+  "line": "speed: the 4 modules (executor, afetadas, check-ticket, avancar) are in .claude/ and parse"
+}

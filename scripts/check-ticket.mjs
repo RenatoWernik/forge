@@ -14,9 +14,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afetadas } from './afetadas.mjs';
+import { afetadas, fonteDe } from './afetadas.mjs';
 import { estadoDe, executa, lerTap } from './executor.mjs';
 
+// os lints do forge; o `lints` do manifesto (V-08, #132: um projeto gerado declara `[]`) substitui-os, e um manifesto sem `lints` mantém-nos
 const LINTS = ['scripts/guardas-critico.test.mjs', 'scripts/mapa-suites.test.mjs'];
 const LIMITE_LINT_MS = 180000;
 const TOKENS = ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'];
@@ -53,8 +54,12 @@ function arvoreLimpa(raiz) {
   return sujos.length ? { estado: 'FAIL', detalhe: curto(sujos.join(', ')) } : { estado: 'ok', detalhe: '' };
 }
 
-// 2: os lints da raiz, cada um num `node --test`; um lint em falta é FAIL
+// 2: os lints do manifesto, cada um num `node --test`; um lint em falta é FAIL; com `lints: []` não há nada a correr
 function lint(raiz) {
+  let lints = LINTS;
+  try { lints = lerJson(join(raiz, fonteDe(raiz, 'suites.json'))).lints ?? LINTS; } catch { /* sem manifesto legível os outros passos já dizem o motivo */ }
+  if (!Array.isArray(lints) || !lints.every((l) => typeof l === 'string' && l)) return Promise.resolve({ estado: 'FAIL', detalhe: 'suites.json: lints tem de ser uma lista de caminhos' });
+  if (!lints.length) return Promise.resolve({ estado: 'ok', detalhe: 'nenhum lint declarado' });
   const um = (rel) => new Promise((fim) => {
     if (!existsSync(join(raiz, rel))) return fim(`${rel} em falta`);
     const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
@@ -70,7 +75,7 @@ function lint(raiz) {
       fim(`${rel}: ${maus.join('; ') || `código ${status}`}`);
     });
   });
-  return Promise.all(LINTS.map(um)).then((r) => { const maus = r.filter(Boolean); return maus.length ? { estado: 'FAIL', detalhe: curto(maus.join(' | ')) } : { estado: 'ok', detalhe: '' }; });
+  return Promise.all(lints.map(um)).then((r) => { const maus = r.filter(Boolean); return maus.length ? { estado: 'FAIL', detalhe: curto(maus.join(' | ')) } : { estado: 'ok', detalhe: '' }; });
 }
 
 // 3: os ficheiros do diff contra o merge-base (com a árvore de trabalho, sem deteção de renomeações: o nome antigo também conta) ⊆ os globs
@@ -131,7 +136,7 @@ function clona(raiz, sha, continuar) {
 //   Mapa do V-02 (sem `regras`, #126): um ficheiro fora de tests/critico dá TODAS as suítes (regra 3 do afetadas), por isso o passo exige o manifesto inteiro
 //   no passo 4, completo e a `pass`; um diff só de testes não tem nada a exigir (n/a, dito por extenso, nunca um ok mudo).
 function esquema(raiz, ficheiros, todas, p4) {
-  const mapa = lerJson(join(raiz, 'scripts', 'mapa-suites.json'));
+  const mapa = lerJson(join(raiz, fonteDe(raiz, 'mapa-suites.json')));
   if (!('regras' in mapa)) {
     if (ficheiros.every((f) => f.startsWith('tests/critico/'))) return { estado: 'ok', detalhe: 'n/a: o diff só toca em testes' };
     if (p4.estado === 'pendente') return { estado: 'pendente', detalhe: 'incompleto: repetir com --continuar' };
@@ -177,7 +182,7 @@ async function main(argv) {
   let pRamo = Promise.resolve(orfao('sem diff contra a base')), pPos = pRamo;
   if (ficheiros) {
     try {
-      const manifesto = lerJson(join(raiz, 'scripts', 'suites.json'));
+      const manifesto = lerJson(join(raiz, fonteDe(raiz, 'suites.json')));
       todas = manifesto.suites.map((s) => s.nome);
       const r = await afetadas(ficheiros, { raiz });
       suites = [...r.suites];

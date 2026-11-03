@@ -13,6 +13,7 @@ import { closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, read
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fonteDe } from './afetadas.mjs';
 
 // Todo processo lançado passa por aqui: no Windows um filho de um motor destacado (sem consola) sem windowsHide abre uma consola por spawn. O
 // contador vai nos resultados (`processos`) para um teste provar que o número de spawns não cresce com o tempo.
@@ -213,17 +214,33 @@ function lerArgs(argv) {
 }
 
 function lerManifesto(raiz) {
-  const f = join(raiz, 'scripts', 'suites.json');
+  const fonte = fonteDe(raiz, 'suites.json'), f = join(raiz, fonte); // .claude/ num projeto gerado, scripts/ no forge (V-08)
   if (!existsSync(f)) throw new Uso(`falta ${f}`);
   const texto = readFileSync(f, 'utf8'), m = JSON.parse(texto);
   if (m.versao !== 1 || !Array.isArray(m.suites)) throw new Uso('suites.json: versao 1 com suites[] esperada');
   for (const k of ['paralelo', 'vagas_globais', 'carga_sensivel', 'orcamento_s']) if (!(m[k] > 0)) throw new Uso(`suites.json: ${k} inválido`);
   for (const s of m.suites) {
-    if (s.tipo !== 'node-test') throw new Uso(`suite ${s.nome}: tipo ${s.tipo} não suportado (só node-test)`);
+    if (s.tipo === 'comando') { // um comando qualquer (argv, sem shell) que acaba em 0 ou não, ou que escreve TAP
+      if (!Array.isArray(s.comando) || !s.comando.length || !s.comando.every((x) => typeof x === 'string' && x)) throw new Uso(`suite ${s.nome}: comando tem de ser uma lista (argv) de textos`);
+      s.formato ??= 'codigo';
+      if (!['tap', 'codigo'].includes(s.formato)) throw new Uso(`suite ${s.nome}: formato ${s.formato} (tap ou codigo)`);
+    } else if (s.tipo !== 'node-test') throw new Uso(`suite ${s.nome}: tipo ${s.tipo} não suportado (node-test ou comando)`);
     s.limite_s ??= LIMITE_PADRAO_S;
   }
   m.hash = createHash('sha256').update(texto).digest('hex');
+  m.fonte = fonte;
   return m;
+}
+
+// as contagens de uma unidade que acabou: o TAP do node --test; numa suíte `comando`, o TAP de outra ferramenta (sem o sumário `# pass`, contam as linhas
+// ok e not ok do nível 0) ou só o código de saída. Sem nenhum teste contado a unidade é «erro» (estadoDe), nunca um falso verde
+function contagens(s, out, status) {
+  if (s.tipo !== 'comando') return lerTap(out);
+  if (s.formato === 'codigo') return { pass: status === 0 ? 1 : 0, fail: status === 0 ? 0 : 1, skip: 0, todo: 0, skips: [], duracoes: {} };
+  const c = lerTap(out);
+  if (c.pass !== null && c.fail !== null) return c;
+  const nivel0 = testesDoTap(out).filter((t) => !t.nome.includes(' > ')), n = (e) => nivel0.filter((t) => t.estado === e).length;
+  return { ...c, pass: n('pass'), fail: n('fail'), skip: n('skip'), todo: n('todo') };
 }
 
 // a duração (s) de cada unidade no último resultado com o mesmo manifesto; as unidades sem medida contam pelo limite_s (o pior caso)
@@ -246,7 +263,8 @@ function planeia(m, escolha, raiz, medidas) {
   if (escolha !== '*') { const f = escolha.filter((n) => !nomes.includes(n)); if (f.length) throw new Uso(`suites desconhecidas: ${f.join(', ')}`); }
   const us = [];
   for (const s of m.suites.filter((x) => escolha === '*' || escolha.includes(x.nome))) {
-    const ficheiros = [...new Set(s.ficheiros.flatMap((g) => globSync(g, { cwd: raiz }).map((f) => f.replaceAll('\\', '/'))))].sort();
+    // uma suíte `comando` é uma só unidade; o «ficheiro» dela é só o nome (a chave, o nome do TAP e o que o check-ticket mostra)
+    const ficheiros = s.tipo === 'comando' ? [`comando-${s.nome}`] : [...new Set(s.ficheiros.flatMap((g) => globSync(g, { cwd: raiz }).map((f) => f.replaceAll('\\', '/'))))].sort();
     if (!ficheiros.length) throw new Uso(`suite ${s.nome}: nenhum ficheiro casa`);
     // um bloco é o padrão (texto) ou {padrao, limite_s}: o limite_s do bloco, se houver, substitui o da suíte
     // sensivel_ao_tempo: true (a suíte toda) ou uma lista de globs (só esses ficheiros)
@@ -349,6 +367,7 @@ const cobre = (motor, pedido) => motor === '*' || (pedido !== '*' && pedido.ever
 
 async function chamada(argv, saida) {
   const c = await prepara(argv), { o, raiz, m, plano, marca } = c, t0 = Date.now();
+  if (m.fonte.startsWith('.claude/')) saida(`executor: manifesto lido de ${m.fonte}`);
   if (c.afetadas) saida(`afetadas: ${c.afetadas.suites.length} suítes (${c.afetadas.ficheiros.length} ficheiros contra ${c.afetadas.base.slice(0, 7)}): ${c.afetadas.suites.join(', ')}`);
   const motorFicheiro = join(c.motorDir, `${marca}.json`), lock = join(c.motorDir, `${marca}.lock`);
   mkdirSync(join(c.pasta, 'logs'), { recursive: true });
@@ -497,13 +516,16 @@ async function motorCorre(argv, saida) {
     delete env.FORGE_LOTE_FASE; delete env.FORGE_LOTE_RESULTADOS;
     // fase 1: os testes com doLote saltam; fase 2: só eles correm, a ler este ficheiro de resultados (que a fase 2 vai completando)
     if (u.fase === 2) env.FORGE_LOTE_RESULTADOS = ficheiro; else env.FORGE_LOTE_FASE = '1';
-    const args = ['--test', '--test-reporter=tap'];
-    if (u.suite.concorrencia) args.push(`--test-concurrency=${u.suite.concorrencia}`);
-    if (u.fase === 2) args.push(`--test-name-pattern=^(?:${u.nomes.map(escapaRegex).join('|')})$`);
-    else if (u.bloco) args.push(`--test-name-pattern=${u.bloco}`);
-    args.push(u.ficheiro);
+    let exe = process.execPath, args = ['--test', '--test-reporter=tap'];
+    if (u.suite.tipo === 'comando') [exe, ...args] = u.suite.comando;
+    else {
+      if (u.suite.concorrencia) args.push(`--test-concurrency=${u.suite.concorrencia}`);
+      if (u.fase === 2) args.push(`--test-name-pattern=^(?:${u.nomes.map(escapaRegex).join('|')})$`);
+      else if (u.bloco) args.push(`--test-name-pattern=${u.bloco}`);
+      args.push(u.ficheiro);
+    }
     const r = { u, vaga, cmax: vaga.carga, inicio: new Date(), limite: false, out: '', err: '' };
-    const p = lancaProc(process.execPath, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+    const p = lancaProc(exe, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     r.pid = p.pid;
     p.stdout.on('data', (b) => { r.out += b; });
     p.stderr.on('data', (b) => { r.err += b; });
@@ -524,7 +546,7 @@ async function motorCorre(argv, saida) {
     if (!raizViva()) process.exit(1); // a raiz desapareceu: nada a gravar
     correm.delete(r);
     vagas.larga(r.vaga.dirs);
-    const cont = lerTap(r.out), { u } = r;
+    const { u } = r, cont = contagens(u.suite, r.out, r.status);
     const estadoReal = r.limite ? 'limite' : r.status === null || r.status === undefined ? 'erro' : estadoDe(r.status, cont);
     const estado = confere() ? estadoReal : 'invalidado'; // a unidade correu (ou acabou) sobre outro conteúdo
     const tap = tapDe(u);

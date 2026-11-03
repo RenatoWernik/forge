@@ -1,5 +1,6 @@
 { "versao": 1,
   "paralelo": 6, "vagas_globais": 10, "carga_sensivel": 3, "orcamento_s": 500,
+  "lints": ["scripts/guardas-critico.test.mjs", "scripts/mapa-suites.test.mjs"],
   "suites": [
     { "nome": "scripts", "tipo": "node-test", "ficheiros": ["scripts/*.test.mjs"], "limite_s": 900, "concorrencia": 2, "sensivel_ao_tempo": true },
     { "nome": "f-01-r0", "tipo": "node-test", "ficheiros": ["tests/critico/f-01-r0/*.test.mjs"], "limite_s": 495 },
@@ -45,5 +46,6 @@
     { "nome": "v-02-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-02-r0/*.test.mjs"], "limite_s": 240 },
     { "nome": "v-06-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-06-r0/*.test.mjs"], "limite_s": 300 },
     { "nome": "v-11-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-11-r0/*.test.mjs"], "limite_s": 300 },
-    { "nome": "v-05-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-05-r0/*.test.mjs"], "limite_s": 480 }
+    { "nome": "v-05-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-05-r0/*.test.mjs"], "limite_s": 480 },
+    { "nome": "v-08-r0", "tipo": "node-test", "ficheiros": ["tests/critico/v-08-r0/*.test.mjs"], "limite_s": 300 }
   ] }

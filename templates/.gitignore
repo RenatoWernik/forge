@@ -3,3 +3,4 @@ graphify-out/
 .claude/settings.local.json
 .mcp.json
 .ai-memory.local.toml
+.forge/

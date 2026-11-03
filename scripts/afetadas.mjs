@@ -19,6 +19,9 @@ import { fileURLToPath } from 'node:url';
 const RAIZ = fileURLToPath(new URL('../', import.meta.url));
 const PASTA = 'tests/critico/';
 const json = (raiz, rel) => JSON.parse(readFileSync(join(raiz, rel), 'utf8'));
+// V-08 (#132): o manifesto e o mapa de um projeto gerado ficam em .claude/ (os módulos são copiados byte a byte para lá); no forge, em scripts/.
+// Com os dois, ganha o .claude/. Sem nenhum, o caminho de scripts/ (a leitura falha com o nome certo).
+export const fonteDe = (raiz, nome) => [`.claude/${nome}`, `scripts/${nome}`].find((f) => existsSync(join(raiz, f))) ?? `scripts/${nome}`;
 // shortcut: o que só depende da árvore (manifesto, mapa, ficheiros de cada suíte, pastas que ela importa, alvos dos doLote) fica em memória, por raiz,
 // durante o processo (refazê-lo custava ~370 ms por chamada: o c1-cobertura chama-a 812 vezes). Assume uma árvore que não muda neste processo; quem a altera
 // chama afetadas() num processo novo. O diff dos ficheiros nunca entra na cache; uma exceção não fica guardada.
@@ -31,7 +34,7 @@ const memo = (raiz, chave, f) => {
 const ficheirosDe = (raiz, suite) => memo(raiz, `ficheiros:${suite.nome}`, () => ficheirosDaSuite(raiz, suite));
 
 export function lerMapa(raiz = RAIZ) {
-  const m = json(raiz, 'scripts/mapa-suites.json');
+  const m = json(raiz, fonteDe(raiz, 'mapa-suites.json'));
   if (m.versao !== 1) throw new Error('mapa-suites.json: versao 1 esperada');
   if (m.sempre !== undefined && !(m.sempre && typeof m.sempre === 'object' && !Array.isArray(m.sempre))) throw new Error('mapa-suites.json: sempre é { suíte: motivo }');
   return m; // shortcut: chaves a mais (como as antigas `regras`) são ignoradas aqui; é o lint que as recusa no mapa do repo
@@ -57,7 +60,7 @@ const pastaDe = (f) => (f.startsWith(PASTA) && f.slice(PASTA.length).includes('/
 
 // as regras 1 a 4, sem o fecho do lote
 export function diretas(ficheiros, raiz = RAIZ) {
-  const suites = memo(raiz, 'suites', () => json(raiz, 'scripts/suites.json').suites), nomes = suites.map((s) => s.nome), porque = {};
+  const suites = memo(raiz, 'suites', () => json(raiz, fonteDe(raiz, 'suites.json')).suites), nomes = suites.map((s) => s.nome), porque = {};
   const junta = (s, regra, ficheiro) => (porque[s] ??= []).push({ regra, ficheiro });
   const sempre = Object.keys(memo(raiz, 'mapa', () => lerMapa(raiz)).sempre ?? {});
   const desconhecidas = sempre.filter((s) => !nomes.includes(s));
@@ -111,7 +114,7 @@ const alvosDoLote = (raiz, suite) => memo(raiz, `alvos:${suite.nome}`, () => new
 })));
 
 export function afetadas(ficheiros, { raiz = RAIZ } = {}) {
-  const { nomes, porque } = diretas(ficheiros, raiz), suites = memo(raiz, 'suites', () => json(raiz, 'scripts/suites.json').suites);
+  const { nomes, porque } = diretas(ficheiros, raiz), suites = memo(raiz, 'suites', () => json(raiz, fonteDe(raiz, 'suites.json')).suites);
   const fila = Object.keys(porque);
   while (fila.length && Object.keys(porque).length < nomes.length) {
     const s = fila.shift();
@@ -145,6 +148,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   if (a.length !== 2 || a[0] !== '--base' || a[1].startsWith('--')) { console.error('uso: node scripts/afetadas.mjs --base <ref>'); process.exit(2); }
   try {
     const r = desdeBase(a[1]);
+    const mapa = fonteDe(RAIZ, 'mapa-suites.json');
+    if (mapa.startsWith('.claude/')) console.log(`afetadas: mapa lido de ${mapa}`);
     for (const l of linhas(r)) console.log(l);
     console.log(`afetadas: ${r.suites.length} suítes, ${r.ficheiros.length} ficheiros no diff contra ${r.base.slice(0, 7)}`);
   } catch (e) { console.error(`afetadas: ${e.message}`); process.exit(2); }
