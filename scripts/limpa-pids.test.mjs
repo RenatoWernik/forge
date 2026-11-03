@@ -48,7 +48,7 @@ const TABELA = {
   'tests/critico/v-01-r0/limpa-identidade.test.mjs': { contagem: 3, classe: 'filho-vivo', motivo: 'kill() nos handles que o teste lançou' },
   'tests/critico/v-01-r0/r1-a4-c9-carga.test.mjs': { contagem: 2, classe: 'filho-vivo', motivo: 'p.kill() nos processos de carga que o teste lançou; um comentário' },
   'tests/critico/v-05-r0/dev-classes.test.mjs': { contagem: 1, classe: 'texto', motivo: 'comentário que descreve a medição com o espião' },
-  'tests/critico/v-05-r0/helpers.mjs': { contagem: 4, classe: 'saiu', motivo: 'mataArvore só recebe PIDs de PIDS, que a lanca() retira em exit/error; a sonda process.kill(pid, 0) não mata' },
+  'tests/critico/v-05-r0/helpers.mjs': { contagem: 4, classe: 'saiu', motivo: 'mataArvore só recebe PIDs de PIDS, que a lanca() retira em exit/error; a sonda de existência (sinal 0) não mata' },
   'tests/critico/v-06-r0/helpers.mjs': { contagem: 5, classe: 'saiu', motivo: 'o PID sai de PIDS no acaba() do filho (F-31); a sonda de existência não mata' },
 };
 const CLASSES = ['filho-vivo', 'identidade', 'saiu', 'texto'];
