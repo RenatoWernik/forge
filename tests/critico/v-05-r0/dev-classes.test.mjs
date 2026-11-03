@@ -48,6 +48,29 @@ test('classe: erros de uso dão 2 e não chamam o gh (sem --ambito, --publicar q
   }
 });
 
+// medido na ponta (C2 do V-05): o lint corria em paralelo com o motor e fora das vagas; o teste de tempo «corpus < 60 s» (exclusivo) do ramo deu 70,6 s e falhou
+test('classe: o lint corre antes dos motores e nunca se sobrepõe a uma unidade (janelas de tempo gravadas), com as 6 linhas pela ordem de sempre', async () => {
+  const janelas = join(tmp('v05-janelas-'), 'janelas.jsonl');
+  const grava = `import { appendFileSync } from 'node:fs';
+const marca = (quem, fase) => appendFileSync(process.env.V05_JANELAS, JSON.stringify({ quem, fase, t: Date.now() }) + '\\n');
+const dorme = (ms) => new Promise((f) => setTimeout(f, ms));
+`;
+  const d = cenario((r) => {
+    // o lint do mapa e a unidade da a-r0 demoram o bastante para que uma sobreposição se veja; cada um grava o início e o fim
+    // o mesmo ficheiro também é uma unidade da suíte `scripts`: só o executor dá às unidades um TEMP dentro de forge-exec-*, e é assim que se distingue o lint
+    escreve(r, 'scripts/mapa-suites.test.mjs', `import test from 'node:test';\n${grava}const quem = /forge-exec-[^\\\\/]+[\\\\/]u\\d+[\\\\/]tmp$/.test(process.env.TEMP ?? '') ? 'unidade' : 'lint';\ntest('lint do cenário (lento)', async () => { marca(quem, 'ini'); await dorme(2500); marca(quem, 'fim'); });\n`);
+    escreve(r, 'tests/critico/a-r0/x.test.mjs', `import test from 'node:test';\n${grava}test('a: unidade lenta', async () => { marca('unidade', 'ini'); await dorme(1500); marca('unidade', 'fim'); });\n`);
+  });
+  const r = await correr(d, ['--ambito', ...A, 'scripts/mapa-suites.test.mjs', '--base', 'origin/main'], { env: { V05_JANELAS: janelas } });
+  assert.equal(r.status, 0, saida(r));
+  assert.deepEqual(linhas(r.out).map((l) => `${l.estado} ${l.passo}`), PASSOS.map((p) => `ok ${p}`), saida(r));
+  const reg = readFileSync(janelas, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const t = (quem, fase) => reg.filter((e) => e.quem === quem && e.fase === fase).map((e) => e.t);
+  assert.equal(t('lint', 'ini').length, 1, JSON.stringify(reg));
+  assert.ok(t('unidade', 'ini').length >= 2, `a unidade corre no ramo e no pós-merge: ${JSON.stringify(reg)}`);
+  assert.ok(Math.max(...t('lint', 'fim')) <= Math.min(...t('unidade', 'ini')), `o lint e uma unidade sobrepuseram-se: ${JSON.stringify(reg)}`);
+});
+
 test('classe: o orçamento do executor não chega: código 3 sem publicar; com --continuar acaba o que falta e dá 0, com os 6 ok', async () => {
   const d = cenario((r) => {
     const m = JSON.parse(readFileSync(join(r, 'scripts/suites.json'), 'utf8'));

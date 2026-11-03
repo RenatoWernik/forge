@@ -154,8 +154,10 @@ async function main(argv) {
   const falha = (e) => ({ estado: 'FAIL', detalhe: curto(e.message) });
   const orfao = (porque) => ({ estado: 'FAIL', detalhe: porque });
 
-  const pLint = lint(raiz); // corre em paralelo com o executor: o orçamento_s dele já ocupa quase toda a chamada
   diz('árvore limpa', arvoreLimpa(raiz));
+  // o lint corre sozinho, antes dos motores: fora das vagas do executor, em paralelo roubava CPU às unidades exclusivas e sensíveis ao tempo
+  // (medido no C2: o «corpus < 60 s» do ramo deu 70,6 s e falhou). Um FAIL aqui não impede os passos seguintes.
+  diz('lint', await lint(raiz));
 
   let ficheiros = null, suites = null, todas = [], erro;
   try { ficheiros = diffDoRamo(raiz, o.base); } catch (e) { erro = e; }
@@ -172,7 +174,6 @@ async function main(argv) {
       pPos = Promise.resolve().then(() => corre('pós-merge', clona(raiz, sha, o.continuar), suites, sha, o.continuar)).catch(falha);
     } catch (e) { pRamo = Promise.resolve(falha(e)); pPos = pRamo; suites = null; }
   }
-  diz('lint', await pLint);
   diz('âmbito', ficheiros ? ambito(ficheiros, o.ambito) : falha(erro));
   const p4 = await pRamo;
   diz('afetadas no ramo', p4);
