@@ -8,10 +8,12 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, gitRaiz, caso, NOME_SO, AMB, SHA_F22A, SHA_CURTO, SHA_OUTRO } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const NOVOS = ['tests/critico/f-26-r0/', 'tests/critico/_comum/'];
 
-test('GUARDA: nada muda em tests/critico/ contra o merge-base com a main, fora de f-26-r0 e _comum (versionados e novos)', (t) => {
+test('ÂMBITO: GUARDA: nada muda em tests/critico/ contra o merge-base com a main, fora de f-26-r0 e _comum (versionados e novos)', (t) => {
+  if (soNoTicket(t, 'f-26')) return;
   const mb = gitRaiz('merge-base', 'HEAD', 'origin/main');
   if (mb.status !== 0) return t.skip('sem origin/main');
   const b = mb.stdout.trim();

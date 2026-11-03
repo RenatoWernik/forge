@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { srcNow, srcBase, contract, baseArgs, runWf, scenario, fresh, resultOf, outcome, sameOutcome, why, criticCalls, read, verdictBlock, PRE_LINE, H, D, rng, randomPlan, generate, corpusAnswers, check, state, fails, replaceIn, mutations } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const p = contract('pa', 9101);
 const PRE = (r) => [{ description: `PRE-r${r}-1 C1 the parser drops a trailing comma`, blame: `${'a'.repeat(40)} src/a.js:${10 + r}` }, { description: `PRE-r${r}-2 C2 the header is not escaped`, blame: `${'b'.repeat(40)} src/h.js:${20 + r}` }];
@@ -50,6 +51,20 @@ test('C1 [ataque] (rigorous): os preExisting de cada ronda entram em followUps c
 });
 
 test('C1 [guarda, propriedade]: os preExisting nunca mudam o desfecho; 40 planos ao acaso por modo, iguais ao gauntlet-build da BASE sem eles', async () => {
+  for (const mode of ['rigorous', 'accelerated']) {
+    for (let seed = 1; seed <= 40; seed++) {
+      const plan = randomPlan(rng(seed));
+      // V-11 (#135): em todos os ramos a referência é o próprio workflow sem os preExisting; a da BASE fixa é a do teste ÂMBITO abaixo
+      const ref = resultOf(await runWf(srcNow(), baseArgs([p], { mode }), scenario(p, { critic: (r) => plan[r - 1] || {} })));
+      const withPre = plan.map((v, i) => ({ ...v, preExisting: PRE(i + 1) }));
+      const run = await runWf(srcNow(), baseArgs([p], { mode }), scenario(p, fresh(withPre)));
+      sameOutcome(resultOf(run), ref, `${mode}, semente ${seed}, plano ${JSON.stringify(plan)}: ${why(run)}`);
+    }
+  }
+});
+
+test('ÂMBITO: C1 [guarda, propriedade]: os preExisting nunca mudam o desfecho; 40 planos ao acaso por modo, iguais ao gauntlet-build da BASE sem eles', async (t) => {
+  if (soNoTicket(t, 'f-23a')) return;
   for (const mode of ['rigorous', 'accelerated']) {
     for (let seed = 1; seed <= 40; seed++) {
       const plan = randomPlan(rng(seed));

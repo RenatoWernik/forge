@@ -7,6 +7,7 @@ import { join, extname, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT, BASE, sandboxEnv, git, api } from './helpers.mjs';
 import { doLote } from '../_comum/lote.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em 4d437e8
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 27, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
@@ -47,7 +48,8 @@ test('critério 3: um módulo do mod importa scripts/painel-leitor.mjs do pacote
 });
 
 // `claude-code` só em módulos TypeScript (o módulo de hooks e `import type`); um .mjs/.js/.cjs que os testes importam não o pode ter
-test('só biblioteca padrão: os .mjs/.js/.cjs/.ts/.tsx acrescentados ou alterados só importam node:, caminhos relativos ou (em .ts/.tsx) claude-code', async () => {
+test('ÂMBITO: só biblioteca padrão: os .mjs/.js/.cjs/.ts/.tsx acrescentados ou alterados só importam node:, caminhos relativos ou (em .ts/.tsx) claude-code', async (t) => {
+  if (soNoTicket(t, 'f-11')) return;
   const RE = [/\bimport\s+[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g, /\bimport\s*['"]([^'"]+)['"]/g, /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g, /\bexport\s+[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g, /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g];
   const d = git('diff', '--name-only', '--diff-filter=AM', desde(), '--', '.', ':(exclude)tests');
   const n = git('ls-files', '--others', '--exclude-standard', '--', '.', ':(exclude)tests');

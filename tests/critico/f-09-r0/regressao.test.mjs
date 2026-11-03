@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
 import { ROOT, BASE, sandboxEnv, git } from './helpers.mjs';
 import { doLote } from '../_comum/lote.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em 9f176c1
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'mod-painel.test.mjs': 10, 'painel-web.test.mjs': 2, 'painel.test.mjs': 13, 'scaffold.test.mjs': 35, 'sem-claude-mem.test.mjs': 1, 'skill-new-project.test.mjs': 8, 'sync.test.mjs': 22 };
@@ -61,7 +62,8 @@ const acrescentadas = () => {
   return out;
 };
 
-test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão, dados pessoais nem nada da Guilda', () => {
+test('ÂMBITO: reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão, dados pessoais nem nada da Guilda', (t) => {
+  if (soNoTicket(t, 'f-09')) return;
   const me = userInfo().username;
   const PROIBIDO = [/\b[A-Z]:\\\\?[A-Za-z]/, /\b[A-Z]:\/[A-Za-z]/, /\/Users\//, /\/home\/[a-z]/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /guilda/i, /renat/i, /@keyrus\./i, /AgentHomes|dev-mods|forge-wt|forge-ref/i,
     ...(me && me.length >= 3 ? [new RegExp(`\\b${me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')] : [])];
@@ -70,7 +72,8 @@ test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da m
   assert.deepEqual(achados, []);
 });
 
-test('só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados fora de tests/ só importam node: ou caminhos relativos', () => {
+test('ÂMBITO: só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados fora de tests/ só importam node: ou caminhos relativos', (t) => {
+  if (soNoTicket(t, 'f-09')) return;
   const d = git('diff', '--name-only', '--diff-filter=AM', desde(), '--', '.', ':(exclude)tests');
   const u = git('ls-files', '--others', '--exclude-standard', '--', '.', ':(exclude)tests');
   const files = [...new Set([...d.stdout.split('\n'), ...u.stdout.split('\n')].map((s) => s.trim()).filter(Boolean))].filter((x) => ['.mjs', '.js', '.cjs'].includes(extname(x)) && existsSync(join(ROOT, x)));

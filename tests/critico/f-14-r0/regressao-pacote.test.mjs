@@ -7,11 +7,13 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT, BASE, git, sandboxEnv, readFileSync, existsSync } from './helpers.mjs';
 import { doLote } from '../_comum/lote.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const PASS_BASE = 291;
 const conta = (t) => [...t.matchAll(/^\s*test\((['"`])/gm)].length;
 
-test('regressão: nenhum scripts/*.test.mjs da base desaparece nem perde testes', () => {
+test('ÂMBITO: regressão: nenhum scripts/*.test.mjs da base desaparece nem perde testes', (t) => {
+  if (soNoTicket(t, 'f-14')) return;
   const ls = git('ls-tree', '--name-only', BASE + ':scripts');
   assert.equal(ls.status, 0, ls.stderr);
   const menos = [];

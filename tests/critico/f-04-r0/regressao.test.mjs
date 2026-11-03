@@ -8,6 +8,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, BASE, git, runTests, failures } from './helpers.mjs';
 import { doLote } from '../_comum/lote.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 // Testes estáticos (`^test(`) por ficheiro em e083b6a; a suíte passava com 139
 const BASELINE = { 'corpus.test.mjs': 5, 'doctor.test.mjs': 46, 'frontmatter.test.mjs': 3, 'painel.test.mjs': 13, 'scaffold.test.mjs': 29, 'sem-claude-mem.test.mjs': 1, 'sync.test.mjs': 21 };
@@ -72,7 +73,8 @@ const acrescentadas = () => {
   return out;
 };
 
-test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão nem dados pessoais', () => {
+test('ÂMBITO: reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão nem dados pessoais', (t) => {
+  if (soNoTicket(t, 'f-04')) return;
   const PROIBIDO = [/\b[A-Z]:\\\\?[A-Za-z]/, /\/Users\//, /\/home\/[a-z]/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /renat/i, /@keyrus\./i, /AgentHomes|dev-mods/i];
   const achados = [];
   for (const [f, l] of acrescentadas()) for (const re of PROIBIDO) if (re.test(l.replace(/(?:github(?:usercontent)?\.com\/(?:repos\/)?|(?<![\w\/.-]))RenatoWernik\/(?:gauntlet-loop|forge)(?![\w.-])/gi, ''))) achados.push(`${f}: ${re} → ${l.trim().slice(0, 100)}`);

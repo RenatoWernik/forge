@@ -6,6 +6,7 @@
 //   L3 (rule 9, the other way): every file that runs `git diff --name-only` (the «only these files changed» pattern) has that diff inside
 //      a «ÂMBITO:» test, or uses base() (tests/critico/_comum/base.mjs).
 // The folders in scripts/guardas-legado.json are frozen: «legado» must still exist, «emCurso» (open branches) is exempt when present.
+// «legado» is linted like the rest (V-11, #135); what stays is justified file by file and rule by rule in «excecoes».
 // Reads text only: it never runs or imports a tests/critico file (the f-14 included). scripts/corpus/guardas/ is the oracle of the rules.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -219,12 +220,28 @@ test('lista congelada: cada pasta de legado ainda existe em tests/critico/', () 
   assert.deepEqual(faltam, [], `pasta(s) em legado que já não existem em tests/critico/: ${faltam.join(', ')} (tire-as de scripts/guardas-legado.json)`);
 });
 
-for (const pasta of pastas(CRITICO).filter((p) => !lista.legado.includes(p) && !lista.emCurso.includes(p))) {
+// V-11 (#135): the lint reads EVERY folder, the frozen ones too. The only way out is an entry of «excecoes» ({ficheiro, regra, motivo}, one per
+// file and rule), and it only counts while the folder of the file is in «legado»: a new file in a frozen folder is not exempt.
+const excecoes = lista.excecoes ?? [];
+assert.ok(Array.isArray(excecoes) && excecoes.every((e) => typeof e?.ficheiro === 'string' && /^L[123]$/.test(e.regra) && typeof e.motivo === 'string' && e.motivo.trim().length >= 15),
+  'excecoes: cada entrada tem de ser {ficheiro, regra (L1, L2 ou L3), motivo (pelo menos 15 caracteres)}');
+const pastaDe = (rel) => rel.split('/')[2];
+const isenta = (x, pasta) => lista.legado.includes(pasta) && excecoes.some((e) => e.ficheiro === `tests/critico/${pasta}/${x.ficheiro}` && e.regra === x.regra);
+for (const pasta of pastas(CRITICO).filter((p) => !lista.emCurso.includes(p))) {
   test(`tests/critico/${pasta}: regras 8 e 9 (L1, L2, L3)`, () => {
-    const falhas = lintPasta(join(CRITICO, pasta), `tests/critico/${pasta}`).map((x) => x.texto);
+    const falhas = lintPasta(join(CRITICO, pasta), `tests/critico/${pasta}`).filter((x) => !isenta(x, pasta)).map((x) => x.texto);
     assert.deepEqual(falhas, [], '\n' + falhas.join('\n'));
   });
 }
+
+test('excecoes: cada entrada vale para uma pasta de legado e para uma violação que o lint acha mesmo nesse ficheiro', () => {
+  const reais = new Set(lista.legado.filter((p) => existsSync(join(CRITICO, p)))
+    .flatMap((p) => lintPasta(join(CRITICO, p), `tests/critico/${p}`).map((x) => `${x.regra} tests/critico/${p}/${x.ficheiro}`)));
+  const sobram = excecoes.filter((e) => !lista.legado.includes(pastaDe(e.ficheiro)) || !reais.has(`${e.regra} ${e.ficheiro}`)).map((e) => `${e.regra} ${e.ficheiro}`);
+  assert.deepEqual(sobram, [], `exceção(ões) sem pasta de legado ou sem a violação (tire-as de scripts/guardas-legado.json): ${sobram.join(', ')}`);
+  const repetidas = excecoes.map((e) => `${e.regra} ${e.ficheiro}`).filter((k, i, a) => a.indexOf(k) !== i);
+  assert.deepEqual(repetidas, [], 'exceções repetidas');
+});
 
 // --- L4 runs on every folder (the frozen lists do not exempt it), and its corpus is scripts/corpus/guardas-l4/ (same esperado.json) ---
 const lerPasta = (dir) => ficheiros(dir).map((f) => ({ rel: relative(dir, f).replaceAll('\\', '/'), src: readFileSync(f, 'utf8') }));

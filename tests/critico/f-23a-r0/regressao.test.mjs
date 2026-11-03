@@ -6,12 +6,31 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { srcNow, srcBase, contract, baseArgs, runWf, scenario, fresh, planned, resultOf, outcome, sameOutcome, why, rng, randomPlan } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const p = contract('pa', 9101);
 
+// V-11 (#135): em todos os ramos a referência é o próprio workflow com o runtime antigo (sem campos novos); a da BASE fixa é a dos testes
+// ÂMBITO a seguir (só valem no ramo do F-23a: um desfecho autorizado de outro ticket não os parte)
 for (const mode of ['rigorous', 'accelerated']) {
   for (const [what, shape] of [['sem campos novos (os runtimes falsos antigos)', planned], ['com os campos novos neutros', fresh]]) {
     test(`regra geral [guarda] (${mode}): ${what}, o desfecho é o da BASE em 60 planos ao acaso, sem erro`, async () => {
+      for (let seed = 1; seed <= 60; seed++) {
+        const plan = randomPlan(rng(1000 + seed));
+        const ref = await runWf(srcNow(), baseArgs([p], { mode }), scenario(p, planned(plan)));
+        assert.ok(resultOf(ref), 'o workflow não correu: ' + why(ref));
+        const run = await runWf(srcNow(), baseArgs([p], { mode }), scenario(p, shape(plan)));
+        assert.equal(run.err, undefined, `semente ${seed}: ` + why(run));
+        sameOutcome(resultOf(run), resultOf(ref), `${mode}, semente ${seed}, plano ${JSON.stringify(plan)}: ${why(run)}`);
+      }
+    });
+  }
+}
+
+for (const mode of ['rigorous', 'accelerated']) {
+  for (const [what, shape] of [['sem campos novos (os runtimes falsos antigos)', planned], ['com os campos novos neutros', fresh]]) {
+    test(`ÂMBITO: regra geral [guarda] (${mode}): ${what}, o desfecho é o da BASE em 60 planos ao acaso, sem erro`, async (t) => {
+      if (soNoTicket(t, 'f-23a')) return;
       for (let seed = 1; seed <= 60; seed++) {
         const plan = randomPlan(rng(1000 + seed));
         const ref = await runWf(srcBase(), baseArgs([p], { mode }), scenario(p, planned(plan)));

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { ROOT, BASE, GRAVAR, tmp, base, buildProject, sandboxEnv, git } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const CMD = 'node .claude/painel-gravar.mjs';
 const sha = (f) => createHash('sha256').update(readFileSync(f)).digest('hex');
@@ -115,6 +116,12 @@ const atual = (rel) => readFileSync(join(ROOT, rel), 'utf8').replace(/\r\n/g, '\
 test('C2: o §6 do FRAMEWORK manda escrever o painel.json com «node .claude/painel-gravar.mjs» (1×) e mantém o texto que lá estava', () => {
   const novo = sec6(atual('templates/FRAMEWORK.md'));
   assert.equal(conta(novo, CMD), 1, `«${CMD}» aparece ${conta(novo, CMD)}× no §6`);
+});
+
+// V-11 (#135): a comparação com o texto da base fixa só vale no ramo do F-25; a contagem acima corre em todos
+test('ÂMBITO: C2: o §6 do FRAMEWORK mantém o texto que lá estava (contra a base do F-25)', (t) => {
+  if (soNoTicket(t, 'f-25')) return;
+  const novo = sec6(atual('templates/FRAMEWORK.md'));
   for (const l of sec6(naBase('templates/FRAMEWORK.md')).split('\n').filter((x) => x.trim()))
     assert.ok(novo.includes(l), 'o §6 perdeu ou mudou esta linha: ' + l.slice(0, 120));
 });
@@ -122,11 +129,16 @@ test('C2: o §6 do FRAMEWORK manda escrever o painel.json com «node .claude/pai
 const sameData = (t) => { const m = /const SAME_DATA = (['"`])((?:\\.|(?!\1).)*)\1/s.exec(t); return m ? m[2] : null; };
 for (const wf of ['gauntlet-build.js', 'gauntlet-batch.js', 'gauntlet-ponytail.js']) {
   test(`C2: o SAME_DATA de ${wf} manda escrever com «node .claude/painel-gravar.mjs» (1×) e mantém o texto que lá estava`, () => {
+    const novo = sameData(atual(`templates/.claude/workflows/${wf}`));
+    assert.ok(novo, 'o SAME_DATA desapareceu');
+    assert.equal(conta(novo, CMD), 1, `«${CMD}» aparece ${conta(novo, CMD)}× no SAME_DATA`);
+  });
+  test(`ÂMBITO: C2: o SAME_DATA de ${wf} mantém o texto que lá estava (contra a base do F-25)`, (t) => {
+    if (soNoTicket(t, 'f-25')) return;
     const rel = `templates/.claude/workflows/${wf}`;
     const novo = sameData(atual(rel)), velho = sameData(naBase(rel));
     assert.ok(velho, 'sem SAME_DATA na base');
     assert.ok(novo, 'o SAME_DATA desapareceu');
-    assert.equal(conta(novo, CMD), 1, `«${CMD}» aparece ${conta(novo, CMD)}× no SAME_DATA`);
     assert.ok(novo.includes(velho), 'o texto existente do SAME_DATA mudou (as mutações painel-estado-fora-do-* procuram-no)');
   });
 }

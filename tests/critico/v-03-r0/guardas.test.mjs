@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { base } from '../_comum/base.mjs';
 import { ROOT, crit, AUTORIZADOS, LF, git, textoNaBase } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 // as chamadas assert(...)/assert.x(...) inteiras, com o espaço normalizado (as strings são saltadas ao contar os parênteses)
 export function asserts(src) {
@@ -31,7 +32,8 @@ export const declaracoes = (src) => [...src.matchAll(/\b(?:test|it|describe)\s*\
 
 const ficheirosDaBase = (b) => git(ROOT, ['ls-tree', '-r', '--name-only', b, '--', crit('')]).split('\n').filter(Boolean);
 
-test('GUARDA: os ficheiros de tests/critico/ da base fora da lista autorizada do ticket ficam byte a byte', (t) => {
+test('ÂMBITO: GUARDA: os ficheiros de tests/critico/ da base fora da lista autorizada do ticket ficam byte a byte', (t) => {
+  if (soNoTicket(t, 'v-03')) return;
   const b = base();
   if (!b) return t.skip('sem origin/main');
   const fs = ficheirosDaBase(b).filter((f) => !AUTORIZADOS.includes(f));
@@ -39,7 +41,8 @@ test('GUARDA: os ficheiros de tests/critico/ da base fora da lista autorizada do
   const mudados = fs.filter((f) => !existsSync(join(ROOT, f)) || LF(readFileSync(join(ROOT, f), 'utf8')) !== LF(textoNaBase(b, f)));
   assert.deepEqual(mudados, []);
 });
-test('GUARDA: nos ficheiros da lista autorizada, os asserts e as declarações dos testes ficam iguais, e um ficheiro que mude chama o doLote', (t) => {
+test('ÂMBITO: GUARDA: nos ficheiros da lista autorizada, os asserts e as declarações dos testes ficam iguais, e um ficheiro que mude chama o doLote', (t) => {
+  if (soNoTicket(t, 'v-03')) return;
   const b = base();
   if (!b) return t.skip('sem origin/main');
   const falhas = [];

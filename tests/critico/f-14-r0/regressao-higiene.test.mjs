@@ -11,11 +11,13 @@ import { join, extname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
 import { ROOT, BASE, git, sandboxEnv, readFileSync, existsSync } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const conta = (t) => [...t.matchAll(/^\s*test\((['"`])/gm)].length;
 const lista = (r) => r.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
 
-test('regressão: nenhum ataque da Ronda −1 já fundido (tests/critico da base) desaparece nem perde testes', () => {
+test('ÂMBITO: regressão: nenhum ataque da Ronda −1 já fundido (tests/critico da base) desaparece nem perde testes', (t) => {
+  if (soNoTicket(t, 'f-14')) return;
   const ls = git('ls-tree', '-r', '--name-only', BASE, '--', 'tests/critico');
   assert.equal(ls.status, 0, ls.stderr);
   const ficheiros = lista(ls).filter((n) => n.endsWith('.test.mjs'));
@@ -43,7 +45,8 @@ const acrescentadas = () => {
   return out;
 };
 
-test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão, dados pessoais nem nada da Guilda', () => {
+test('ÂMBITO: reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da máquina, ids de sessão, dados pessoais nem nada da Guilda', (t) => {
+  if (soNoTicket(t, 'f-14')) return;
   const me = userInfo().username;
   const PROIBIDO = [/\b[A-Z]:\\\\?[A-Za-z]/, /\b[A-Z]:\/[A-Za-z]/, /\/Users\//, /\/home\/[a-z]/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /guilda/i, /renat/i, /@keyrus\./i, /AgentHomes|dev-mods|forge-wt|forge-ref|Ads_Claude/i,
     ...(me && me.length >= 3 ? [new RegExp(`\\b${me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')] : [])];
@@ -55,7 +58,8 @@ test('reprova sempre: o que o ticket acrescenta ao pacote não tem caminhos da m
   assert.deepEqual(achados, []);
 });
 
-test('só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados fora de tests/ só importam node: ou caminhos relativos', () => {
+test('ÂMBITO: só biblioteca padrão: os .mjs/.js/.cjs acrescentados ou alterados fora de tests/ só importam node: ou caminhos relativos', (t) => {
+  if (soNoTicket(t, 'f-14')) return;
   const files = [...new Set([...lista(git('diff', '--name-only', '--diff-filter=AM', desde(), '--', '.', ':(exclude)tests')), ...lista(git('ls-files', '--others', '--exclude-standard', '--', '.', ':(exclude)tests'))])]
     .filter((x) => ['.mjs', '.js', '.cjs'].includes(extname(x)) && existsSync(join(ROOT, x)));
   const RE = [/\bimport\s+[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g, /\bimport\s*['"]([^'"]+)['"]/g, /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g, /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g];
