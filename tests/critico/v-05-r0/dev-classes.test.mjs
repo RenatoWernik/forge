@@ -177,3 +177,24 @@ test('classe (orçamento): o lint e o clone gastam do orcamento_s: a chamada dev
   assert.equal(r.status, 3, saida(r));
   assert.ok(s < ORC + 5, `a chamada levou ${s.toFixed(1)} s com orcamento_s ${ORC}: o lint não foi descontado`);
 });
+
+// V-05 (#129, RESPOSTA): o lock do `learnings add` (templates/.claude/learn.mjs). No Windows, abrir com `wx` um `.lock` que outro processo está a apagar
+// dá EPERM ou EACCES em vez de EEXIST: é «busy, try again» (saída 3), não uma falha (1). Outros erros (ENOSPC) continuam a dar 1.
+const LEARN = join(ROOT, 'templates/.claude/learn.mjs');
+const FORCA = `import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+const real = fs.openSync;
+fs.openSync = (p, ...r) => { if (String(p).endsWith('.lock')) throw Object.assign(new Error(process.env.CODIGO_FORCADO + ': forçado'), { code: process.env.CODIGO_FORCADO }); return real(p, ...r); };
+syncBuiltinESMExports();
+`;
+for (const [codigo, saidaEsperada, texto] of [['EEXIST', 3, 'learnings: busy, try again'], ['EPERM', 3, 'learnings: busy, try again'], ['EACCES', 3, 'learnings: busy, try again'], ['ENOSPC', 1, 'add: ENOSPC']]) {
+  test(`classe (lock do learnings add): openSync do .lock a dar ${codigo} sai com ${saidaEsperada} e «${texto}»`, () => {
+    const d = tmp('v05-lock-');
+    writeFileSync(join(d, 'forca.mjs'), FORCA);
+    writeFileSync(join(d, 'e.json'), JSON.stringify({ DATE: '2026-10-27' }));
+    const r = spawnSync(process.execPath, ['--import', pathToFileURL(join(d, 'forca.mjs')).href, LEARN, 'add', '--json', 'e.json'],
+      { cwd: d, encoding: 'utf8', env: { ...process.env, CODIGO_FORCADO: codigo }, windowsHide: true });
+    assert.equal(r.status, saidaEsperada, r.stdout + r.stderr);
+    assert.ok(r.stderr.includes(texto), r.stderr);
+  });
+}
