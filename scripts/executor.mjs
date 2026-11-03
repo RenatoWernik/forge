@@ -2,7 +2,7 @@
 // Executor paralelo (V-01, #125; spec #123 §4.1 e §4.2): corre as suítes de scripts/suites.json em paralelo, cada ficheiro de teste (ou bloco)
 // num filho `node --test` com home e tmp próprios, limite de tempo que mata só a árvore do PID lançado, vagas partilhadas por todos os
 // executores da máquina e resultados ligados ao sha e à árvore em .forge/resultados/. Só biblioteca padrão.
-//   node scripts/executor.mjs (--todas | --suites a,b | --afetadas [--base origin/main]) [--passe 1|2] [--continuar] [--paralelo N] [--raiz <dir>]
+//   node scripts/executor.mjs (--todas | --suites a,b | --afetadas [--base origin/main]) [--passe 1|2] [--continuar] [--paralelo N] [--orcamento <s>] [--raiz <dir>]
 // Um MOTOR destacado (o próprio script com --motor-interno; PID em .forge/motor/<sha>-<árvore>-p<passe>.json) corre a fila inteira até ao fim e
 // grava cada unidade logo que acaba. A chamada só espera pelo motor até orcamento_s e nunca mata unidades; --continuar volta a ligar-se ao
 // motor vivo ou, se ele morreu, lança outro só com as unidades sem estado final. O limite_s é só o kill de uma unidade.
@@ -189,7 +189,7 @@ function mataArvore(pid) {
 }
 
 function lerArgs(argv) {
-  const o = { suites: null, afetadas: false, base: null, passe: 1, continuar: false, paralelo: null, raiz: process.cwd(), arvoreMotor: null };
+  const o = { suites: null, afetadas: false, base: null, passe: 1, continuar: false, paralelo: null, orcamento: null, raiz: process.cwd(), arvoreMotor: null };
   const valor = (i, nome) => { if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) throw new Uso(`${nome} precisa de um valor`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -198,6 +198,7 @@ function lerArgs(argv) {
     else if (a === '--passe') { o.passe = +valor(i++, a); if (![1, 2].includes(o.passe)) throw new Uso('--passe: 1 ou 2'); }
     else if (a === '--continuar') o.continuar = true;
     else if (a === '--paralelo') { o.paralelo = +valor(i++, a); if (!Number.isInteger(o.paralelo) || o.paralelo < 1) throw new Uso('--paralelo: inteiro ≥ 1'); }
+    else if (a === '--orcamento') { o.orcamento = +valor(i++, a); if (!(o.orcamento > 0)) throw new Uso('--orcamento: segundos > 0'); } // encurta o orcamento_s desta chamada (o check-ticket desconta o lint)
     else if (a === '--raiz') o.raiz = resolve(valor(i++, a));
     else if (a === '--motor-interno') o.arvoreMotor = valor(i++, a); // só a chamada o passa ao motor: a árvore com que a chamada decidiu
     else if (a === '--nonce') o.nonce = valor(i++, a); // só a chamada o passa ao motor: fica na linha de comando dele (reconhece-se o processo) e em cada unidade que ele grava
@@ -386,7 +387,7 @@ async function chamada(argv, saida) {
   }
 
   if (motor && !cobre(motor.suites, o.suites)) saida(`executor: o motor ${motor.pid} corre outra seleção de suítes; a esperar por ele`);
-  while (motorVivo(motorFicheiro) && Date.now() - t0 < m.orcamento_s * 1000) await dorme(250);
+  while (motorVivo(motorFicheiro) && Date.now() - t0 < Math.min(m.orcamento_s, o.orcamento ?? Infinity) * 1000) await dorme(250);
   const vivo = !!motorVivo(motorFicheiro, true);
 
   // a árvore ou o HEAD mudaram, ou o motor invalidou o resultado: nunca se devolve 0/1 nem se reutiliza (C3)

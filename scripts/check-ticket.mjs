@@ -21,6 +21,7 @@ const LINTS = ['scripts/guardas-critico.test.mjs', 'scripts/mapa-suites.test.mjs
 const LIMITE_LINT_MS = 180000;
 const TOKENS = ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'];
 class Uso extends Error {}
+const T0 = Date.now(); // o orcamento_s do executor conta desde o arranque do check-ticket: o lint e o clone gastam dele, e a chamada devolve 3 antes de a ferramenta a passar para segundo plano
 
 function lerArgs(argv) {
   const o = { ambito: [], base: 'origin/main', publicar: null, continuar: false, raiz: process.cwd() };
@@ -87,10 +88,11 @@ const ambito = (ficheiros, globs) => {
 
 // 4 e 5: as suítes afetadas pelo executor, na raiz ou no clone; só dá ok com o resultado completo, deste sha, e `pass` em cada suíte pedida
 const lerJson = (f) => JSON.parse(readFileSync(f, 'utf8'));
-async function corre(prefixo, raiz, suites, sha, continuar) {
+async function corre(prefixo, raiz, suites, sha, continuar, orcamentoS) {
   const saidas = [];
   let codigo;
-  try { codigo = await executa(['--suites', suites.join(','), '--raiz', raiz, ...(continuar ? ['--continuar'] : [])], { saida: (l) => { saidas.push(l); console.log(`  [${prefixo}] ${l}`); } }); }
+  const resto = Math.max(5, Math.floor(orcamentoS - (Date.now() - T0) / 1000));
+  try { codigo = await executa(['--suites', suites.join(','), '--orcamento', String(resto), '--raiz', raiz, ...(continuar ? ['--continuar'] : [])], { saida: (l) => { saidas.push(l); console.log(`  [${prefixo}] ${l}`); } }); }
   catch (e) { return { estado: 'FAIL', detalhe: curto(`executor: ${e.message}`), suites: {} }; }
   const ficheiro = /→ (.+)$/.exec(saidas.at(-1) ?? '')?.[1];
   // código 3 sem ficheiro: o motor ainda corre e a chamada só disse «repita com --continuar»
@@ -165,13 +167,14 @@ async function main(argv) {
   let pRamo = Promise.resolve(orfao('sem diff contra a base')), pPos = pRamo;
   if (ficheiros) {
     try {
-      todas = lerJson(join(raiz, 'scripts', 'suites.json')).suites.map((s) => s.nome);
+      const manifesto = lerJson(join(raiz, 'scripts', 'suites.json'));
+      todas = manifesto.suites.map((s) => s.nome);
       const r = await afetadas(ficheiros, { raiz });
       suites = [...r.suites];
       if (suites.includes('*')) suites = todas;
       if (!suites.length) throw new Error(ficheiros.length ? 'nenhuma suíte afetada (erro de mapa?)' : 'diff vazio contra a base');
-      pRamo = corre('ramo', raiz, suites, sha, o.continuar).catch(falha);
-      pPos = Promise.resolve().then(() => corre('pós-merge', clona(raiz, sha, o.continuar), suites, sha, o.continuar)).catch(falha);
+      pRamo = corre('ramo', raiz, suites, sha, o.continuar, manifesto.orcamento_s).catch(falha);
+      pPos = Promise.resolve().then(() => corre('pós-merge', clona(raiz, sha, o.continuar), suites, sha, o.continuar, manifesto.orcamento_s)).catch(falha);
     } catch (e) { pRamo = Promise.resolve(falha(e)); pPos = pRamo; suites = null; }
   }
   diz('âmbito', ficheiros ? ambito(ficheiros, o.ambito) : falha(erro));

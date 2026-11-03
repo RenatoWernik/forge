@@ -5,9 +5,11 @@
 // - o orçamento: o executor deixa uma unidade por correr, o check-ticket dá 3 (sem publicar) e o --continuar acaba o que falta e dá 0.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cenario, correr, ghFalso, gitOk, lanca, linhas, PASSOS, pidsLancados, escreve, saida, tmp, limpa } from './helpers.mjs';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+import { cenario, correr, ROOT, ghFalso, gitOk, lanca, linhas, PASSOS, pidsLancados, escreve, saida, tmp, limpa } from './helpers.mjs';
 
 after(limpa);
 
@@ -106,4 +108,71 @@ test('classe: o orçamento do executor não chega: código 3 sem publicar; com -
   assert.equal(dois.status, 0, saida(dois));
   assert.deepEqual(linhas(dois.out).map((l) => `${l.estado} ${l.passo}`), PASSOS.map((p) => `ok ${p}`), saida(dois));
   assert.equal(gh.chamadas().length, 1);
+});
+
+// V-05 (#129, REDESENHO): a cache por processo do afetadas() (scripts/afetadas.mjs) nunca muda o resultado e nunca atravessa processos.
+const AFETADAS = pathToFileURL(join(ROOT, 'scripts/afetadas.mjs')).href;
+const CHAMA = `import { afetadas } from ${JSON.stringify(AFETADAS)};
+const [raiz, lista] = [process.argv[2], JSON.parse(process.argv[3])];
+const ord = (r) => ({ suites: [...r.suites].sort(), porque: Object.fromEntries(Object.entries(r.porque).sort()) });
+console.log(JSON.stringify(lista.map((f) => ord(afetadas(f, { raiz })))));
+`;
+const chama = (script, raiz, lista) => {
+  const r = spawnSync(process.execPath, [script, raiz, JSON.stringify(lista)], { encoding: 'utf8', maxBuffer: 1 << 28, windowsHide: true });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout);
+};
+const amostra = () => {
+  const todos = gitOk(ROOT, 'ls-files').split('\n').filter(Boolean);
+  const cada = (re, n) => { const m = todos.filter((f) => re.test(f)); const passo = Math.max(1, Math.floor(m.length / n)); return m.filter((_, i) => i % passo === 0).slice(0, n); };
+  return [...cada(/^tests\/critico\/[^/]+\/[^/]+\.test\.mjs$/, 12), ...cada(/^tests\/critico\/[^/]+\/helpers\.mjs$/, 8), ...cada(/^scripts\/[^/]+\.mjs$/, 6),
+    ...cada(/^tests\/critico\/_comum\//, 2), 'README.md', 'CHANGELOG.md', ...cada(/\.json$/, 3), 'tests/critico/zz-nao-existe/x.test.mjs', 'nao-existe.txt'];
+};
+
+test('classe (cache do afetadas): com a cache quente o resultado é igual ao de um processo novo, para uma amostra de >= 30 ficheiros de categorias diferentes', () => {
+  const d = tmp('v05-cache-'), script = join(d, 'chama.mjs');
+  writeFileSync(script, CHAMA);
+  const fs_ = amostra();
+  assert.ok(fs_.length >= 30, `amostra de ${fs_.length}`);
+  const quente = chama(script, ROOT, [...fs_, ...fs_].map((f) => [f])); // 2 voltas: a 2.ª já com tudo em memória
+  fs_.forEach((f, i) => {
+    const novo = chama(script, ROOT, [[f]])[0];
+    assert.deepEqual(quente[i], novo, `1.ª volta: ${f}`);
+    assert.deepEqual(quente[i + fs_.length], novo, `2.ª volta (cache quente): ${f}`);
+  });
+  const lote = chama(script, ROOT, [fs_.slice(0, 5), fs_.slice(5, 12)]); // diffs com vários ficheiros também
+  assert.deepEqual(lote, chama(script, ROOT, [fs_.slice(0, 5)]).concat(chama(script, ROOT, [fs_.slice(5, 12)])));
+});
+
+test('classe (cache do afetadas): num processo novo o resultado acompanha uma alteração dos imports da árvore', () => {
+  const d = tmp('v05-cache-arv-'), script = join(d, 'chama.mjs'), r = join(d, 'repo');
+  writeFileSync(script, CHAMA);
+  const manif = JSON.stringify({ versao: 1, suites: ['a', 'b'].map((n) => ({ nome: n, tipo: 'node-test', ficheiros: [`tests/critico/${n}/*.test.mjs`] })) });
+  escreve(r, 'scripts/suites.json', manif);
+  escreve(r, 'scripts/mapa-suites.json', JSON.stringify({ versao: 1 }));
+  escreve(r, 'tests/critico/a/h.mjs', 'export const x = 1;\n');
+  escreve(r, 'tests/critico/a/a.test.mjs', "import { x } from './h.mjs';\n");
+  escreve(r, 'tests/critico/b/b.test.mjs', 'export const y = 1;\n');
+  const antes = chama(script, r, [['tests/critico/a/h.mjs']])[0].suites;
+  escreve(r, 'tests/critico/b/b.test.mjs', "import { x } from '../a/h.mjs';\n");
+  const depois = chama(script, r, [['tests/critico/a/h.mjs']])[0].suites;
+  assert.deepEqual([antes, depois], [['a'], ['a', 'b']]);
+});
+
+test('classe (orçamento): o lint e o clone gastam do orcamento_s: a chamada devolve 3 em orcamento_s mais uma folga curta, nunca em lint + orcamento_s', async () => {
+  const ORC = 30;
+  const d = cenario((r) => {
+    const m = JSON.parse(readFileSync(join(r, 'scripts/suites.json'), 'utf8'));
+    Object.assign(m, { orcamento_s: ORC });
+    m.suites.push({ nome: 'b-r0', tipo: 'node-test', ficheiros: ['tests/critico/b-r0/*.test.mjs'], limite_s: 120 });
+    escreve(r, 'scripts/suites.json', JSON.stringify(m, null, 2) + '\n');
+    escreve(r, 'tests/critico/b-r0/y.test.mjs', 'import test from "node:test";\ntest("b: lento", async () => { await new Promise((f) => setTimeout(f, 90000)); });\n');
+    // um lint lento (10 s, a passar): é o tempo que o orçamento tem de descontar
+    escreve(r, 'scripts/mapa-suites.test.mjs', 'import test from "node:test";\ntest("mapa: lento", async () => { await new Promise((f) => setTimeout(f, 10000)); });\n');
+  });
+  const t0 = Date.now();
+  const r = await correr(d, ['--ambito', ...A, 'tests/critico/b-r0/**', 'scripts/suites.json', '--base', 'origin/main']);
+  const s = (Date.now() - t0) / 1000;
+  assert.equal(r.status, 3, saida(r));
+  assert.ok(s < ORC + 5, `a chamada levou ${s.toFixed(1)} s com orcamento_s ${ORC}: o lint não foi descontado`);
 });

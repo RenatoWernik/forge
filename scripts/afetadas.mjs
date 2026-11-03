@@ -19,6 +19,16 @@ import { fileURLToPath } from 'node:url';
 const RAIZ = fileURLToPath(new URL('../', import.meta.url));
 const PASTA = 'tests/critico/';
 const json = (raiz, rel) => JSON.parse(readFileSync(join(raiz, rel), 'utf8'));
+// shortcut: o que só depende da árvore (manifesto, mapa, ficheiros de cada suíte, pastas que ela importa, alvos dos doLote) fica em memória, por raiz,
+// durante o processo (refazê-lo custava ~370 ms por chamada: o c1-cobertura chama-a 812 vezes). Assume uma árvore que não muda neste processo; quem a altera
+// chama afetadas() num processo novo. O diff dos ficheiros nunca entra na cache; uma exceção não fica guardada.
+const CACHE = new Map();
+const memo = (raiz, chave, f) => {
+  const c = CACHE.get(raiz) ?? CACHE.set(raiz, new Map()).get(raiz);
+  if (!c.has(chave)) c.set(chave, f());
+  return c.get(chave);
+};
+const ficheirosDe = (raiz, suite) => memo(raiz, `ficheiros:${suite.nome}`, () => ficheirosDaSuite(raiz, suite));
 
 export function lerMapa(raiz = RAIZ) {
   const m = json(raiz, 'scripts/mapa-suites.json');
@@ -47,9 +57,9 @@ const pastaDe = (f) => (f.startsWith(PASTA) && f.slice(PASTA.length).includes('/
 
 // as regras 1 a 4, sem o fecho do lote
 export function diretas(ficheiros, raiz = RAIZ) {
-  const suites = json(raiz, 'scripts/suites.json').suites, nomes = suites.map((s) => s.nome), porque = {};
+  const suites = memo(raiz, 'suites', () => json(raiz, 'scripts/suites.json').suites), nomes = suites.map((s) => s.nome), porque = {};
   const junta = (s, regra, ficheiro) => (porque[s] ??= []).push({ regra, ficheiro });
-  const sempre = Object.keys(lerMapa(raiz).sempre ?? {});
+  const sempre = Object.keys(memo(raiz, 'mapa', () => lerMapa(raiz)).sempre ?? {});
   const desconhecidas = sempre.filter((s) => !nomes.includes(s));
   if (desconhecidas.length) throw new Error(`mapa-suites.json: sempre com suítes que não estão no manifesto: ${desconhecidas.join(', ')}`);
   const fora = ficheiros.find((f) => !nomes.includes(pastaDe(f)));
@@ -62,7 +72,7 @@ export function diretas(ficheiros, raiz = RAIZ) {
   for (const f of ficheiros) {
     const pasta = pastaDe(f);
     junta(pasta, 'implícita', f);
-    deps ??= Object.fromEntries(suites.map((s) => [s.nome, new Set(ficheirosDaSuite(raiz, s).map(pastaDe).filter((p) => p && p !== s.nome))]));
+    deps ??= memo(raiz, 'deps', () => Object.fromEntries(suites.map((s) => [s.nome, new Set(ficheirosDe(raiz, s).map(pastaDe).filter((p) => p && p !== s.nome))])));
     for (const n of nomes) if (deps[n].has(pasta)) junta(n, `importa ${PASTA}${pasta}/`, f);
   }
   for (const s of sempre) junta(s, 'sempre', ficheiros[0] ?? '(diff vazio)');
@@ -91,17 +101,17 @@ const literais = (s) => [...s.matchAll(/(['"`])((?:\\.|(?!\1).)*)\1/g)].map((m) 
 // as suítes-alvo dos doLote dos ficheiros da suíte: os literais do alvo (texto, lista, `{ suite: 'x' }`) e os das listas literais que ele nomeia
 // (`dirs.map(...)` com `const dirs = ['a', 'b']` no mesmo ficheiro). shortcut: um alvo montado em runtime (o `d` de um ciclo) não se vê; o doLote
 // falha em voz alta na fase 2 com um alvo em falta, nunca em silêncio
-const alvosDoLote = (raiz, suite) => new Set(ficheirosDaSuite(raiz, suite).flatMap((f) => {
+const alvosDoLote = (raiz, suite) => memo(raiz, `alvos:${suite.nome}`, () => new Set(ficheirosDe(raiz, suite).flatMap((f) => {
   const texto = readFileSync(join(raiz, f), 'utf8');
   return alvosEm(texto).flatMap((arg) => {
     const ids = new Set(arg.replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '').match(/[A-Za-z_$][\w$]*/g) ?? []);
     const listas = [...ids].flatMap((id) => [...texto.matchAll(new RegExp(`\\b(?:const|let|var)\\s+${id.replaceAll('$', '\\$')}\\s*=\\s*(\\[[^\\]]*\\])`, 'g'))].map((m) => m[1]));
     return [arg, ...listas].flatMap(literais);
   });
-}));
+})));
 
 export function afetadas(ficheiros, { raiz = RAIZ } = {}) {
-  const { nomes, porque } = diretas(ficheiros, raiz), suites = json(raiz, 'scripts/suites.json').suites;
+  const { nomes, porque } = diretas(ficheiros, raiz), suites = memo(raiz, 'suites', () => json(raiz, 'scripts/suites.json').suites);
   const fila = Object.keys(porque);
   while (fila.length && Object.keys(porque).length < nomes.length) {
     const s = fila.shift();
