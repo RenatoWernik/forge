@@ -44,7 +44,10 @@ function lerArgs(argv) {
 const git = (cwd, ...a) => spawnSync('git', a, { cwd, encoding: 'utf8', maxBuffer: 1 << 30 });
 const nomes = (txt) => txt.split('\0').filter(Boolean);
 const curto = (s, n = 300) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const casa = (f, globs) => globs.some((g) => { const p = g.replaceAll('\\', '/').replace(/^\.\//, ''); return f === p || posix.matchesGlob(f, p); });
+// matchesGlob não tem `dot`: `**` não casa com .claude/ nem com .gitignore, que um projeto gerado tem no diff (V-08). Um segmento que começa por ponto passa a começar por
+// outro carácter, igual no ficheiro e no glob: o `**` e o `*` casam com ele e um glob com o ponto escrito continua a casar só com esse nome
+const semPonto = (s) => s.replace(/(^|\/)\./g, '$1․');
+const casa = (f, globs) => globs.some((g) => { const p = g.replaceAll('\\', '/').replace(/^\.\//, ''); return f === p || posix.matchesGlob(semPonto(f), semPonto(p)); });
 
 // 1: tudo commitado (o .forge/ é do executor e não conta)
 function arvoreLimpa(raiz) {
