@@ -123,7 +123,8 @@ const chama = (script, raiz, lista) => {
   return JSON.parse(r.stdout);
 };
 const amostra = () => {
-  const todos = gitOk(ROOT, 'ls-files').split('\n').filter(Boolean);
+  // ls-tree e não o outro comando de listar: a amostra só pede os ficheiros rastreados, não depende do diff do ticket (o lint do mapa distingue os dois)
+  const todos = gitOk(ROOT, 'ls-tree', '-r', '--name-only', 'HEAD').split('\n').filter(Boolean);
   const cada = (re, n) => { const m = todos.filter((f) => re.test(f)); const passo = Math.max(1, Math.floor(m.length / n)); return m.filter((_, i) => i % passo === 0).slice(0, n); };
   return [...cada(/^tests\/critico\/[^/]+\/[^/]+\.test\.mjs$/, 12), ...cada(/^tests\/critico\/[^/]+\/helpers\.mjs$/, 8), ...cada(/^scripts\/[^/]+\.mjs$/, 6),
     ...cada(/^tests\/critico\/_comum\//, 2), 'README.md', 'CHANGELOG.md', ...cada(/\.json$/, 3), 'tests/critico/zz-nao-existe/x.test.mjs', 'nao-existe.txt'];
