@@ -226,6 +226,9 @@ async function chk(name, f) {
     const fw = fs.readFileSync('FRAMEWORK.md', 'utf8')
     // mode: the table of modes has one column per mode of forge.json, so the mode of this project has its column
     await chk('mode: the table of modes in FRAMEWORK.md has a column for rigorous and for accelerated, the mode of forge.json included', () => fw.split(/\r?\n/).some(l => /^\s*\|/.test(l) && ['rigorous', 'accelerated'].every(m => new RegExp('\\b' + m + '\\b').test(l))))
+    // speed (V-09): the manual teaches the command that advances an approved piece into the integration branch (it refuses --modo projeto without --integracao), and that CP0 fills the prepara of .claude/suites.json
+    await chk('advance: FRAMEWORK.md teaches `node .claude/avancar.mjs --pr <n> --repo <owner/repo> --modo projeto --integracao <branch>` in a code span', () => fw.includes('`node .claude/avancar.mjs --pr <n> --repo <owner/repo> --modo projeto --integracao <branch>`'))
+    await chk('prepara: FRAMEWORK.md (and BOOTSTRAP.md while CP0 is open) say that CP0 fills the `prepara` of .claude/suites.json', () => [fw, ...(has('BOOTSTRAP.md') ? [fs.readFileSync('BOOTSTRAP.md', 'utf8')] : [])].every(t => t.includes('`prepara`')))
   }
   // the contract of each piece is the GitHub issue: no generated document points to a contract file of the project (the contracts/ of Spec-Kit are API contracts),
   // and the three that carry the rules (CLAUDE.md, AGENTS.md, FRAMEWORK.md) read it with gh
@@ -262,6 +265,7 @@ async function chk(name, f) {
       ['the contract wins over an attack', [], [/contract wins/i]],
       ['Round 0', [], [/\bRound 0\b/i]],
       ['answer each finding with fixed or contested, and the reason', ['contested'], [/\bfixed\b/i, /\breason\b/i]],
+      ['check-ticket green before delivering (`node .claude/check-ticket.mjs`)', ['node .claude/check-ticket.mjs'], []],
     ],
     critic: [
       ['materiality test with its 3 criteria', [], [/materiality/i, /always[- ]fails?|fails? always|always[- ]rejects?/i, /(goal|objective|purpose|intent)\b[^.\n]{0,20}\bcriteri(on|a)|criterion'?s (goal|objective|purpose)/i, /reproducib\w*/i, /oracle/i]],
@@ -269,18 +273,21 @@ async function chk(name, f) {
       ['the verdict format', [], [/\bVERDICT\b/, /\bBLOCKING\b|\bBLOCKERS\b/, /\bMINOR\b/, /QUESTIONS (TO|FOR|ON|ABOUT) THE BAR|BAR QUESTIONS/, /\bFOLLOW-?UPS?\b/]],
       ['R1 exhaustive and short later rounds', [], [/\bR1\b|\bround 1\b|\bfirst round\b/i, /exhaustive/i, /(later|following|subsequent|next|other)\s+rounds\b[^.\n]{0,100}\b(short|only)\b/i]],
       ['PRE-EXISTING defects dated by git blame, and the seguimento label', ['PRE-EXISTING', 'seguimento'], [/git blame/i]],
+      ['the critic starts with the executor (`node .claude/executor.mjs`)', ['node .claude/executor.mjs'], []],
     ],
     'round-minus-1': [
       ['exactly the oracle, without adding requirements', [], [/exactly\b[^.\n]{0,20}\boracles?/i, /(without|never|no|not)\s+add\w*\b[^.\n]{0,40}\b(requirements?|demands?)/i]],
       ['BAR GAPS', [], [/BAR GAPS|GAPS (IN|OF|ON) THE BAR/]],
       ['prove that the attacks fail on the base', [], [/\b(prove|show|confirm|demonstrate)\w*\b[^.\n]{0,80}\b(fails?|failing|red)\b/i, /\bbase\b|\bmain\b|before the code/i]],
       ['do not edit the product code', [], [/(do not|don't|never|not)\s+(edit|change|touch|modify|write)\w*\b[^.\n]{0,40}\b(product|production)\b[^.\n]{0,10}\bcode/i]],
+      ['the attacks are proved on the base with the executor (`node .claude/executor.mjs`)', ['node .claude/executor.mjs'], []],
     ],
     batch: [
       ['additive merge', [], [/additiv\w*/i, /\bmerg\w*/i]],
       ['the flaky rule', [], [/flaky/i, /isolated/i, /\bdiff\b/i]],
       ['a regression goes back to the piece that caused it', [], [/regressions?\b[^.\n]{0,120}\b(piece|ticket)\b[^.\n]{0,20}\b(that )?caused/i]],
       ['no push, PR or merge without the yes of the user', [], [/^(?=.*\bpush\b)(?=.*\bPRs?\b)(?=.*\bmerge\b)(?=.*\b(user|utilizador|usu[áa]rio)\b)(?=.*\b(never|no|not|without)\b).*$/im]],
+      ['the full suite runs through the executor (`node .claude/executor.mjs`)', ['node .claude/executor.mjs'], []],
     ],
   }
   const lacks = BRIEFS.flatMap(b => {

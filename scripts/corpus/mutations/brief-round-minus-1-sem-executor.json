@@ -1,0 +1,7 @@
+{
+    "base":  "en-plain-published",
+    "file":  ".claude/briefs/round-minus-1.md",
+    "find":  "node .claude/executor.mjs",
+    "replace":  "a manual run",
+    "line":  "briefs"
+}
