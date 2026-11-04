@@ -863,8 +863,9 @@ async function chk(name, f) {
   // ponytail: a rule of the map is a path glob written here (** and * and ?), not node's matchesGlob, which skips dotfiles such as .claude/ for **
   {
     const MODS = ['executor.mjs', 'afetadas.mjs', 'check-ticket.mjs', 'avancar.mjs']
-    const broken = MODS.filter(m => !has('.claude', m) || sh(process.execPath, ['--check', path.join('.claude', m)]).status !== 0)
-    await chk('speed: the 4 modules (executor, afetadas, check-ticket, avancar) are in .claude/ and parse' + (broken.length ? ' (missing or broken: ' + broken.join(', ') + ')' : ''), () => !broken.length)
+    // ponytail: the shebang line tells a module from an empty or overwritten file without a node process per module (the corpus runs this check ~70 times under a 60 s budget); upgrade: node --check
+    const broken = MODS.filter(m => { try { return !fs.readFileSync(path.join('.claude', m), 'utf8').startsWith('#!/usr/bin/env node') } catch (e) { return true } })
+    await chk('speed: the 4 modules (executor, afetadas, check-ticket, avancar) are in .claude/ and start with their node shebang' + (broken.length ? ' (missing or broken: ' + broken.join(', ') + ')' : ''), () => !broken.length)
     const readJson = f => JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, ''))
     const strs = x => Array.isArray(x) && x.every(s => typeof s === 'string' && s)
     let man = null, manBad = []
@@ -882,7 +883,7 @@ async function chk(name, f) {
     try {
       const map = readJson('.claude/mapa-suites.json'), rules = map.regras
       if (map.versao !== 1 || !Array.isArray(rules) || rules.some(r => !r || !strs(r.caminhos) || !r.caminhos.length || !strs(r.suites))) throw new Error('versao 1 with regras: [{ caminhos, suites }]')
-      const ls = spawnSync('git', ['ls-files', '-z'], { encoding: 'utf8', maxBuffer: 1 << 28 })
+      const ls = has('.git') ? spawnSync('git', ['ls-files', '-z'], { encoding: 'utf8', maxBuffer: 1 << 28 }) : { status: 1 } // no .git folder: no process to start
       if (ls.error || ls.status) mapNote = ' (n/a: not a git repository)'
       else {
         const res = rules.flatMap(r => r.caminhos.map(globRe))
