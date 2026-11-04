@@ -891,7 +891,7 @@ async function chk(name, f) {
       }
     } catch (e) { uncovered = ['.claude/mapa-suites.json'], mapNote = ' (' + e.message + ')' }
     await chk('speed: every tracked file is covered by a rule of .claude/mapa-suites.json' + mapNote, () => !uncovered.length)
-    await chk('speed: .gitignore has the line .forge/ (the results of the executor)', () => fs.readFileSync('.gitignore', 'utf8').split(/\r?\n/).includes('.forge/'))
+    if (!process.env.FORGE_CHECK_NESTED) await chk('speed: .gitignore has the line .forge/ (the results of the executor)', () => fs.readFileSync('.gitignore', 'utf8').split(/\r?\n/).includes('.forge/')) // the nested --render runs see a copy of .claude/ alone, with no .gitignore
   }
 
   console.log(bad ? '\nThere is a FAIL above.' : '\nAll ok.')

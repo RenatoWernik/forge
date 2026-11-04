@@ -13,7 +13,6 @@ import { closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, read
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fonteDe } from './afetadas.mjs';
 
 // Todo processo lançado passa por aqui: no Windows um filho de um motor destacado (sem consola) sem windowsHide abre uma consola por spawn. O
 // contador vai nos resultados (`processos`) para um teste provar que o número de spawns não cresce com o tempo.
@@ -214,7 +213,8 @@ function lerArgs(argv) {
 }
 
 function lerManifesto(raiz) {
-  const fonte = fonteDe(raiz, 'suites.json'), f = join(raiz, fonte); // .claude/ num projeto gerado, scripts/ no forge (V-08)
+  // .claude/ num projeto gerado, scripts/ no forge; com os dois ganha o .claude/ (V-08). shortcut: a mesma regra está em afetadas.mjs (fonteDe); o executor carrega sem ele ao lado
+  const fonte = existsSync(join(raiz, '.claude', 'suites.json')) ? '.claude/suites.json' : 'scripts/suites.json', f = join(raiz, fonte);
   if (!existsSync(f)) throw new Uso(`falta ${f}`);
   const texto = readFileSync(f, 'utf8'), m = JSON.parse(texto);
   if (m.versao !== 1 || !Array.isArray(m.suites)) throw new Uso('suites.json: versao 1 com suites[] esperada');
