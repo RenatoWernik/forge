@@ -373,6 +373,8 @@ This is not the horizontal slicing that the `tdd` skill forbids. Horizontal slic
 - Tests run in the foreground, each command within 9 minutes, and never as a background process. Kill only the processes you launched, never by name.
 - No agent stays idle past `minutesWithoutProgress`: the orchestrator wakes it, or relaunches it from its checkpoint, in the same turn.
 - Every long-running agent saves `.checkpoints/<role>-<task>.md` after each step: what is done with its evidence, what is left, the reasoning in course and the exact next step. When the usage limit arrives, the orchestrator records the state of each agent there and resumes each one from its checkpoint.
+- The suites run through the executor (`.claude/executor.mjs`, with the manifest `.claude/suites.json`): the developer runs `node .claude/check-ticket.mjs` before delivering, the critic starts with `node .claude/executor.mjs` (all the suites in R1, the affected ones later) and the tester runs it twice. The manifest has a field `prepara`, empty in the template: CP0 fills it with the command that installs the dependencies of the project, next to the `testCommand` (the command of the suite `projeto`).
+- The orchestrator brings an approved piece into the integration branch (never into the main branch) with `node .claude/avancar.mjs --pr <n> --repo <owner/repo> --modo projeto --integracao <branch>`, once the critic wrote `VEREDITO: APROVADO` for the head and the `CHECK-TICKET: VERDE` comment exists for the same head.
 
 ### 10.6 The batch workflow
 

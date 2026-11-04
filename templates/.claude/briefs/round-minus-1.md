@@ -19,6 +19,7 @@ The contract is the body of the issue plus the orchestrator's comments (the bar,
 A comment on the ticket with the list of the tests, how many fail on the base and the BAR GAPS (or "none"), and a checkpoint. Do not edit the product code, and do not commit.
 
 ## Operating rules
+- Prove the attacks fail on the base with the executor: `node .claude/executor.mjs --suites <your suite>` (it exits 3 while it is incomplete: repeat it with `--continuar`).
 - Run tests in the foreground, in blocks of at most 9 minutes (540 s) per command, and never with `run_in_background`.
 - Never kill a process by name (`taskkill /IM`, `killall`, `pkill`): other agents and the user share the machine. Kill only by PID, and only the processes you launched yourself.
 - Save a checkpoint in `.checkpoints/<role>-<ticket>.md` after each step, in the format of `.checkpoints/README.md`.
