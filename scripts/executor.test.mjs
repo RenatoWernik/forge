@@ -219,7 +219,7 @@ test('linhaDe: um texto vai como está; numa lista, só o que não é seguro lev
   const aspas = process.platform === 'win32' ? (s) => `"${s}"` : (s) => `'${s}'`;
   assert.equal(linhaDe(['x', 'a b', 'f(1); g()']), `x ${aspas('a b')} ${aspas('f(1); g()')}`);
   if (process.platform === 'win32') {
-    assert.equal(linhaDe(['C:\\Program Files\\x\\y.cmd', 'a b\\']), '"C:\\Program Files\\x\\y.cmd" "a b\\\\"'); // a barra final duplica-se: nunca escapa a aspa de fecho
+    assert.equal(linhaDe(['pasta com espacos\\y.cmd', 'a b\\']), '"pasta com espacos\\y.cmd" "a b\\\\"'); // a barra final duplica-se: nunca escapa a aspa de fecho
     for (const mau of ['a"b', '%PATH%', 'a\nb']) assert.throws(() => linhaDe(['x', mau]), /Windows/);
   } else assert.equal(linhaDe(['x', "it's"]), `x 'it'\\''s'`);
   for (const mau of ['', ' ', [], ['a', ''], ['a', 3], 7, null]) assert.throws(() => linhaDe(mau));
