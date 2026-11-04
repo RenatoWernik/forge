@@ -9,8 +9,8 @@
 //     --continuar acaba em ≤ 4 chamadas e corre as unidades que faltam.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { H, montar, motores, cadeia } from './r1-comum.mjs';
 
@@ -76,15 +76,16 @@ test('A2c: um fail de arrasto gravado antes da morte do motor não é final: a r
   const d = montar('a2c', { paralelo: 2, orcamento_s: 8, suites: [{ nome: 'longa', limite_s: 120 }, { nome: 'q', limite_s: 60 }] }, un);
   const r1 = await H.correr(d, ['--todas'], { env, limite_ms: 60000 });
   assert.equal(r1.status, 3, H.saida(r1));
-  const [motor] = motores(d);
+  // shortcut: o PID do motor lê-se do ficheiro dele sem o registar (motores() registaria): o mataArvore de um PID registado lê a identidade pelo
+  // powershell, que leva segundos sob carga, e o fail deixava de ser arrasto (mais de 5 s antes do último batimento). O motor acabou de ser visto
+  // vivo; o limpa() do after também apanha os motores sem `fim` pelo ficheiro.
+  const pastaMotor = join(d, '.forge', 'motor'), nomeMotor = readdirSync(pastaMotor).find((n) => n.endsWith('.json'));
+  const motor = H.lerJson(join(pastaMotor, nomeMotor));
   assert.ok(motor && H.vivo(motor.pid), 'o motor não está vivo depois da 1.ª chamada');
   assert.ok(await H.esperaAte(() => H.eventos(d).some((e) => e.evento === 'fim' && e.f.startsWith('s/q-')), 40000), 'não acabou nenhuma q');
-  process.kill(H.inicios(d, 's/longa.fx.mjs')[0].pid); // o corredor da longa morre: o motor grava-a como fail
+  H.mataArvore(H.inicios(d, 's/longa.fx.mjs')[0].pid); // o corredor da longa morre: o motor grava-a como fail
   assert.ok(await H.esperaAte(() => H.umResultado(d).dados.unidades.find((u) => u.ficheiro === 's/longa.fx.mjs')?.estado === 'fail', 15000, 10), 'o motor não gravou o fail da longa');
-  // shortcut: taskkill direto em vez de H.mataArvore (a leitura da identidade pelo powershell leva segundos sob carga e o fail deixava de ser arrasto: > 5 s antes do último batimento);
-  // o PID acabou de ser lido do ficheiro do motor vivo
-  if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(motor.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
-  else H.mataArvore(motor.pid);
+  H.mataArvore(motor.pid);
   assert.ok(await H.esperaAte(() => !H.vivo(motor.pid), 10000), 'o motor não morreu');
   const morto = Date.now();
   const antes = await instantaneo(d);
