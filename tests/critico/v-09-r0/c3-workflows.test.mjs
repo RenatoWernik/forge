@@ -1,6 +1,6 @@
 // V-09 C3 (#133): com agentes falsos no molde dos do check, os workflows do projeto gerado chamam as peças novas nos prompts. O gauntlet-build leva o
 // executor ao crítico da R1 e da R2, antes do método, e o check-ticket ao dev, com o greenEvidence. O gauntlet-batch leva-o 2× ao tester, sem
-// mudar a contagem de passes do workflow. Leituras: PERGUNTAS 2 e 3 do comentário 6618884237.
+// mudar a contagem de passes do workflow. Leituras: RESPOSTAS 2 e 3 às PERGUNTAS do comentário 6618884237.
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { EN, EXECUTOR, CHECK_TICKET, gerar, conjunto, fluxo, prompts, argsBase, argsLote, agentesBuild, agentesLote } from './helpers.mjs';

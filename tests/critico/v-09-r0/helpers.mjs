@@ -2,9 +2,10 @@
 // Reutiliza o sandbox, o corpus e a tradução substituta do f-02-r0 (HOME, USERPROFILE e CLAUDE_CONFIG_DIR temporários; sem NODE_TEST_CONTEXT).
 // Sem rede, sem gh real e sem sessões claude: os agentes são falsos, no molde dos do templates/.claude/check.cjs.
 //
-// LEITURA DO CONTRATO (corpo da #133 e PERGUNTAS 1 a 5 do comentário 6618884237; a resposta do orquestrador prevalece):
+// LEITURA DO CONTRATO (corpo da #133 e RESPOSTA do orquestrador às PERGUNTAS 1 a 5 do comentário 6618884237, que prevalece):
 // - As regras novas: `node .claude/check-ticket.mjs` no dev.md, `node .claude/executor.mjs` no critic.md, no batch.md e no round-minus-1.md
-//   (PERGUNTA 1) e `node .claude/avancar.mjs --modo projeto` no FRAMEWORK.md, secção 10.5 (PERGUNTA 5a). Cada literal dá uma regra do check.
+//   (RESPOSTA 1) e o AVANCAR abaixo no FRAMEWORK.md, secção 10.5 (RESPOSTAS 4 e 5a). Cada literal dá uma regra do check. O comando do FRAMEWORK
+//   corre contra os argumentos reais do avancar do projeto (RESPOSTA 4).
 // - «Dá ok em EN e em PT»: o projeto dos conjuntos en-plain-published e pt-plain-published, tal como sai do scaffold, com o translatePt do f-02
 //   no PT. Só os `code spans` sobrevivem a essa tradução, por isso o literal tem de estar num.
 // - «FAIL com a mutação»: trocar o literal por outro texto no ficheiro do projeto põe a FAIL uma linha que estava ok; e há no corpus uma mutação
@@ -13,8 +14,8 @@
 //   casar com o NO_MERGE do check. push e merge sem distinguir maiúsculas e com as flexões; PR só em maiúsculas, porque o `--pr <n>` do
 //   avancar é um nome de opção. Ficam fora da contagem os 4 módulos e o check.cjs, que são código e não texto para os agentes.
 // - C3: uma simulação própria do projeto gerado, com args e agentes falsos iguais aos do check. Crítico: `--todas` na R1 e `--afetadas` na R2,
-//   antes do passo `Get the real reference` (PERGUNTA 3). Dev: `node .claude/check-ticket.mjs` na mesma linha que `greenEvidence`.
-//   Tester: `--todas --passe 1`, `--passe 2` e `--continuar`, com qualquer testCommand (PERGUNTA 2).
+//   antes do passo `Get the real reference` (RESPOSTA 3). Dev: `node .claude/check-ticket.mjs` na mesma linha que `greenEvidence`.
+//   Tester: `--todas --passe 1`, `--passe 2` e `--continuar`, com qualquer testCommand (RESPOSTA 2). Os prompts ficam provados por este C3, sem linha no check (RESPOSTA 5b).
 // - «Enfraquecer uma regra atual»: nos ficheiros do mecanismo nenhuma linha da base muda ou sai (só se acrescenta); em todo o templates/, as
 //   linhas de regra (NO_MERGE, 540 s, 9 min, primeiro plano) ficam byte a byte; nenhuma linha do check da base desaparece.
 // - C4 tem duas metades. A estática está aqui (nenhum ataque antigo alterado; os scripts/*.test.mjs sem linhas apagadas). A corrida é do dev na
@@ -39,7 +40,7 @@ export const EN = 'en-plain-published';
 export const PT = 'pt-plain-published';
 export const CHECK_TICKET = 'node .claude/check-ticket.mjs';
 export const EXECUTOR = 'node .claude/executor.mjs';
-export const AVANCAR = 'node .claude/avancar.mjs --modo projeto';
+export const AVANCAR = 'node .claude/avancar.mjs --pr <n> --repo <owner/repo> --modo projeto --integracao <branch>';
 export const REGRAS = [
   { file: '.claude/briefs/dev.md', lit: CHECK_TICKET },
   { file: '.claude/briefs/critic.md', lit: EXECUTOR },
