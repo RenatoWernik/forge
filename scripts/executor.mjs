@@ -311,7 +311,8 @@ export function contagensTap(out) {
   const topo = ls.filter((l) => /^(not )?ok\b/.test(l)), nao = topo.filter((l) => l.startsWith('not')).length;
   const marca = (re) => topo.filter((l) => !l.startsWith('not') && re.test(l)).length;
   const sumario = c.pass !== null && c.fail !== null;
-  const sk = marca(/ # SKIP\b/), td = marca(/ # TODO\b/);
+  // A: pela especificação TAP a diretiva não distingue maiúsculas, o espaço depois do «#» é opcional e a palavra pode continuar (`# skip`, `#skip`, `# Skipped: x`, `#ToDo`)
+  const sk = marca(/#\s*skip/i), td = marca(/^(?!.*#\s*skip).*#\s*todo/i);
   const contas = sumario ? c : { ...c, pass: topo.length - nao - sk - td, fail: nao, skip: sk, todo: td };
   if (nao || contas.fail > 0) return { ...contas, fail: Math.max(contas.fail, nao) };
   const plano = [...out.matchAll(/^1\.\.(\d+)\s*$/gm)].at(-1);
@@ -410,6 +411,20 @@ function lerFeitas(c) {
   return { feitas, inicio: antigo.inicio };
 }
 
+// o motor morreu depois da última unidade final e antes do último escreve: as unidades estão todas finais mas o resultado diz «completo: false». Sem motor vivo e sem
+// nada por correr fecha-se o resultado (completo: true), em vez de deixar quem lê a repetir --continuar para sempre
+function reconcilia(c) {
+  const r = existsSync(c.ficheiro) ? lerJsonSeguro(c.ficheiro) : null;
+  if (!r || r.sha !== c.sha || r.arvore !== c.arvore || r.valido === false || r.completo || !r.unidades?.every((u) => FINAIS.includes(u.estado) && !pendenteF2(u))) return;
+  const suites = {};
+  for (const nome of new Set(r.unidades.map((u) => u.suite))) {
+    const us = r.unidades.filter((u) => u.suite === nome), soma = (k) => us.reduce((a, u) => a + u[k], 0);
+    suites[nome] = { estado: estadoSuite(us.map((u) => u.estado), false), pass: soma('pass'), fail: soma('fail'), skip: soma('skip') };
+  }
+  writeFileSync(`${c.ficheiro}.tmp`, JSON.stringify({ ...r, completo: true, fase1_completa: true, suites, fim: new Date().toISOString() }, null, 2));
+  renameSync(`${c.ficheiro}.tmp`, c.ficheiro);
+}
+
 // --- a chamada: liga-se ao motor (ou lança-o), espera até orcamento_s e devolve o código; nunca mata unidades ---
 // quem é o processo `pid`: a hora de arranque e a linha de comando, ou null se não existe ou não se consegue ler
 export function identidade(pid) {
@@ -468,6 +483,23 @@ async function chamada(argv, saida) {
   // por acabar: as unidades sem estado final e as que ainda esperam pela fase 2 do lote
   const faltam = () => { const { feitas } = lerFeitas(c); return plano.filter((u) => !feitas.has(u.chave) || pendenteF2(feitas.get(u.chave))).length; };
 
+  // A saída 3 nunca é sem fim (V-08, R3): um só mecanismo.
+  //  - reconciliação: sem motor vivo e com todas as unidades finais, o resultado fica completo (o motor morreu depois da última unidade e antes do último escreve);
+  //  - contador: .forge/motor/<marca>.semprogresso (sem «.json»: os .json dali são os motores, e o v-01-r0 conta-os) conta as chamadas seguidas que chegam sem motor
+  //    vivo e sem nenhuma unidade final nova desde a anterior; à 2.ª o executor sai com 1 e o motivo. Qualquer progresso, um motor vivo a trabalhar ou uma corrida
+  //    nova (sem --continuar) põem-no a 0.
+  const progressoAgora = () => { const { feitas } = lerFeitas(c); return feitas.size + [...feitas.values()].filter((u) => u.tap_fase2).length; };
+  const contador = join(c.motorDir, `${marca}.semprogresso`), anterior = o.continuar ? lerJsonSeguro(contador) : null;
+  const chegouVivo = !!motorVivo(motorFicheiro, true), prog = progressoAgora();
+  const semProgresso = chegouVivo || !anterior || prog > anterior.progresso ? 0 : anterior.n + 1;
+  writeFileSync(contador, JSON.stringify({ n: semProgresso, progresso: prog }));
+  if (!chegouVivo && o.continuar && !faltam()) reconcilia(c);
+  else if (!chegouVivo && semProgresso >= 2) {
+    const morte = lerJsonSeguro(c.ficheiro)?.motor_morreu ?? (existsSync(join(c.motorDir, `${marca}.log`)) ? readFileSync(join(c.motorDir, `${marca}.log`), 'utf8').trim().split(/\r?\n/).slice(-3).join(' | ') : 'sem log');
+    saida(`executor: os 2 últimos motores morreram sem concluir nenhuma unidade nova (${morte}); a parar com 1 em vez de repetir --continuar${existsSync(c.ficheiro) ? ` → ${c.ficheiro}` : ''}`);
+    return 1;
+  }
+
   // um só motor por sha, árvore e passe: quem toma o lock (mkdir atómico) decide e lança; os outros esperam e ligam-se ao que ele deixou
   let motor = null;
   for (let i = 0; !motor && i < 300; i++) {
@@ -482,17 +514,6 @@ async function chamada(argv, saida) {
     try {
       motor = motorVivo(motorFicheiro, true);
       if (!motor) {
-        // 3 sem fim é impossível: cada lançamento regista as unidades finais que já havia; se os 2 últimos motores morreram sem nenhuma unidade nova, não há um 3.º
-        const lancamentos = join(c.motorDir, `${marca}.lancamentos`); // sem «.json»: os ficheiros .json de .forge/motor são os motores (v-01-r0 conta-os)
-        if (!o.continuar) rm(lancamentos);
-        const progresso = (() => { const { feitas } = lerFeitas(c); return feitas.size + [...feitas.values()].filter((u) => u.tap_fase2).length; })();
-        const hist = lerJsonSeguro(lancamentos) ?? [];
-        if (hist.length >= 2 && hist.slice(-2).every((p) => p === progresso)) {
-          const morte = lerJsonSeguro(c.ficheiro)?.motor_morreu ?? (existsSync(join(c.motorDir, `${marca}.log`)) ? readFileSync(join(c.motorDir, `${marca}.log`), 'utf8').trim().split(/\r?\n/).slice(-3).join(' | ') : 'sem log');
-          saida(`executor: os 2 últimos motores morreram sem concluir nenhuma unidade nova (${morte}); a parar com 1 em vez de repetir --continuar${existsSync(c.ficheiro) ? ` → ${c.ficheiro}` : ''}`);
-          return 1;
-        }
-        writeFileSync(lancamentos, JSON.stringify([...hist, progresso]));
         const nonce = randomBytes(8).toString('hex');
         if (!o.continuar) { try { renameSync(c.ficheiro, `${c.ficheiro}.ant`); } catch { /* ainda não havia */ } } // uma corrida nova não herda o resultado antigo, mas o motor aproveita as durações dele
         const log = openSync(join(c.motorDir, `${marca}.log`), 'a');
@@ -552,10 +573,11 @@ async function motorCorre(argv, saida) {
   // o nome do log nunca usa o `nome` da suíte nem o `ficheiro` em bruto: o que não for [\w.-] passa a «_» (um «test:unit» ou «unit/api» dava ENOENT e matava o motor),
   // e quando algo mudou (ou foi cortado) o índice da unidade impede que nomes parecidos colidam. Um nome já seguro fica como sempre foi.
   // (um nome com mais de 120 caracteres é cortado: o Windows corta os caminhos nos 260)
+  // C: o nome seguro mais os 8 primeiros hex do sha256 de suite\0ficheiro\0bloco (sempre: a-b + c e a + b-c, ou Unit e unit no Windows, não podem partilhar um log)
   const limpo = (s, corte) => { const t = String(s).replace(/[^\w.-]/g, '_'); return t.length > 120 ? t.slice(0, corte) : t; };
   const tapDe = (u) => {
-    const nome = limpo(u.suite.nome, 30), fich = limpo(u.ficheiro, 50), mudou = nome !== String(u.suite.nome) || fich !== u.ficheiro.replaceAll('/', '_');
-    return `.forge/resultados/logs/${marca}-${nome}-${fich}${mudou ? `-i${u.ordem}` : ''}${u.bloco ? `-b${plano.indexOf(u)}` : ''}${u.fase === 2 ? '-f2' : ''}.tap`;
+    const hash = createHash('sha256').update(`${u.suite.nome}\0${u.ficheiro}\0${u.bloco ?? ''}`).digest('hex').slice(0, 8);
+    return `.forge/resultados/logs/${marca}-${limpo(u.suite.nome, 30)}-${limpo(u.ficheiro, 50)}-${hash}${u.fase === 2 ? '-f2' : ''}.tap`;
   };
   const emCurso = (r) => ({ suite: r.u.suite.nome, ficheiro: r.u.ficheiro, bloco: r.u.bloco, estado: 'em_curso', pass: 0, fail: 0, skip: 0, todo: 0, skips: [],
     duracoes: {}, duracao_s: 0, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap: tapDe(r.u) });
@@ -792,6 +814,7 @@ async function motorCorre(argv, saida) {
       limite_s: Math.min(u.limite_s, FASE2_LIMITE_S), nomes: feitas.get(u.chave).skips.filter((s) => s.motivo === MOTIVO_LOTE).map((s) => desfazTap(s.teste)), ordem: plano.length + i })));
   }
 
+  if (+process.env.FORGE_TESTE_ATRASO_FINAL_MS > 0) await dorme(+process.env.FORGE_TESTE_ATRASO_FINAL_MS); // gancho só dos testes: abre a janela «última unidade final, escreve(true) por fazer»
   if (fatal) { for (const r of correm) mataUnidade(r); try { escreve(false); } catch { /* a raiz desapareceu */ } }
   else escreve(plano.every((u) => feitas.has(u.chave)) && !plano.some((u) => pendenteF2(feitas.get(u.chave))));
   saida(`motor ${process.pid}: ${plano.length} unidades em ${Math.round((Date.now() - t0) / 1000)} s${invalido ? ` (invalidado: ${invalido})` : ''}`);
