@@ -1,0 +1,6 @@
+{
+  "versao": 1,
+  "regras": [
+    { "caminhos": ["**"], "suites": ["*"], "motivo": "um projeto novo corre todas as suítes; afine as regras quando o manifesto crescer" }
+  ]
+}

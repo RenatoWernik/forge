@@ -859,6 +859,43 @@ async function chk(name, f) {
     if (again.length) console.log('warn  learnings: recurrence in the strongest layer, the test was not enough, review it (redesign): ' + again.map(w => w.message).join(', '))
   }
 
+  // speed (V-08): the executor, the affected suites, check-ticket and advance live in .claude/ (copied from the forge package as they are), with their manifest .claude/suites.json and map .claude/mapa-suites.json.
+  // ponytail: a rule of the map is a path glob written here (** and * and ?), not node's matchesGlob, which skips dotfiles such as .claude/ for **
+  {
+    const MODS = ['executor.mjs', 'afetadas.mjs', 'check-ticket.mjs', 'avancar.mjs']
+    // ponytail: the shebang line tells a module from an empty or overwritten file without a node process per module (the corpus runs this check ~70 times under a 60 s budget); upgrade: node --check
+    const broken = MODS.filter(m => { try { return !fs.readFileSync(path.join('.claude', m), 'utf8').startsWith('#!/usr/bin/env node') } catch (e) { return true } })
+    await chk('speed: the 4 modules (executor, afetadas, check-ticket, avancar) are in .claude/ and start with their node shebang' + (broken.length ? ' (missing or broken: ' + broken.join(', ') + ')' : ''), () => !broken.length)
+    const readJson = f => JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, ''))
+    const strs = x => Array.isArray(x) && x.every(s => typeof s === 'string' && s)
+    let man = null, manBad = []
+    try {
+      man = readJson('.claude/suites.json')
+      const names = Array.isArray(man.suites) ? man.suites.map(s => s && s.nome) : []
+      if (man.versao !== 1) manBad.push('versao')
+      if (!names.length || names.some(n => typeof n !== 'string' || !n) || new Set(names).size !== names.length) manBad.push('suites')
+      else for (const s of man.suites) if (!(s.tipo === 'node-test' ? strs(s.ficheiros) && s.ficheiros.length : s.tipo === 'comando' && (typeof s.comando === 'string' ? s.comando.trim() : strs(s.comando) && s.comando.length) && (s.formato === undefined || ['tap', 'codigo'].includes(s.formato)))) manBad.push('suites.' + s.nome)
+      if (man.lints !== undefined && !strs(man.lints)) manBad.push('lints')
+      if (man.prepara !== undefined && typeof man.prepara !== 'string' && !Array.isArray(man.prepara)) manBad.push('prepara')
+    } catch (e) { manBad = ['not a JSON file'] }
+    await chk('speed: .claude/suites.json is valid (versao 1, suites with unique names of tipo node-test or comando, lints a list of paths)' + (manBad.length ? ' (invalid: ' + manBad.join(', ') + ')' : ''), () => !manBad.length)
+    const globRe = g => new RegExp('^' + g.replace(/\\/g, '/').replace(/^\.\//, '').split(/(\*\*\/|\*\*|\*|\?)/).map(t => t === '**/' ? '(?:.*/)?' : t === '**' ? '.*' : t === '*' ? '[^/]*' : t === '?' ? '[^/]' : t.replace(/[.+^${}()|[\]\\]/g, '\\$&')).join('') + '$')
+    let uncovered = [], mapNote = ''
+    try {
+      const map = readJson('.claude/mapa-suites.json'), rules = map.regras
+      if (map.versao !== 1 || !Array.isArray(rules) || rules.some(r => !r || !strs(r.caminhos) || !r.caminhos.length || !strs(r.suites))) throw new Error('versao 1 with regras: [{ caminhos, suites }]')
+      const ls = has('.git') ? spawnSync('git', ['ls-files', '-z'], { encoding: 'utf8', maxBuffer: 1 << 28 }) : { status: 1 } // no .git folder: no process to start
+      if (ls.error || ls.status) mapNote = ' (n/a: not a git repository)'
+      else {
+        const res = rules.flatMap(r => r.caminhos.map(globRe))
+        uncovered = ls.stdout.split('\0').filter(f => f && !res.some(re => re.test(f)))
+        if (uncovered.length) mapNote = ' (not covered: ' + uncovered.slice(0, 3).join(', ') + (uncovered.length > 3 ? ', ...' : '') + ')'
+      }
+    } catch (e) { uncovered = ['.claude/mapa-suites.json'], mapNote = ' (' + e.message + ')' }
+    await chk('speed: every tracked file is covered by a rule of .claude/mapa-suites.json' + mapNote, () => !uncovered.length)
+    if (!process.env.FORGE_CHECK_NESTED) await chk('speed: .gitignore has the line .forge/ (the results of the executor)', () => fs.readFileSync('.gitignore', 'utf8').split(/\r?\n/).includes('.forge/')) // the nested --render runs see a copy of .claude/ alone, with no .gitignore
+  }
+
   console.log(bad ? '\nThere is a FAIL above.' : '\nAll ok.')
   process.exit(bad)
 })()

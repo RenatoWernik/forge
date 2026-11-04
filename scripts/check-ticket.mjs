@@ -15,11 +15,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afetadas } from './afetadas.mjs';
-import { estadoDe, executa, lerTap } from './executor.mjs';
+import { estadoDe, executa, fonteDe, lerTap } from './executor.mjs';
 
+// os lints do forge; o `lints` do manifesto (V-08, #132: um projeto gerado declara `[]`) substitui-os, e um manifesto sem `lints` mantém-nos
 const LINTS = ['scripts/guardas-critico.test.mjs', 'scripts/mapa-suites.test.mjs'];
 const LIMITE_LINT_MS = 180000;
 const TOKENS = ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'];
+const DICA_PREPARA = 'o ramo passou e o manifesto não tem prepara: faltam dependências no clone?';
 class Uso extends Error {}
 const T0 = Date.now(); // o orcamento_s do executor conta desde o arranque do check-ticket: o lint e o clone gastam dele, e a chamada devolve 3 antes de a ferramenta a passar para segundo plano
 
@@ -43,7 +45,10 @@ function lerArgs(argv) {
 const git = (cwd, ...a) => spawnSync('git', a, { cwd, encoding: 'utf8', maxBuffer: 1 << 30 });
 const nomes = (txt) => txt.split('\0').filter(Boolean);
 const curto = (s, n = 300) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const casa = (f, globs) => globs.some((g) => { const p = g.replaceAll('\\', '/').replace(/^\.\//, ''); return f === p || posix.matchesGlob(f, p); });
+// matchesGlob não tem `dot`: `**` não casa com .claude/ nem com .gitignore, que um projeto gerado tem no diff (V-08). Um segmento que começa por ponto passa a começar por
+// outro carácter, igual no ficheiro e no glob: o `**` e o `*` casam com ele e um glob com o ponto escrito continua a casar só com esse nome
+const semPonto = (s) => s.replace(/(^|\/)\./g, '$1․');
+const casa = (f, globs) => globs.some((g) => { const p = g.replaceAll('\\', '/').replace(/^\.\//, ''); return f === p || posix.matchesGlob(semPonto(f), semPonto(p)); });
 
 // 1: tudo commitado (o .forge/ é do executor e não conta)
 function arvoreLimpa(raiz) {
@@ -53,8 +58,12 @@ function arvoreLimpa(raiz) {
   return sujos.length ? { estado: 'FAIL', detalhe: curto(sujos.join(', ')) } : { estado: 'ok', detalhe: '' };
 }
 
-// 2: os lints da raiz, cada um num `node --test`; um lint em falta é FAIL
+// 2: os lints do manifesto, cada um num `node --test`; um lint em falta é FAIL; com `lints: []` não há nada a correr
 function lint(raiz) {
+  let lints = LINTS;
+  try { lints = lerJson(join(raiz, fonteDe(raiz, 'suites.json'))).lints ?? LINTS; } catch { /* sem manifesto legível os outros passos já dizem o motivo */ }
+  if (!Array.isArray(lints) || !lints.every((l) => typeof l === 'string' && l)) return Promise.resolve({ estado: 'FAIL', detalhe: 'suites.json: lints tem de ser uma lista de caminhos' });
+  if (!lints.length) return Promise.resolve({ estado: 'ok', detalhe: 'nenhum lint declarado' });
   const um = (rel) => new Promise((fim) => {
     if (!existsSync(join(raiz, rel))) return fim(`${rel} em falta`);
     const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
@@ -70,7 +79,7 @@ function lint(raiz) {
       fim(`${rel}: ${maus.join('; ') || `código ${status}`}`);
     });
   });
-  return Promise.all(LINTS.map(um)).then((r) => { const maus = r.filter(Boolean); return maus.length ? { estado: 'FAIL', detalhe: curto(maus.join(' | ')) } : { estado: 'ok', detalhe: '' }; });
+  return Promise.all(lints.map(um)).then((r) => { const maus = r.filter(Boolean); return maus.length ? { estado: 'FAIL', detalhe: curto(maus.join(' | ')) } : { estado: 'ok', detalhe: '' }; });
 }
 
 // 3: os ficheiros do diff contra o merge-base (com a árvore de trabalho, sem deteção de renomeações: o nome antigo também conta) ⊆ os globs
@@ -88,19 +97,22 @@ const ambito = (ficheiros, globs) => {
 
 // 4 e 5: as suítes afetadas pelo executor, na raiz ou no clone; só dá ok com o resultado completo, deste sha, e `pass` em cada suíte pedida
 const lerJson = (f) => JSON.parse(readFileSync(f, 'utf8'));
-async function corre(prefixo, raiz, suites, sha, continuar, orcamentoS) {
+async function corre(prefixo, raiz, suites, sha, continuar, orcamentoS, preparar = false) {
   const saidas = [];
   let codigo;
   const resto = Math.max(5, Math.floor(orcamentoS - (Date.now() - T0) / 1000));
-  try { codigo = await executa(['--suites', suites.join(','), '--orcamento', String(resto), '--raiz', raiz, ...(continuar ? ['--continuar'] : [])], { saida: (l) => { saidas.push(l); console.log(`  [${prefixo}] ${l}`); } }); }
+  // --preparar só no clone do pós-merge (não traz as dependências ignoradas): o `prepara` do manifesto corre lá uma vez; o ramo já as tem
+  try { codigo = await executa(['--suites', suites.join(','), '--orcamento', String(resto), '--raiz', raiz, ...(preparar ? ['--preparar'] : []), ...(continuar ? ['--continuar'] : [])], { saida: (l) => { saidas.push(l); console.log(`  [${prefixo}] ${l}`); } }); }
   catch (e) { return { estado: 'FAIL', detalhe: curto(`executor: ${e.message}`), suites: {} }; }
   const ficheiro = /→ (.+)$/.exec(saidas.at(-1) ?? '')?.[1];
   // código 3 sem ficheiro: o motor ainda corre e a chamada só disse «repita com --continuar»
   if (codigo === 3 && !(ficheiro && existsSync(ficheiro))) return { estado: 'pendente', detalhe: curto(`incompleto: repetir com --continuar (${suites.join(', ')})`), suites: {} };
   if (!ficheiro || !existsSync(ficheiro)) return { estado: 'FAIL', detalhe: 'o executor não deixou resultados', suites: {} };
   const res = lerJson(ficheiro);
+  // o executor parou com 1 sem o resultado completo: os 2 últimos motores morreram sem progresso; nunca «pendente» (seria 3 sem fim)
+  if (codigo === 1 && !res.completo) return { estado: 'FAIL', detalhe: curto(`o motor do executor morreu: ${res.motor_morreu ?? saidas.at(-1)}`), suites: {}, ficheiro };
   if (res.valido === false) return { estado: 'FAIL', detalhe: curto(`resultado invalidado: ${res.motivo ?? 'a árvore ou o HEAD mudaram'}`), suites: {}, ficheiro };
-  const maus = res.unidades.filter((u) => u.estado !== 'pass').map((u) => `${u.suite}: ${u.estado} ${u.ficheiro}`);
+  const maus = res.unidades.filter((u) => u.estado !== 'pass').map((u) => `${u.suite}: ${u.estado} ${u.ficheiro}${u.motivo ? ` (${u.motivo})` : ''}`);
   const estados = Object.fromEntries(Object.entries(res.suites).map(([n, s]) => [n, s.estado]));
   // o executor dá 1 com uma falha mesmo com o resultado incompleto, e as unidades por correr ainda podem falhar: só um resultado completo fecha o passo
   if (!res.completo) return { estado: 'pendente', detalhe: curto(`incompleto${maus.length ? `, com falhas até agora (${maus.join('; ')})` : ''}: repetir com --continuar`), suites: estados, ficheiro };
@@ -131,7 +143,7 @@ function clona(raiz, sha, continuar) {
 //   Mapa do V-02 (sem `regras`, #126): um ficheiro fora de tests/critico dá TODAS as suítes (regra 3 do afetadas), por isso o passo exige o manifesto inteiro
 //   no passo 4, completo e a `pass`; um diff só de testes não tem nada a exigir (n/a, dito por extenso, nunca um ok mudo).
 function esquema(raiz, ficheiros, todas, p4) {
-  const mapa = lerJson(join(raiz, 'scripts', 'mapa-suites.json'));
+  const mapa = lerJson(join(raiz, fonteDe(raiz, 'mapa-suites.json')));
   if (!('regras' in mapa)) {
     if (ficheiros.every((f) => f.startsWith('tests/critico/'))) return { estado: 'ok', detalhe: 'n/a: o diff só toca em testes' };
     if (p4.estado === 'pendente') return { estado: 'pendente', detalhe: 'incompleto: repetir com --continuar' };
@@ -157,6 +169,10 @@ async function main(argv) {
   const rev = git(raiz, 'rev-parse', 'HEAD');
   if (rev.status !== 0) throw new Uso(`${raiz} não é um repositório git com commits`);
   const sha = rev.stdout.trim();
+  // um manifesto sem suítes não corre nada: «0/0» seria um verde sem testes, por isso é erro de uso (como no executor)
+  let vazio = false;
+  try { const s = lerJson(join(raiz, fonteDe(raiz, 'suites.json'))).suites; vazio = Array.isArray(s) && !s.length; } catch { /* sem manifesto legível os passos já dizem o motivo */ }
+  if (vazio) throw new Uso('suites.json: suites está vazio: sem suítes nada corre, e um VERDE seria sem testes');
   // o token só serve ao gh: os testes que o executor lança não o herdam (e GITHUB_HEAD_REF, do CI, não pode enganar o soNoTicket do clone)
   const ghEnv = { ...process.env };
   for (const k of [...TOKENS, 'GITHUB_HEAD_REF']) delete process.env[k];
@@ -171,26 +187,30 @@ async function main(argv) {
   // (medido no C2: o «corpus < 60 s» do ramo deu 70,6 s e falhou). Um FAIL aqui não impede os passos seguintes.
   diz('lint', await lint(raiz));
 
-  let ficheiros = null, suites = null, todas = [], erro;
+  let ficheiros = null, suites = null, todas = [], erro, temPrepara = false;
   try { ficheiros = diffDoRamo(raiz, o.base); } catch (e) { erro = e; }
 
   let pRamo = Promise.resolve(orfao('sem diff contra a base')), pPos = pRamo;
   if (ficheiros) {
     try {
-      const manifesto = lerJson(join(raiz, 'scripts', 'suites.json'));
+      const manifesto = lerJson(join(raiz, fonteDe(raiz, 'suites.json')));
       todas = manifesto.suites.map((s) => s.nome);
+      temPrepara = manifesto.prepara != null && manifesto.prepara !== '' && !(Array.isArray(manifesto.prepara) && !manifesto.prepara.length);
       const r = await afetadas(ficheiros, { raiz });
       suites = [...r.suites];
       if (suites.includes('*')) suites = todas;
       if (!suites.length) throw new Error(ficheiros.length ? 'nenhuma suíte afetada (erro de mapa?)' : 'diff vazio contra a base');
       pRamo = corre('ramo', raiz, suites, sha, o.continuar, manifesto.orcamento_s).catch(falha);
-      pPos = Promise.resolve().then(() => corre('pós-merge', clona(raiz, sha, o.continuar), suites, sha, o.continuar, manifesto.orcamento_s)).catch(falha);
+      pPos = Promise.resolve().then(() => corre('pós-merge', clona(raiz, sha, o.continuar), suites, sha, o.continuar, manifesto.orcamento_s, true)).catch(falha);
     } catch (e) { pRamo = Promise.resolve(falha(e)); pPos = pRamo; suites = null; }
   }
   diz('âmbito', ficheiros ? ambito(ficheiros, o.ambito) : falha(erro));
   const p4 = await pRamo;
   diz('afetadas no ramo', p4);
-  diz('pós-merge', await pPos);
+  const p5 = await pPos;
+  // o ramo passou e o pós-merge não, sem `prepara`: o clone não traz os ficheiros ignorados (node_modules/...); o motivo real só está nos logs do clone
+  if (p5.estado === 'FAIL' && p4.estado === 'ok' && !temPrepara) p5.detalhe = `${curto(p5.detalhe, 200)} ; ${DICA_PREPARA}`;
+  diz('pós-merge', p5);
   let p6;
   try { p6 = suites ? esquema(raiz, ficheiros, todas, p4) : orfao('sem afetadas no ramo'); } catch (e) { p6 = falha(e); }
   diz('esquema', p6);

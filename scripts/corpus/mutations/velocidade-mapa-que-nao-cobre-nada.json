@@ -1,0 +1,8 @@
+{
+  "base": "en-plain-published",
+  "seed": { "files": { "src/exemplo.txt": "x\n" }, "commit": true },
+  "file": ".claude/mapa-suites.json",
+  "find": "\"**\"",
+  "replace": "\"nenhum-sitio/**\"",
+  "line": "speed: every tracked file is covered by a rule of .claude/mapa-suites.json"
+}

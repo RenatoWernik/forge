@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".gitignore",
+  "find": ".forge/",
+  "replace": ".forge-outro/",
+  "line": "speed: .gitignore has the line .forge/ (the results of the executor)"
+}

@@ -27,6 +27,7 @@
     "v-01-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o c6-manifesto (nomes = pastas) cobre-se porque uma pasta fora do manifesto leva todas as suítes",
     "v-03-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o ls-files dos helpers só copia o repo para uma fixture, não guarda um diff",
     "v-02-r0":"ÂMBITO: só corre na branch do próprio ticket (soNoTicket); o C5 compara a saída do CLI com o diff contra a base",
+    "v-08-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket); compara com o merge-base (git archive e git diff) e os projetos gerados são repos temporários",
     "v-11-r0": "ÂMBITO: só corre na branch do próprio ticket (soNoTicket) e compara a árvore do ticket com o merge-base; o c3 e o c5 correm cópias fora do repo"
   }
 }

@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 class Recusa extends Error {}
@@ -129,14 +129,17 @@ function posMerge(sha) {
     git(pasta, 'clone', '--quiet', '--no-checkout', '--', origem, '.');
     git(pasta, 'checkout', '--quiet', '--detach', sha);
     git(pasta, 'rev-parse', '--verify', `${sha}^`);
-    const exec = ['scripts/executor.mjs', '.claude/executor.mjs'].find((f) => existsSync(join(pasta, f)));
-    if (!exec) throw new Error('o squash não tem executor (scripts/executor.mjs ou .claude/executor.mjs)');
+    // o executor da pasta deste módulo (.claude/ no projeto, scripts/ no forge), nunca o primeiro que se achar: um scripts/executor.mjs do projeto, falso, daria verde
+    const propria = basename(dirname(fileURLToPath(import.meta.url)));
+    const exec = ['.claude', 'scripts'].includes(propria) ? `${propria}/executor.mjs` : ['scripts/executor.mjs', '.claude/executor.mjs'].find((f) => existsSync(join(pasta, f))); // shortcut: uma cópia noutra pasta (os testes) procura como antes
+    if (!exec || !existsSync(join(pasta, exec))) throw new Error(`o squash não tem o executor ${exec ?? '(scripts/executor.mjs ou .claude/executor.mjs)'}`);
     const env = { ...process.env };
     for (const k of TOKENS) delete env[k];
     const corre1 = (...a) => corre(process.execPath, [exec, ...a], { cwd: pasta, env, timeout: 900000 });
     // o executor só espera pelo motor até orcamento_s e sai com 3 (incompleto); repete-se com --continuar até 0 ou 1 (o motor nunca é morto)
-    let r = corre1('--afetadas', '--base', `${sha}^`);
-    for (let t = 0; r.status === 3 && t < MAX_CONTINUAR; t++) { diz(`pós-merge: executor incompleto (saída 3), --continuar ${t + 1}`); r = corre1('--afetadas', '--base', `${sha}^`, '--continuar'); }
+    // --preparar: o clone não traz as dependências ignoradas; o `prepara` do manifesto (se houver) corre uma vez (a marca impede o --continuar de o repetir)
+    let r = corre1('--afetadas', '--base', `${sha}^`, '--preparar');
+    for (let t = 0; r.status === 3 && t < MAX_CONTINUAR; t++) { diz(`pós-merge: executor incompleto (saída 3), --continuar ${t + 1}`); r = corre1('--afetadas', '--base', `${sha}^`, '--preparar', '--continuar'); }
     const verde = r.status === 0;
     const logs = join(pasta, '.forge', 'resultados', 'logs');
     const falhas = !existsSync(logs) ? [] : readdirSync(logs).filter((n) => n.endsWith('.tap'))

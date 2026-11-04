@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": ".claude/suites.json",
+  "find": "\"versao\": 1",
+  "replace": "\"versao\": 2",
+  "line": "speed: .claude/suites.json is valid (versao 1, suites with unique names of tipo node-test or comando, lints a list of paths)"
+}
