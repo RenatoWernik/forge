@@ -234,12 +234,13 @@ function lerManifesto(raiz) {
 
 // as contagens de uma unidade que acabou: o TAP do node --test; numa suíte `comando`, o TAP de outra ferramenta (sem o sumário `# pass`, contam as linhas
 // ok e not ok do nível 0) ou só o código de saída. Sem nenhum teste contado a unidade é «erro» (estadoDe), nunca um falso verde
-function contagens(s, out, status) {
+export function contagens(s, out, status) {
   if (s.tipo !== 'comando') return lerTap(out);
   if (s.formato === 'codigo') return { pass: status === 0 ? 1 : 0, fail: status === 0 ? 0 : 1, skip: 0, todo: 0, skips: [], duracoes: {} };
   const c = lerTap(out);
   if (c.pass !== null && c.fail !== null) return c;
-  const nivel0 = testesDoTap(out).filter((t) => !t.nome.includes(' > ')), n = (e) => nivel0.filter((t) => t.estado === e).length;
+  const nivel0 = out.split(/\r?\n/).filter((l) => /^(not )?ok\b/.test(l)).map((l) => (/ # SKIP\b/.test(l) ? 'skip' : / # TODO\b/.test(l) ? 'todo' : l.startsWith('not') ? 'fail' : 'pass'));
+  const n = (e) => nivel0.filter((x) => x === e).length;
   return { ...c, pass: n('pass'), fail: n('fail'), skip: n('skip'), todo: n('todo') };
 }
 

@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { estadoDe, estadoSuite, lerTap } from './executor.mjs';
+import { contagens, estadoDe, estadoSuite, lerTap } from './executor.mjs';
 
 const EXECUTOR = fileURLToPath(new URL('./executor.mjs', import.meta.url));
 const pastas = [];
@@ -105,6 +105,33 @@ test('uso: sem --todas/--suites, suite desconhecida, --afetadas e argumentos est
   for (const a of [[], ['--suites', 'nada'], ['--todas', '--afetadas'], ['--todas', '--passe', '3'], ['--todas', '--xpto']]) {
     const r = executor(d, ...a);
     assert.equal(r.status, 2, `${a.join(' ')}: ${r.stdout}${r.stderr}`);
+  }
+});
+
+// V-08 (#132): a suíte `comando`. O comportamento no projeto gerado é provado por tests/critico/v-08-r0/; aqui as classes de entradas do manifesto e do TAP.
+test('contagens: `comando` com formato codigo conta pelo código de saída; com formato tap lê o sumário do node ou, sem ele, as linhas ok e not ok do nível 0; sem testes nunca é pass', () => {
+  const cmd = (formato) => ({ tipo: 'comando', formato });
+  const estado = (s, out, status) => estadoDe(status, contagens(s, out, status));
+  assert.equal(estado(cmd('codigo'), '', 0), 'pass');
+  assert.equal(estado(cmd('codigo'), 'tap falso\nok 1 - x\n', 4), 'fail');
+  assert.deepEqual(contagens(cmd('tap'), TAP, 1).pass, 1); // com sumário: o do node
+  const semSumario = 'TAP version 13\nok 1 - a\nnot ok 2 - b\n    ok 1 - interno\nok 3 - c # SKIP x\n1..3\n';
+  const c = contagens(cmd('tap'), semSumario, 1);
+  assert.deepEqual([c.pass, c.fail, c.skip], [1, 1, 1]);
+  assert.equal(estadoDe(1, c), 'fail');
+  assert.equal(estado(cmd('tap'), '', 0), 'erro'); // um comando que sai 0 sem escrever TAP não prova nada
+  assert.equal(estado(cmd('tap'), 'ok 1 - a\n', 1), 'erro'); // saída ≠ 0 sem falhas no TAP
+  assert.deepEqual(contagens({ tipo: 'node-test' }, TAP, 1), lerTap(TAP)); // o node-test não muda
+});
+
+test('uso: uma suíte `comando` sem lista de argv, com formato desconhecido, ou um tipo desconhecido, dão a saída 2 e nomeiam a suíte', () => {
+  const d = tmp();
+  mkdirSync(join(d, 'scripts')); // o manifesto é lido antes do git: não é preciso repo
+  for (const suite of [{ comando: 'node -v' }, { comando: [] }, { comando: ['node', 3] }, { comando: ['node', '-v'], formato: 'xml' }, { tipo: 'jest' }]) {
+    writeFileSync(join(d, 'scripts/suites.json'), JSON.stringify({ versao: 1, paralelo: 1, vagas_globais: 1, carga_sensivel: 1, orcamento_s: 30, suites: [{ nome: 'cx', tipo: 'comando', ...suite }] }));
+    const r = executor(d, '--todas');
+    assert.equal(r.status, 2, JSON.stringify(suite) + (r.stdout + r.stderr));
+    assert.match(r.stdout + r.stderr, /suite cx/);
   }
 });
 
