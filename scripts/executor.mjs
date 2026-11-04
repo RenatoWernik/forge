@@ -30,28 +30,45 @@ const NAO_ENCONTRADO = process.platform === 'win32' ? 9009 : 127; // a saída do
 const TOKENS = ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN']; // nenhuma unidade os herda, mesmo numa chamada direta
 class Uso extends Error {}
 
-// V-08: um `comando` (e o `prepara`) é um texto, que vai ao shell como está, ou uma lista, de que cada elemento vai entre aspas seguras. No Windows um
-// elemento com «"», «%» ou quebra de linha não se cita com segurança no cmd: é erro de uso (o texto serve). Um elemento seguro nunca leva aspas:
-// `"npm.cmd"` entre aspas perde o %~dp0 do próprio npm.cmd.
+// V-08: um `comando` (e o `prepara`) é um texto, que vai ao shell como está, ou uma lista (o primeiro elemento é o executável).
+export function validaComando(c) {
+  if (typeof c === 'string' ? c.trim() : Array.isArray(c) && c.length && c.every((x) => typeof x === 'string' && x)) return;
+  throw new Error('comando tem de ser um texto ou uma lista de textos');
+}
+
+// A lista como uma linha de shell, cada elemento entre aspas seguras. Só serve ao que o Windows corre pelo cmd (um .cmd ou .bat: o spawn recusa-os sem shell); um
+// .exe ou o POSIX recebem a lista tal como está. No cmd um elemento com «"», «%» ou quebra de linha não se cita com segurança: é erro. Um elemento seguro nunca
+// leva aspas: `"npm.cmd"` entre aspas perde o %~dp0 do próprio npm.cmd.
 export function linhaDe(c) {
-  if (typeof c === 'string') { if (!c.trim()) throw new Error('comando vazio'); return c; }
-  if (!Array.isArray(c) || !c.length || !c.every((x) => typeof x === 'string' && x)) throw new Error('comando tem de ser um texto ou uma lista de textos');
+  validaComando(c);
+  if (typeof c === 'string') return c;
   const win = process.platform === 'win32', seguro = win ? /^[\w.\-/\\:@=,+]+$/ : /^[\w.\-/:@=,+]+$/;
   return c.map((a) => {
     if (seguro.test(a)) return a;
     if (!win) return `'${a.replaceAll("'", "'\\''")}'`;
-    if (/["%\r\n]/.test(a)) throw new Error(`o elemento ${JSON.stringify(a)} tem «"», «%» ou quebra de linha: no Windows escreva o comando como texto`);
+    if (/["%\r\n]/.test(a)) throw new Error(`o elemento ${JSON.stringify(a)} tem «"», «%» ou quebra de linha: um .cmd no Windows não o recebe com segurança (escreva o comando como texto)`);
     return `"${a.replace(/\\+$/, '$&$&')}"`;
   }).join(' ');
 }
 
-// o executável de uma lista existe? (o PATH e o PATHEXT do ambiente da unidade; um nome com caminho vale contra o cwd). Sem isto um comando inexistente
-// só aparece como a saída ≠ 0 do shell, com a mensagem na língua da máquina
+// o ficheiro do executável de uma lista, ou null: o PATH e o PATHEXT do ambiente da unidade (no Windows só um nome com extensão executável conta: o `npm` sem extensão
+// da pasta do node é um script de shell); um nome com caminho vale contra o cwd. Sem isto um comando inexistente só aparece como a saída ≠ 0 do shell
 function achaExe(nome, env, cwd) {
   const win = process.platform === 'win32', chave = (n) => Object.keys(env).find((k) => (win ? k.toUpperCase() : k) === n);
-  const exts = win ? ['', ...(env[chave('PATHEXT')] ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)] : [''];
+  const pext = win ? (env[chave('PATHEXT')] ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean) : [''];
+  const exts = win && pext.some((e) => nome.toLowerCase().endsWith(e.toLowerCase())) ? [''] : pext;
   const dirs = /[\\/]/.test(nome) ? [isAbsolute(nome) ? '' : cwd] : [...(win ? [cwd] : []), ...(env[chave('PATH')] ?? '').split(delimiter).filter(Boolean)];
-  return dirs.some((d) => exts.some((e) => { try { return statSync(join(d, nome + e)).isFile(); } catch { return false; } }));
+  for (const d of dirs) for (const e of exts) { const f = join(d, nome + e); try { if (statSync(f).isFile()) return f; } catch { /* não existe */ } }
+  return null;
+}
+
+// como lançar um `comando`: um texto vai ao shell; uma lista vai direta ao executável que o PATH acha (os argumentos nunca passam por um shell), menos um .cmd ou .bat
+// no Windows, que só corre pelo cmd
+function aLancar(comando, env, cwd) {
+  if (typeof comando === 'string') return { exe: comando, args: [], shell: true };
+  const f = achaExe(comando[0], env, cwd);
+  if (!f) throw new Error(`comando não encontrado: ${comando[0]}`);
+  return process.platform === 'win32' && /\.(cmd|bat)$/i.test(f) ? { exe: linhaDe(comando), args: [], shell: true } : { exe: f, args: comando.slice(1), shell: false };
 }
 
 // por correr na fase 2: uma unidade com estado final e testes que saltaram com o motivo do lote, ainda sem a fase 2 fundida
@@ -253,12 +270,12 @@ function lerManifesto(raiz) {
   for (const k of ['paralelo', 'vagas_globais', 'carga_sensivel', 'orcamento_s']) if (!(m[k] > 0)) throw new Uso(`suites.json: ${k} inválido`);
   // `prepara` (opcional): um comando, corrido uma vez antes das suítes com --preparar; vazio ('' ou []) é «nada a preparar»
   if (m.prepara != null && m.prepara !== '' && !(Array.isArray(m.prepara) && !m.prepara.length)) {
-    try { m.preparaLinha = linhaDe(m.prepara); } catch (e) { throw new Uso(`suites.json: prepara: ${e.message}`); }
+    try { validaComando(m.prepara); } catch (e) { throw new Uso(`suites.json: prepara: ${e.message}`); }
+    m.temPrepara = true;
   }
   for (const s of m.suites) {
     if (s.tipo === 'comando') { // um comando qualquer (texto ou lista, pelo shell) que acaba em 0 ou não, ou que escreve TAP
-      try { s.linha = linhaDe(s.comando); } catch (e) { throw new Uso(`suite ${s.nome}: ${e.message}`); }
-      s.argv0 = Array.isArray(s.comando) ? s.comando[0] : null;
+      try { validaComando(s.comando); } catch (e) { throw new Uso(`suite ${s.nome}: ${e.message}`); }
       s.formato ??= 'codigo';
       if (!['tap', 'codigo'].includes(s.formato)) throw new Uso(`suite ${s.nome}: formato ${s.formato} (tap ou codigo)`);
     } else if (s.tipo !== 'node-test') throw new Uso(`suite ${s.nome}: tipo ${s.tipo} não suportado (node-test ou comando)`);
@@ -600,9 +617,8 @@ async function motorCorre(argv, saida) {
     if (u.fase === 2) env.FORGE_LOTE_RESULTADOS = ficheiro; else env.FORGE_LOTE_FASE = '1';
     semTokens(env);
     const comando = u.suite.tipo === 'comando';
-    let exe = process.execPath, args = ['--test', '--test-reporter=tap'];
-    if (comando) [exe, args] = [u.suite.linha, []];
-    else {
+    let exe = process.execPath, args = ['--test', '--test-reporter=tap'], shell = false;
+    if (!comando) {
       if (u.suite.concorrencia) args.push(`--test-concurrency=${u.suite.concorrencia}`);
       if (u.fase === 2) args.push(`--test-name-pattern=^(?:${u.nomes.map(escapaRegex).join('|')})$`);
       else if (u.bloco) args.push(`--test-name-pattern=${u.bloco}`);
@@ -611,8 +627,8 @@ async function motorCorre(argv, saida) {
     const r = { u, vaga, cmax: vaga.carga, inicio: new Date(), limite: false, out: '', err: '' };
     let p;
     try {
-      if (comando && u.suite.argv0 && !achaExe(u.suite.argv0, env, raiz)) throw new Error(`comando não encontrado: ${u.suite.argv0}`);
-      p = lancaProc(exe, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', shell: comando });
+      if (comando) ({ exe, args, shell } = aLancar(u.suite.comando, env, raiz));
+      p = lancaProc(exe, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', shell });
     } catch (e) { // um arranque falhado (o spawn pode lançar na hora, p. ex. EINVAL) é o «erro» desta unidade: nunca deita o motor abaixo
       r.err = String(e.message ?? e); r.motivo = `arranque falhado: ${r.err}`; r.saiu = true; r.pid = 0;
       r.fim = Promise.resolve();
@@ -705,8 +721,10 @@ async function motorCorre(argv, saida) {
     const tap = `.forge/resultados/logs/${marca}-prepara.tap`, r = { limite: false, out: '', err: '', saiu: false, pid: 0 };
     const acaba = (estado, motivo) => { writeFileSync(join(raiz, tap), r.out); if (r.err) writeFileSync(`${join(raiz, tap)}.err`, r.err); fim({ estado, motivo, tap }); };
     let p;
-    try { p = lancaProc(m.preparaLinha, [], { cwd: raiz, env: semTokens(ambiente(join(raizTmp, 'prepara'))), stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', shell: true }); }
-    catch (e) { r.err = String(e.message ?? e); return acaba('erro', `arranque falhado: ${r.err}`); }
+    try {
+      const env = semTokens(ambiente(join(raizTmp, 'prepara'))), { exe, args, shell } = aLancar(m.prepara, env, raiz);
+      p = lancaProc(exe, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', shell });
+    } catch (e) { r.err = String(e.message ?? e); return acaba('erro', `arranque falhado: ${r.err}`); }
     r.pid = p.pid; preparando.add(r);
     p.stdout.on('data', (b) => { r.out += b; });
     p.stderr.on('data', (b) => { r.err += b; });
@@ -723,7 +741,7 @@ async function motorCorre(argv, saida) {
   });
   const marcaPrep = join(c.motorDir, `${marca}.prepara.json`);
   if (!o.continuar) rm(marcaPrep);
-  if (o.preparar && m.preparaLinha && fila.length && !existsSync(marcaPrep)) {
+  if (o.preparar && m.temPrepara && fila.length && !existsSync(marcaPrep)) {
     const p = await preparaDependencias();
     if (p.estado === 'pass') writeFileSync(marcaPrep, JSON.stringify({ fim: new Date().toISOString() }));
     else {
