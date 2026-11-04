@@ -483,7 +483,7 @@ async function chamada(argv, saida) {
       motor = motorVivo(motorFicheiro, true);
       if (!motor) {
         // 3 sem fim é impossível: cada lançamento regista as unidades finais que já havia; se os 2 últimos motores morreram sem nenhuma unidade nova, não há um 3.º
-        const lancamentos = join(c.motorDir, `${marca}.lancamentos.json`);
+        const lancamentos = join(c.motorDir, `${marca}.lancamentos`); // sem «.json»: os ficheiros .json de .forge/motor são os motores (v-01-r0 conta-os)
         if (!o.continuar) rm(lancamentos);
         const progresso = (() => { const { feitas } = lerFeitas(c); return feitas.size + [...feitas.values()].filter((u) => u.tap_fase2).length; })();
         const hist = lerJsonSeguro(lancamentos) ?? [];
@@ -769,7 +769,7 @@ async function motorCorre(argv, saida) {
     p.on('exit', (status) => { r.saiu = true; setTimeout(() => fecha(status), 2000); });
     p.on('error', (e) => { r.err += String(e); r.saiu = true; fecha(null); });
   });
-  const marcaPrep = join(c.motorDir, `${marca}.prepara.json`);
+  const marcaPrep = join(c.motorDir, `${marca}.prepara`);
   if (!o.continuar) rm(marcaPrep);
   if (o.preparar && m.temPrepara && fila.length && !existsSync(marcaPrep)) {
     const p = await preparaDependencias();
