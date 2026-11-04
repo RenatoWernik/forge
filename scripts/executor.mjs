@@ -323,6 +323,8 @@ export function contagensTap(out) {
     const total = c.pass + (c.skip ?? 0) + (c.todo ?? 0), folhas = folhasOk(ls);
     if (total < 1 || folhas !== total) return erro(`sumário com ${total} testes mas ${folhas} linhas ok`);
   }
+  // pelo menos um teste corrido: tudo em SKIP ou TODO seria um verde sem ter corrido nada (no `node-test` do forge o skip de âmbito é legítimo, e não passa por aqui)
+  if (!(contas.pass >= 1)) return erro('nenhum teste correu: todos em SKIP ou TODO');
   return contas;
 }
 
@@ -480,6 +482,17 @@ async function chamada(argv, saida) {
     try {
       motor = motorVivo(motorFicheiro, true);
       if (!motor) {
+        // 3 sem fim é impossível: cada lançamento regista as unidades finais que já havia; se os 2 últimos motores morreram sem nenhuma unidade nova, não há um 3.º
+        const lancamentos = join(c.motorDir, `${marca}.lancamentos.json`);
+        if (!o.continuar) rm(lancamentos);
+        const progresso = (() => { const { feitas } = lerFeitas(c); return feitas.size + [...feitas.values()].filter((u) => u.tap_fase2).length; })();
+        const hist = lerJsonSeguro(lancamentos) ?? [];
+        if (hist.length >= 2 && hist.slice(-2).every((p) => p === progresso)) {
+          const morte = lerJsonSeguro(c.ficheiro)?.motor_morreu ?? (existsSync(join(c.motorDir, `${marca}.log`)) ? readFileSync(join(c.motorDir, `${marca}.log`), 'utf8').trim().split(/\r?\n/).slice(-3).join(' | ') : 'sem log');
+          saida(`executor: os 2 últimos motores morreram sem concluir nenhuma unidade nova (${morte}); a parar com 1 em vez de repetir --continuar${existsSync(c.ficheiro) ? ` → ${c.ficheiro}` : ''}`);
+          return 1;
+        }
+        writeFileSync(lancamentos, JSON.stringify([...hist, progresso]));
         const nonce = randomBytes(8).toString('hex');
         if (!o.continuar) { try { renameSync(c.ficheiro, `${c.ficheiro}.ant`); } catch { /* ainda não havia */ } } // uma corrida nova não herda o resultado antigo, mas o motor aproveita as durações dele
         const log = openSync(join(c.motorDir, `${marca}.log`), 'a');
@@ -536,7 +549,14 @@ async function motorCorre(argv, saida) {
   const fila = plano.filter((u) => !feitas.has(u.chave));
   const ordemChave = new Map(plano.toSorted((a, b) => a.ordem - b.ordem).map((u, i) => [u.chave, i]));
   const correm = new Set(), preparando = new Set(); // o `prepara` em curso também morre com o motor
-  const tapDe = (u) => `.forge/resultados/logs/${marca}-${u.suite.nome}-${u.ficheiro.replaceAll('/', '_')}${u.bloco ? `-b${plano.indexOf(u)}` : ''}${u.fase === 2 ? '-f2' : ''}.tap`;
+  // o nome do log nunca usa o `nome` da suíte nem o `ficheiro` em bruto: o que não for [\w.-] passa a «_» (um «test:unit» ou «unit/api» dava ENOENT e matava o motor),
+  // e quando algo mudou (ou foi cortado) o índice da unidade impede que nomes parecidos colidam. Um nome já seguro fica como sempre foi.
+  // (um nome com mais de 120 caracteres é cortado: o Windows corta os caminhos nos 260)
+  const limpo = (s, corte) => { const t = String(s).replace(/[^\w.-]/g, '_'); return t.length > 120 ? t.slice(0, corte) : t; };
+  const tapDe = (u) => {
+    const nome = limpo(u.suite.nome, 30), fich = limpo(u.ficheiro, 50), mudou = nome !== String(u.suite.nome) || fich !== u.ficheiro.replaceAll('/', '_');
+    return `.forge/resultados/logs/${marca}-${nome}-${fich}${mudou ? `-i${u.ordem}` : ''}${u.bloco ? `-b${plano.indexOf(u)}` : ''}${u.fase === 2 ? '-f2' : ''}.tap`;
+  };
   const emCurso = (r) => ({ suite: r.u.suite.nome, ficheiro: r.u.ficheiro, bloco: r.u.bloco, estado: 'em_curso', pass: 0, fail: 0, skip: 0, todo: 0, skips: [],
     duracoes: {}, duracao_s: 0, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap: tapDe(r.u) });
 
@@ -544,6 +564,15 @@ async function motorCorre(argv, saida) {
   // com valido: false (nunca dá 0 nem é reutilizado)
   // Se o git falhar (raiz inexistente, repo estragado) o resultado também fica inválido, e o motor sai (`fatal`): sem retry em ciclo.
   let invalido = null, fatal = false;
+  // O motor nunca morre em silêncio: um erro não apanhado fica no resultado (`motor_morreu`) e no log, e o motor sai com 1 (a chamada para ao 2.º motor sem progresso)
+  let motorMorreu = null;
+  const morre = (e) => {
+    motorMorreu = String(e?.stack ?? e).split('\n').slice(0, 3).join(' | ');
+    try { saida(`MOTOR MORREU: ${motorMorreu}`); escreve(false); } catch { /* a raiz desapareceu */ }
+    process.exit(1);
+  };
+  process.on('uncaughtException', morre);
+  process.on('unhandledRejection', morre);
   let ultimaOk = 0; // shortcut: uma verificação com menos de 250 ms vale (evita 3 git por unidade que acaba logo a seguir a outra)
   const confere = () => {
     if (invalido) return false;
@@ -573,7 +602,7 @@ async function motorCorre(argv, saida) {
     const cmd = argv.slice(0, argv.indexOf('--motor-interno')).join(' ');
     const dados = { versao: 1, sha: c.sha, arvore: c.arvore, node: process.version, comando: `node scripts/executor.mjs ${cmd}`.trim(), manifesto: m.hash,
       inicio, fim: new Date().toISOString(), completo: completo && !invalido, fase1_completa: plano.every((u) => feitas.has(u.chave)),
-      ...(invalido ? { valido: false, motivo: invalido } : {}), processos, unidades, suites };
+      ...(invalido ? { valido: false, motivo: invalido } : {}), ...(motorMorreu ? { motor_morreu: motorMorreu } : {}), processos, unidades, suites };
     // Windows: renomear sobre um ficheiro que um leitor (a chamada, uma ferramenta) tem aberto dá EPERM/EBUSY/EACCES; tenta-se algumas vezes e,
     // se continuar preso, o próximo escreve grava o estado todo, por isso um leitor nunca deita o motor abaixo
     for (let i = 0; i < 20; i++) {
@@ -654,6 +683,7 @@ async function motorCorre(argv, saida) {
   };
 
   const termina = (r) => {
+    if (process.env.FORGE_TESTE_MORTE_MOTOR === '1') throw new Error('morte forçada pelo teste (FORGE_TESTE_MORTE_MOTOR=1)'); // só os testes a definem
     if (!raizViva()) process.exit(1); // a raiz desapareceu: nada a gravar
     correm.delete(r);
     vagas.larga(r.vaga.dirs);

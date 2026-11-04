@@ -21,6 +21,7 @@ import { estadoDe, executa, fonteDe, lerTap } from './executor.mjs';
 const LINTS = ['scripts/guardas-critico.test.mjs', 'scripts/mapa-suites.test.mjs'];
 const LIMITE_LINT_MS = 180000;
 const TOKENS = ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'];
+const DICA_PREPARA = 'o ramo passou e o manifesto não tem prepara: faltam dependências no clone?';
 class Uso extends Error {}
 const T0 = Date.now(); // o orcamento_s do executor conta desde o arranque do check-ticket: o lint e o clone gastam dele, e a chamada devolve 3 antes de a ferramenta a passar para segundo plano
 
@@ -108,6 +109,8 @@ async function corre(prefixo, raiz, suites, sha, continuar, orcamentoS, preparar
   if (codigo === 3 && !(ficheiro && existsSync(ficheiro))) return { estado: 'pendente', detalhe: curto(`incompleto: repetir com --continuar (${suites.join(', ')})`), suites: {} };
   if (!ficheiro || !existsSync(ficheiro)) return { estado: 'FAIL', detalhe: 'o executor não deixou resultados', suites: {} };
   const res = lerJson(ficheiro);
+  // o executor parou com 1 sem o resultado completo: os 2 últimos motores morreram sem progresso; nunca «pendente» (seria 3 sem fim)
+  if (codigo === 1 && !res.completo) return { estado: 'FAIL', detalhe: curto(`o motor do executor morreu: ${res.motor_morreu ?? saidas.at(-1)}`), suites: {}, ficheiro };
   if (res.valido === false) return { estado: 'FAIL', detalhe: curto(`resultado invalidado: ${res.motivo ?? 'a árvore ou o HEAD mudaram'}`), suites: {}, ficheiro };
   const maus = res.unidades.filter((u) => u.estado !== 'pass').map((u) => `${u.suite}: ${u.estado} ${u.ficheiro}${u.motivo ? ` (${u.motivo})` : ''}`);
   const estados = Object.fromEntries(Object.entries(res.suites).map(([n, s]) => [n, s.estado]));
@@ -184,7 +187,7 @@ async function main(argv) {
   // (medido no C2: o «corpus < 60 s» do ramo deu 70,6 s e falhou). Um FAIL aqui não impede os passos seguintes.
   diz('lint', await lint(raiz));
 
-  let ficheiros = null, suites = null, todas = [], erro;
+  let ficheiros = null, suites = null, todas = [], erro, temPrepara = false;
   try { ficheiros = diffDoRamo(raiz, o.base); } catch (e) { erro = e; }
 
   let pRamo = Promise.resolve(orfao('sem diff contra a base')), pPos = pRamo;
@@ -192,6 +195,7 @@ async function main(argv) {
     try {
       const manifesto = lerJson(join(raiz, fonteDe(raiz, 'suites.json')));
       todas = manifesto.suites.map((s) => s.nome);
+      temPrepara = manifesto.prepara != null && manifesto.prepara !== '' && !(Array.isArray(manifesto.prepara) && !manifesto.prepara.length);
       const r = await afetadas(ficheiros, { raiz });
       suites = [...r.suites];
       if (suites.includes('*')) suites = todas;
@@ -203,7 +207,10 @@ async function main(argv) {
   diz('âmbito', ficheiros ? ambito(ficheiros, o.ambito) : falha(erro));
   const p4 = await pRamo;
   diz('afetadas no ramo', p4);
-  diz('pós-merge', await pPos);
+  const p5 = await pPos;
+  // o ramo passou e o pós-merge não, sem `prepara`: o clone não traz os ficheiros ignorados (node_modules/...); o motivo real só está nos logs do clone
+  if (p5.estado === 'FAIL' && p4.estado === 'ok' && !temPrepara) p5.detalhe = `${curto(p5.detalhe, 200)} ; ${DICA_PREPARA}`;
+  diz('pós-merge', p5);
   let p6;
   try { p6 = suites ? esquema(raiz, ficheiros, todas, p4) : orfao('sem afetadas no ramo'); } catch (e) { p6 = falha(e); }
   diz('esquema', p6);

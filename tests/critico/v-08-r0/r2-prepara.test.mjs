@@ -108,6 +108,8 @@ test('R2-5 (C7): num projeto com uma dependência instalada e ignorada, sem `pre
   assert.equal(a.status, 1, `sem prepara: código ${a.status}` + fim(a));
   assert.ok(linhas(a.out).some((l) => /^ok afetadas no ramo\b/.test(l)), 'o ramo devia dar ok' + fim(a));
   assert.ok(linhas(a.out).some((l) => /^FAIL pós-merge\b.*projeto/.test(l)), 'o pós-merge devia nomear a suíte' + fim(a));
+  // R3 (RESPOSTA 9:53): a linha nomeia a causa provável, e termina com a dica
+  assert.ok(linhas(a.out).some((l) => /^FAIL pós-merge \(.*projeto.* ; o ramo passou e o manifesto não tem prepara: faltam dependências no clone\?\)$/.test(l)), 'o pós-merge devia dizer que o ramo passou e que o manifesto não tem prepara' + fim(a));
   const com = await comDependencia('npm install --offline --no-audit --no-fund');
   const b = correAteFim(com, 'check-ticket.mjs', ['--ambito', '**', '--base', 'main']);
   assert.equal(b.status, 0, `com prepara: código ${b.status}` + fim(b));
@@ -120,4 +122,6 @@ test('R2-5 (C7): num projeto com dependências, um `prepara` que falha dá FAIL 
   assert.equal(r.status, 1, `código ${r.status}` + fim(r));
   assert.ok(linhas(r.out).some((l) => /^ok afetadas no ramo\b/.test(l)), 'o ramo devia dar ok' + fim(r));
   assert.ok(linhas(r.out).some((l) => /^FAIL pós-merge\b.*prepara/.test(l)), 'o pós-merge devia dizer prepara' + fim(r));
+  // R3: com `prepara` a causa é outra, a dica não aparece
+  assert.ok(!r.out.includes('o manifesto não tem prepara'), 'um projeto com prepara mostrou a dica de falta de prepara' + fim(r));
 });

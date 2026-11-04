@@ -206,6 +206,11 @@ test('contagensTap: só há pass com prova (plano 1..N e N linhas ok, ou o sumá
     ['sumário com menos folhas que o # pass', 'ok 1 - a\n# tests 3\n# pass 3\n# fail 0\n# skipped 0\n# todo 0\n'],
     ['saída vazia', ''],
   ]) { const [e, motivo] = estado(out); assert.deepEqual([nome, e, !!motivo], [nome, 'erro', true]); }
+  // R3: tudo em SKIP ou TODO é erro «nenhum teste correu»; um só ok que corre basta
+  for (const out of ['1..1\nok 1 - a # SKIP x\n', '1..2\nok 1 - a # SKIP x\nok 2 - b # TODO y\n', '# tests 2\n# pass 0\n# fail 0\n# skipped 2\n# todo 0\nok 1 - a # SKIP x\nok 2 - b # SKIP y\n']) {
+    assert.deepEqual([estado(out)[0], /nenhum teste correu/.test(estado(out)[1] ?? '')], ['erro', true], out);
+  }
+  assert.deepEqual(estado('1..2\nok 1 - a # SKIP x\nok 2 - b\n'), ['pass', undefined]);
   // um not ok é fail, mesmo com saída 0 (e com o plano por cumprir)
   assert.equal(estado('1..2\nok 1 - a\nnot ok 2 - b\n')[0], 'fail');
   assert.equal(estado('1..5\nok 1 - a\nnot ok 2 - b\n')[0], 'fail');
