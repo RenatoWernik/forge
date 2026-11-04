@@ -7,7 +7,8 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { contagens, estadoDe, estadoSuite, lerTap } from './executor.mjs';
+import { estadoDe, estadoSuite, lerTap } from './executor.mjs';
+import { contagens } from './executor.mjs'; // V-08: numa linha à parte, a guarda do f-21b exige as linhas da base intactas
 
 const EXECUTOR = fileURLToPath(new URL('./executor.mjs', import.meta.url));
 const pastas = [];
