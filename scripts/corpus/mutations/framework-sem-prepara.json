@@ -1,7 +1,7 @@
 {
-    "base":  "en-plain-published",
-    "file":  "FRAMEWORK.md",
-    "find":  "`prepara`",
-    "replace":  "the install step",
-    "line":  "prepara: FRAMEWORK.md (and BOOTSTRAP.md while CP0 is open) say that CP0 fills the `prepara` of .claude/suites.json"
+  "base": "en-plain-published",
+  "file": "FRAMEWORK.md",
+  "find": "`prepara`",
+  "replace": "the install step",
+  "line": "prepara: FRAMEWORK.md (and BOOTSTRAP.md while CP0 is open) say that CP0 fills the `prepara` of .claude/suites.json"
 }

@@ -1,7 +1,7 @@
 {
-    "base":  "en-plain-published",
-    "file":  "FRAMEWORK.md",
-    "find":  "node .claude/avancar.mjs --pr \u003cn\u003e --repo \u003cowner/repo\u003e --modo projeto --integracao \u003cbranch\u003e",
-    "replace":  "a manual run",
-    "line":  "advance: FRAMEWORK.md teaches `node .claude/avancar.mjs --pr \u003cn\u003e --repo \u003cowner/repo\u003e --modo projeto --integracao \u003cbranch\u003e` in a code span"
+  "base": "en-plain-published",
+  "file": "FRAMEWORK.md",
+  "find": "node .claude/avancar.mjs --pr <n> --repo <owner/repo> --modo projeto --integracao <branch>",
+  "replace": "a manual run",
+  "line": "advance: FRAMEWORK.md teaches `node .claude/avancar.mjs --pr <n> --repo <owner/repo> --modo projeto --integracao <branch>` in a code span"
 }

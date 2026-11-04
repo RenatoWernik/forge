@@ -1,7 +1,7 @@
 {
-    "base":  "en-plain-published",
-    "file":  ".claude/briefs/dev.md",
-    "find":  "node .claude/check-ticket.mjs",
-    "replace":  "a manual run",
-    "line":  "briefs"
+  "base": "en-plain-published",
+  "file": ".claude/briefs/dev.md",
+  "find": "node .claude/check-ticket.mjs",
+  "replace": "a manual run",
+  "line": "briefs"
 }
