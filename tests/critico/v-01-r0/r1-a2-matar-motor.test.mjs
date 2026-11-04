@@ -25,12 +25,14 @@ test('A2a: matar o motor a meio da unidade longa: a retoma não duplica nem perd
   assert.ok(motor && H.vivo(motor.pid), 'o motor não está vivo depois da 1.ª chamada');
   // a longa arranca primeiro (maior limite_s); espera-se que ela esteja a meio e que haja q já acabadas
   assert.ok(await H.esperaAte(() => H.eventos(d).filter((e) => e.evento === 'fim' && e.f.startsWith('s/q-')).length >= 2, 40000), 'não acabaram 2 q');
-  const antes = Object.fromEntries(H.umResultado(d).dados.unidades.map((u) => [u.ficheiro, u]));
-  assert.equal(antes['s/longa.fx.mjs']?.estado, 'em_curso', 'a longa não estava a meio');
+  assert.equal(H.umResultado(d).dados.unidades.find((u) => u.ficheiro === 's/longa.fx.mjs')?.estado, 'em_curso', 'a longa não estava a meio');
   const corredorLonga = H.inicios(d, 's/longa.fx.mjs')[0].pid;
   H.mataArvore(motor.pid);
   assert.ok(await H.esperaAte(() => !H.vivo(motor.pid), 10000), 'o motor não morreu');
   const morto = Date.now();
+  // o instantâneo que classifica as unidades é tirado com o motor já morto (F-32, #172): antes, uma q em_curso podia acabar
+  // entre o instantâneo e o kill e o oráculo exigia 2 arranques a uma unidade que já tinha estado final
+  const antes = Object.fromEntries(H.umResultado(d).dados.unidades.map((u) => [u.ficheiro, u]));
   assert.ok(await H.esperaAte(() => !H.vivo(corredorLonga), 10000), `o corredor ${corredorLonga} da longa ficou vivo depois de matar a árvore do motor`);
   const cod = await cadeia(d, env, 10);
   assert.equal(cod.at(-1), 0, `a cadeia não acabou: ${cod.join(', ')}`);
