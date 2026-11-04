@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { srcNow, srcBase, runWf, fake, plain, why, buildArgs, attacksArgs, ponyArgs, batchArgs, piece, unit, resultOf, omit, rng, pick, git, MB, ROOT, lines } from './helpers.mjs';
+import { soNoTicket } from '../_comum/ambito.mjs';
 
 const RESP = ['graph: updated 42 nodes', null, 'ok', 'Error: graphify not found ' + 'z'.repeat(150)];
 
@@ -39,7 +40,8 @@ for (const [name, mk, f] of [['batch', () => batchArgs(), {}], ['ponytail', () =
   });
 }
 
-test('regressão [guarda]: os ficheiros de tests/critico/ da BASE ficam byte a byte (nenhum ataque se enfraquece nem se apaga)', () => {
+test('ÂMBITO: regressão [guarda]: os ficheiros de tests/critico/ da BASE ficam byte a byte (nenhum ataque se enfraquece nem se apaga)', (t) => {
+  if (soNoTicket(t, 'f-21b')) return; // #165: só na branch do f-21b; noutro ramo que altere ataques antigos era ruído
   const fs_ = git('ls-tree', '-r', '--name-only', MB, 'tests/critico').split(/\r?\n/).filter(Boolean);
   assert.ok(fs_.length > 100, 'controlo: ' + fs_.length);
   const mudados = fs_.filter((f) => { const p = join(ROOT, f); return !existsSync(p) || lines(readFileSync(p, 'utf8')).join('\n') !== lines(git('show', MB + ':' + f)).join('\n'); });
@@ -48,7 +50,8 @@ test('regressão [guarda]: os ficheiros de tests/critico/ da BASE ficam byte a b
 
 // as linhas da base que se perderam em «agora» (subsequência gulosa, pela ordem)
 const perdidas = (antes, agora) => { let j = 0; const out = []; for (const l of antes) { const k = agora.indexOf(l, j); if (k < 0) out.push(l); else j = k + 1; } return out; };
-test('regressão [guarda]: os scripts/*.test.mjs da BASE mantêm todas as linhas, pela mesma ordem (nenhum assert antigo muda)', () => {
+test('ÂMBITO: regressão [guarda]: os scripts/*.test.mjs da BASE mantêm todas as linhas, pela mesma ordem (nenhum assert antigo muda)', (t) => {
+  if (soNoTicket(t, 'f-21b')) return; // #165
   const fs_ = git('ls-tree', '--name-only', MB, 'scripts/').split(/\r?\n/).filter((f) => f.endsWith('.test.mjs'));
   assert.ok(fs_.length >= 10, 'controlo: ' + fs_.length);
   for (const f of fs_) {

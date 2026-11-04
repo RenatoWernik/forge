@@ -16,7 +16,9 @@ test('ÂMBITO: nenhum ataque de outro ticket (tests/critico/* fora de v-08-r0) m
   if (soNoTicket(t, 'v-08')) return;
   const b = base();
   if (!b) return t.skip('sem origin/main');
-  const mudou = gitRoot('diff', '--name-status', b, '--', 'tests/critico').split(/\r?\n/).filter(Boolean).filter((l) => !/^\S+\s+tests\/critico\/v-08-r0\//.test(l));
+  const mudou = gitRoot('diff', '--name-status', b, '--', 'tests/critico').split(/\r?\n/).filter(Boolean).filter((l) => !/^\S+\s+tests\/critico\/v-08-r0\//.test(l))
+    // única exceção, autorizada por escrito na #132 (RESPOSTA às 17:21, #165): a guarda do f-21b passa a ÂMBITO (soNoTicket 'f-21b'), como as do V-11; nenhum outro ataque antigo
+    .filter((l) => !/^M\s+tests\/critico\/f-21b-r0\/regressao\.test\.mjs$/.test(l));
   assert.deepEqual(mudou, [], 'ataques antigos alterados ou apagados');
 });
 
