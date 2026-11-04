@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { compara, testesDoTap } from './inventario.mjs';
 
 const TAP = [
@@ -46,7 +47,7 @@ test('inventario.mjs recusa um resultado com valido:false (antes ou depois), com
   try {
     const grava = (n, extra) => { const f = join(d, n); writeFileSync(f, JSON.stringify({ versao: 1, unidades: [], ...extra })); return f; };
     const bom = grava('bom.json', {}), mau = grava('mau.json', { valido: false, motivo: 'a árvore mudou durante a corrida' });
-    const corre = (a, b) => spawnSync(process.execPath, [new URL('./inventario.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'), '--antes', a, '--depois', b], { encoding: 'utf8' });
+    const corre = (a, b) => spawnSync(process.execPath, [fileURLToPath(new URL('./inventario.mjs', import.meta.url)),'--antes', a, '--depois', b], { encoding: 'utf8' });
     assert.equal(corre(bom, bom).status, 0);
     for (const [a, b] of [[mau, bom], [bom, mau]]) {
       const r = corre(a, b);
