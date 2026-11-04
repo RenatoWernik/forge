@@ -21,7 +21,7 @@ const PASTA = 'tests/critico/';
 const json = (raiz, rel) => JSON.parse(readFileSync(join(raiz, rel), 'utf8'));
 // V-08 (#132): o manifesto e o mapa de um projeto gerado ficam em .claude/ (os módulos são copiados byte a byte para lá); no forge, em scripts/.
 // Com os dois, ganha o .claude/. Sem nenhum, o caminho de scripts/ (a leitura falha com o nome certo).
-export const fonteDe = (raiz, nome) => [`.claude/${nome}`, `scripts/${nome}`].find((f) => existsSync(join(raiz, f))) ?? `scripts/${nome}`;
+const fonteDe = (raiz, nome) => [`.claude/${nome}`, `scripts/${nome}`].find((f) => existsSync(join(raiz, f))) ?? `scripts/${nome}`;
 // shortcut: o que só depende da árvore (manifesto, mapa, ficheiros de cada suíte, pastas que ela importa, alvos dos doLote) fica em memória, por raiz,
 // durante o processo (refazê-lo custava ~370 ms por chamada: o c1-cobertura chama-a 812 vezes). Assume uma árvore que não muda neste processo; quem a altera
 // chama afetadas() num processo novo. O diff dos ficheiros nunca entra na cache; uma exceção não fica guardada.

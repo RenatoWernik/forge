@@ -212,9 +212,12 @@ function lerArgs(argv) {
   return o;
 }
 
+// .claude/ num projeto gerado, scripts/ no forge; com os dois ganha o .claude/ (V-08). shortcut: a mesma regra está em afetadas.mjs; o executor carrega sem ele ao lado
+// (tests/critico/v-05-r0 troca o afetadas por um falso que só exporta `afetadas`), por isso o check-ticket importa esta daqui
+export const fonteDe = (raiz, nome) => [`.claude/${nome}`, `scripts/${nome}`].find((f) => existsSync(join(raiz, f))) ?? `scripts/${nome}`;
+
 function lerManifesto(raiz) {
-  // .claude/ num projeto gerado, scripts/ no forge; com os dois ganha o .claude/ (V-08). shortcut: a mesma regra está em afetadas.mjs (fonteDe); o executor carrega sem ele ao lado
-  const fonte = existsSync(join(raiz, '.claude', 'suites.json')) ? '.claude/suites.json' : 'scripts/suites.json', f = join(raiz, fonte);
+  const fonte = fonteDe(raiz, 'suites.json'), f = join(raiz, fonte);
   if (!existsSync(f)) throw new Uso(`falta ${f}`);
   const texto = readFileSync(f, 'utf8'), m = JSON.parse(texto);
   if (m.versao !== 1 || !Array.isArray(m.suites)) throw new Uso('suites.json: versao 1 com suites[] esperada');

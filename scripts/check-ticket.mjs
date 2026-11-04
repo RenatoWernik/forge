@@ -14,8 +14,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afetadas, fonteDe } from './afetadas.mjs';
-import { estadoDe, executa, lerTap } from './executor.mjs';
+import { afetadas } from './afetadas.mjs';
+import { estadoDe, executa, fonteDe, lerTap } from './executor.mjs';
 
 // os lints do forge; o `lints` do manifesto (V-08, #132: um projeto gerado declara `[]`) substitui-os, e um manifesto sem `lints` mantém-nos
 const LINTS = ['scripts/guardas-critico.test.mjs', 'scripts/mapa-suites.test.mjs'];
