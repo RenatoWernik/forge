@@ -874,8 +874,9 @@ async function chk(name, f) {
       const names = Array.isArray(man.suites) ? man.suites.map(s => s && s.nome) : []
       if (man.versao !== 1) manBad.push('versao')
       if (!names.length || names.some(n => typeof n !== 'string' || !n) || new Set(names).size !== names.length) manBad.push('suites')
-      else for (const s of man.suites) if (!(s.tipo === 'node-test' ? strs(s.ficheiros) && s.ficheiros.length : s.tipo === 'comando' && strs(s.comando) && s.comando.length && (s.formato === undefined || ['tap', 'codigo'].includes(s.formato)))) manBad.push('suites.' + s.nome)
+      else for (const s of man.suites) if (!(s.tipo === 'node-test' ? strs(s.ficheiros) && s.ficheiros.length : s.tipo === 'comando' && (typeof s.comando === 'string' ? s.comando.trim() : strs(s.comando) && s.comando.length) && (s.formato === undefined || ['tap', 'codigo'].includes(s.formato)))) manBad.push('suites.' + s.nome)
       if (man.lints !== undefined && !strs(man.lints)) manBad.push('lints')
+      if (man.prepara !== undefined && typeof man.prepara !== 'string' && !Array.isArray(man.prepara)) manBad.push('prepara')
     } catch (e) { manBad = ['not a JSON file'] }
     await chk('speed: .claude/suites.json is valid (versao 1, suites with unique names of tipo node-test or comando, lints a list of paths)' + (manBad.length ? ' (invalid: ' + manBad.join(', ') + ')' : ''), () => !manBad.length)
     const globRe = g => new RegExp('^' + g.replace(/\\/g, '/').replace(/^\.\//, '').split(/(\*\*\/|\*\*|\*|\?)/).map(t => t === '**/' ? '(?:.*/)?' : t === '**' ? '.*' : t === '*' ? '[^/]*' : t === '?' ? '[^/]' : t.replace(/[.+^${}()|[\]\\]/g, '\\$&')).join('') + '$')

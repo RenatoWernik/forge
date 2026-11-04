@@ -5,6 +5,7 @@
   "carga_sensivel": 2,
   "orcamento_s": 500,
   "lints": [],
+  "prepara": "",
   "suites": [
     {
       "nome": "projeto",

@@ -2,7 +2,7 @@
 // Executor paralelo (V-01, #125; spec #123 §4.1 e §4.2): corre as suítes de scripts/suites.json em paralelo, cada ficheiro de teste (ou bloco)
 // num filho `node --test` com home e tmp próprios, limite de tempo que mata só a árvore do PID lançado, vagas partilhadas por todos os
 // executores da máquina e resultados ligados ao sha e à árvore em .forge/resultados/. Só biblioteca padrão.
-//   node scripts/executor.mjs (--todas | --suites a,b | --afetadas [--base origin/main]) [--passe 1|2] [--continuar] [--paralelo N] [--orcamento <s>] [--raiz <dir>]
+//   node scripts/executor.mjs (--todas | --suites a,b | --afetadas [--base origin/main]) [--passe 1|2] [--continuar] [--preparar] [--paralelo N] [--orcamento <s>] [--raiz <dir>]
 // Um MOTOR destacado (o próprio script com --motor-interno; PID em .forge/motor/<sha>-<árvore>-p<passe>.json) corre a fila inteira até ao fim e
 // grava cada unidade logo que acaba. A chamada só espera pelo motor até orcamento_s e nunca mata unidades; --continuar volta a ligar-se ao
 // motor vivo ou, se ele morreu, lança outro só com as unidades sem estado final. O limite_s é só o kill de uma unidade.
@@ -11,7 +11,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Todo processo lançado passa por aqui: no Windows um filho de um motor destacado (sem consola) sem windowsHide abre uma consola por spawn. O
@@ -25,7 +25,34 @@ const PASSO_MS = 100; // varredura do agendador e da carga global
 const FINAIS = ['pass', 'fail', 'limite', 'erro'];
 const MOTIVO_LOTE = 'lote: satisfeito na fase 2'; // o skip dos testes que usam doLote (tests/critico/_comum/lote.mjs) na fase 1
 const FASE2_LIMITE_S = 90; // a fase 2 só lê o resultado: uma unidade dela nunca precisa de mais
+const PREPARA_LIMITE_S = 900; // o `prepara` do manifesto (V-08): uma instalação de dependências
+const NAO_ENCONTRADO = process.platform === 'win32' ? 9009 : 127; // a saída do shell para um comando que não existe
+const TOKENS = ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN']; // nenhuma unidade os herda, mesmo numa chamada direta
 class Uso extends Error {}
+
+// V-08: um `comando` (e o `prepara`) é um texto, que vai ao shell como está, ou uma lista, de que cada elemento vai entre aspas seguras. No Windows um
+// elemento com «"», «%» ou quebra de linha não se cita com segurança no cmd: é erro de uso (o texto serve). Um elemento seguro nunca leva aspas:
+// `"npm.cmd"` entre aspas perde o %~dp0 do próprio npm.cmd.
+export function linhaDe(c) {
+  if (typeof c === 'string') { if (!c.trim()) throw new Error('comando vazio'); return c; }
+  if (!Array.isArray(c) || !c.length || !c.every((x) => typeof x === 'string' && x)) throw new Error('comando tem de ser um texto ou uma lista de textos');
+  const win = process.platform === 'win32', seguro = win ? /^[\w.\-/\\:@=,+]+$/ : /^[\w.\-/:@=,+]+$/;
+  return c.map((a) => {
+    if (seguro.test(a)) return a;
+    if (!win) return `'${a.replaceAll("'", "'\\''")}'`;
+    if (/["%\r\n]/.test(a)) throw new Error(`o elemento ${JSON.stringify(a)} tem «"», «%» ou quebra de linha: no Windows escreva o comando como texto`);
+    return `"${a.replace(/\\+$/, '$&$&')}"`;
+  }).join(' ');
+}
+
+// o executável de uma lista existe? (o PATH e o PATHEXT do ambiente da unidade; um nome com caminho vale contra o cwd). Sem isto um comando inexistente
+// só aparece como a saída ≠ 0 do shell, com a mensagem na língua da máquina
+function achaExe(nome, env, cwd) {
+  const win = process.platform === 'win32', chave = (n) => Object.keys(env).find((k) => (win ? k.toUpperCase() : k) === n);
+  const exts = win ? ['', ...(env[chave('PATHEXT')] ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)] : [''];
+  const dirs = /[\\/]/.test(nome) ? [isAbsolute(nome) ? '' : cwd] : [...(win ? [cwd] : []), ...(env[chave('PATH')] ?? '').split(delimiter).filter(Boolean)];
+  return dirs.some((d) => exts.some((e) => { try { return statSync(join(d, nome + e)).isFile(); } catch { return false; } }));
+}
 
 // por correr na fase 2: uma unidade com estado final e testes que saltaram com o motivo do lote, ainda sem a fase 2 fundida
 const pendenteF2 = (u) => FINAIS.includes(u.estado) && !u.tap_fase2 && !!u.skips?.some((s) => s.motivo === MOTIVO_LOTE);
@@ -189,7 +216,7 @@ function mataArvore(pid) {
 }
 
 function lerArgs(argv) {
-  const o = { suites: null, afetadas: false, base: null, passe: 1, continuar: false, paralelo: null, orcamento: null, raiz: process.cwd(), arvoreMotor: null };
+  const o = { suites: null, afetadas: false, base: null, passe: 1, continuar: false, preparar: false, paralelo: null, orcamento: null, raiz: process.cwd(), arvoreMotor: null };
   const valor = (i, nome) => { if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) throw new Uso(`${nome} precisa de um valor`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -197,6 +224,7 @@ function lerArgs(argv) {
     else if (a === '--suites') o.suites = valor(i++, a).split(',').filter(Boolean);
     else if (a === '--passe') { o.passe = +valor(i++, a); if (![1, 2].includes(o.passe)) throw new Uso('--passe: 1 ou 2'); }
     else if (a === '--continuar') o.continuar = true;
+    else if (a === '--preparar') o.preparar = true; // corre o `prepara` do manifesto uma vez antes das suítes (o clone do pós-merge); o ramo não o pede
     else if (a === '--paralelo') { o.paralelo = +valor(i++, a); if (!Number.isInteger(o.paralelo) || o.paralelo < 1) throw new Uso('--paralelo: inteiro ≥ 1'); }
     else if (a === '--orcamento') { o.orcamento = +valor(i++, a); if (!(o.orcamento > 0)) throw new Uso('--orcamento: segundos > 0'); } // encurta o orcamento_s desta chamada (o check-ticket desconta o lint)
     else if (a === '--raiz') o.raiz = resolve(valor(i++, a));
@@ -221,10 +249,16 @@ function lerManifesto(raiz) {
   if (!existsSync(f)) throw new Uso(`falta ${f}`);
   const texto = readFileSync(f, 'utf8'), m = JSON.parse(texto);
   if (m.versao !== 1 || !Array.isArray(m.suites)) throw new Uso('suites.json: versao 1 com suites[] esperada');
+  if (!m.suites.length) throw new Uso('suites.json: suites está vazio: sem suítes nada corre, e «0/0 unidades» seria um verde sem testes');
   for (const k of ['paralelo', 'vagas_globais', 'carga_sensivel', 'orcamento_s']) if (!(m[k] > 0)) throw new Uso(`suites.json: ${k} inválido`);
+  // `prepara` (opcional): um comando, corrido uma vez antes das suítes com --preparar; vazio ('' ou []) é «nada a preparar»
+  if (m.prepara != null && m.prepara !== '' && !(Array.isArray(m.prepara) && !m.prepara.length)) {
+    try { m.preparaLinha = linhaDe(m.prepara); } catch (e) { throw new Uso(`suites.json: prepara: ${e.message}`); }
+  }
   for (const s of m.suites) {
-    if (s.tipo === 'comando') { // um comando qualquer (argv, sem shell) que acaba em 0 ou não, ou que escreve TAP
-      if (!Array.isArray(s.comando) || !s.comando.length || !s.comando.every((x) => typeof x === 'string' && x)) throw new Uso(`suite ${s.nome}: comando tem de ser uma lista (argv) de textos`);
+    if (s.tipo === 'comando') { // um comando qualquer (texto ou lista, pelo shell) que acaba em 0 ou não, ou que escreve TAP
+      try { s.linha = linhaDe(s.comando); } catch (e) { throw new Uso(`suite ${s.nome}: ${e.message}`); }
+      s.argv0 = Array.isArray(s.comando) ? s.comando[0] : null;
       s.formato ??= 'codigo';
       if (!['tap', 'codigo'].includes(s.formato)) throw new Uso(`suite ${s.nome}: formato ${s.formato} (tap ou codigo)`);
     } else if (s.tipo !== 'node-test') throw new Uso(`suite ${s.nome}: tipo ${s.tipo} não suportado (node-test ou comando)`);
@@ -235,16 +269,52 @@ function lerManifesto(raiz) {
   return m;
 }
 
-// as contagens de uma unidade que acabou: o TAP do node --test; numa suíte `comando`, o TAP de outra ferramenta (sem o sumário `# pass`, contam as linhas
-// ok e not ok do nível 0) ou só o código de saída. Sem nenhum teste contado a unidade é «erro» (estadoDe), nunca um falso verde
+// as linhas `ok` de um TAP que são testes e não grupos (um grupo fecha com o seu `ok`, depois dos filhos, que vão 4 espaços mais fundo): é o que o `# pass` conta
+function folhasOk(ls) {
+  const filhos = {};
+  let n = 0;
+  for (const l of ls) {
+    const m = /^( *)(not )?ok\b/.exec(l);
+    if (!m) continue;
+    const i = m[1].length;
+    if (!m[2] && !filhos[i]) n++;
+    filhos[i] = false;
+    if (i >= 4) filhos[i - 4] = true;
+  }
+  return n;
+}
+
+// `formato: tap` numa suíte `comando` (V-08, R2): só dá pass com prova. Sem `Bail out!`; qualquer `not ok` é fail; e um plano `1..N` (N ≥ 1) ao nível 0 com N linhas
+// ok/not ok ao nível 0, ou, sem plano, o sumário `# pass N` do node --test com as N linhas ok das folhas. Todo o resto é «erro» (pass e fail a null), com o `motivo`.
+// Quem não escreve TAP usa `formato: codigo`.
+export function contagensTap(out) {
+  const c = lerTap(out), ls = out.split(/\r?\n/);
+  const erro = (motivo) => ({ ...c, pass: null, fail: null, motivo });
+  if (ls.some((l) => /^\s*Bail out!/i.test(l))) return erro('Bail out!');
+  const topo = ls.filter((l) => /^(not )?ok\b/.test(l)), nao = topo.filter((l) => l.startsWith('not')).length;
+  const marca = (re) => topo.filter((l) => !l.startsWith('not') && re.test(l)).length;
+  const sumario = c.pass !== null && c.fail !== null;
+  const sk = marca(/ # SKIP\b/), td = marca(/ # TODO\b/);
+  const contas = sumario ? c : { ...c, pass: topo.length - nao - sk - td, fail: nao, skip: sk, todo: td };
+  if (nao || contas.fail > 0) return { ...contas, fail: Math.max(contas.fail, nao) };
+  const plano = [...out.matchAll(/^1\.\.(\d+)\s*$/gm)].at(-1);
+  if (plano) {
+    if (+plano[1] < 1) return erro('plano 1..0: nenhum teste');
+    if (topo.length !== +plano[1]) return erro(`plano ${plano[0]} mas ${topo.length} linhas ok`);
+  } else if (!sumario) return erro('sem plano 1..N nem sumário # pass: não há prova de que correu um teste');
+  else {
+    const total = c.pass + (c.skip ?? 0) + (c.todo ?? 0), folhas = folhasOk(ls);
+    if (total < 1 || folhas !== total) return erro(`sumário com ${total} testes mas ${folhas} linhas ok`);
+  }
+  return contas;
+}
+
+// as contagens de uma unidade que acabou: o TAP do node --test; numa suíte `comando`, o TAP de outra ferramenta (contagensTap) ou só o código de saída. Sem nenhum
+// teste provado a unidade é «erro» (estadoDe), nunca um falso verde
 export function contagens(s, out, status) {
   if (s.tipo !== 'comando') return lerTap(out);
   if (s.formato === 'codigo') return { pass: status === 0 ? 1 : 0, fail: status === 0 ? 0 : 1, skip: 0, todo: 0, skips: [], duracoes: {} };
-  const c = lerTap(out);
-  if (c.pass !== null && c.fail !== null) return c;
-  const nivel0 = out.split(/\r?\n/).filter((l) => /^(not )?ok\b/.test(l)).map((l) => (/ # SKIP\b/.test(l) ? 'skip' : / # TODO\b/.test(l) ? 'todo' : l.startsWith('not') ? 'fail' : 'pass'));
-  const n = (e) => nivel0.filter((x) => x === e).length;
-  return { ...c, pass: n('pass'), fail: n('fail'), skip: n('skip'), todo: n('todo') };
+  return contagensTap(out);
 }
 
 // a duração (s) de cada unidade no último resultado com o mesmo manifesto; as unidades sem medida contam pelo limite_s (o pior caso)
@@ -424,6 +494,8 @@ async function chamada(argv, saida) {
   const { feitas } = lerFeitas(c);
   const sel = plano.map((u) => feitas.get(u.chave)).filter(Boolean), mau = sel.filter((u) => u.estado !== 'pass');
   const resto = plano.length - sel.length + sel.filter(pendenteF2).length, seg = Math.round((Date.now() - t0) / 1000);
+  const semPrepara = mau.find((u) => u.motivo?.startsWith('prepara')); // nenhuma suíte correu: o `prepara` do manifesto falhou
+  if (semPrepara) saida(`executor: ${semPrepara.motivo}; as suítes não correram (${semPrepara.tap})`);
   if (resto) {
     saida(`executor: ${sel.length}/${plano.length} unidades, ${mau.length} com falha, limite ou erro, ${resto} por acabar em ${seg} s`
       + (vivo ? `; o motor ${motor.pid} continua a correr: repita com --continuar` : '; o motor morreu antes de acabar: repita com --continuar para relançar o resto'));
@@ -446,7 +518,7 @@ async function motorCorre(argv, saida) {
   const inicio = inicioAntigo ?? new Date().toISOString();
   const fila = plano.filter((u) => !feitas.has(u.chave));
   const ordemChave = new Map(plano.toSorted((a, b) => a.ordem - b.ordem).map((u, i) => [u.chave, i]));
-  const correm = new Set();
+  const correm = new Set(), preparando = new Set(); // o `prepara` em curso também morre com o motor
   const tapDe = (u) => `.forge/resultados/logs/${marca}-${u.suite.nome}-${u.ficheiro.replaceAll('/', '_')}${u.bloco ? `-b${plano.indexOf(u)}` : ''}${u.fase === 2 ? '-f2' : ''}.tap`;
   const emCurso = (r) => ({ suite: r.u.suite.nome, ficheiro: r.u.ficheiro, bloco: r.u.bloco, estado: 'em_curso', pass: 0, fail: 0, skip: 0, todo: 0, skips: [],
     duracoes: {}, duracao_s: 0, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(), tap: tapDe(r.u) });
@@ -498,7 +570,7 @@ async function motorCorre(argv, saida) {
   const vagas = new Vagas(m.vagas_globais, m.carga_sensivel);
   const raizTmp = mkdtempSync(join(tmpdir(), 'forge-exec-'));
   const limpa = () => {
-    for (const r of correm) mataUnidade(r);
+    for (const r of [...correm, ...preparando]) mataUnidade(r);
     vagas.largaTudo(); rm(raizTmp);
     const j = lerJsonSeguro(motorFicheiro);
     if (j?.pid === process.pid) { try { writeFileSync(motorFicheiro, JSON.stringify({ ...j, fim: new Date().toISOString() })); } catch { /* a pasta desapareceu */ } }
@@ -507,11 +579,17 @@ async function motorCorre(argv, saida) {
   for (const sinal of ['SIGINT', 'SIGTERM']) process.once(sinal, () => process.exit(130));
 
   const t0 = Date.now(), paralelo = o.paralelo ?? m.paralelo;
-  const lanca = (u, vaga) => {
-    const dir = join(raizTmp, `u${u.ordem}`), home = join(dir, 'home'), tmp = join(dir, 'tmp');
+  // o ambiente de um filho: home e tmp próprios e nunca os tokens do gh (nem por um `env` da suíte, nem numa chamada direta)
+  const ambiente = (dir) => {
+    const home = join(dir, 'home'), tmp = join(dir, 'tmp');
     mkdirSync(home, { recursive: true }); mkdirSync(tmp, { recursive: true });
     const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: home, TMP: tmp, TEMP: tmp, TMPDIR: tmp, DISABLE_AUTOUPDATER: '1' };
     delete env.NODE_TEST_CONTEXT;
+    return env;
+  };
+  const semTokens = (env) => { for (const k of Object.keys(env)) if (TOKENS.includes(k.toUpperCase())) delete env[k]; return env; };
+  const lanca = (u, vaga) => {
+    const env = ambiente(join(raizTmp, `u${u.ordem}`));
     for (const [k, v] of Object.entries(u.suite.env ?? {})) {
       if (v !== '@real') env[k] = String(v);
       else if (process.env[k] === undefined) delete env[k];
@@ -520,8 +598,10 @@ async function motorCorre(argv, saida) {
     delete env.FORGE_LOTE_FASE; delete env.FORGE_LOTE_RESULTADOS;
     // fase 1: os testes com doLote saltam; fase 2: só eles correm, a ler este ficheiro de resultados (que a fase 2 vai completando)
     if (u.fase === 2) env.FORGE_LOTE_RESULTADOS = ficheiro; else env.FORGE_LOTE_FASE = '1';
+    semTokens(env);
+    const comando = u.suite.tipo === 'comando';
     let exe = process.execPath, args = ['--test', '--test-reporter=tap'];
-    if (u.suite.tipo === 'comando') [exe, ...args] = u.suite.comando;
+    if (comando) [exe, args] = [u.suite.linha, []];
     else {
       if (u.suite.concorrencia) args.push(`--test-concurrency=${u.suite.concorrencia}`);
       if (u.fase === 2) args.push(`--test-name-pattern=^(?:${u.nomes.map(escapaRegex).join('|')})$`);
@@ -529,7 +609,18 @@ async function motorCorre(argv, saida) {
       args.push(u.ficheiro);
     }
     const r = { u, vaga, cmax: vaga.carga, inicio: new Date(), limite: false, out: '', err: '' };
-    const p = lancaProc(exe, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+    let p;
+    try {
+      if (comando && u.suite.argv0 && !achaExe(u.suite.argv0, env, raiz)) throw new Error(`comando não encontrado: ${u.suite.argv0}`);
+      p = lancaProc(exe, args, { cwd: raiz, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', shell: comando });
+    } catch (e) { // um arranque falhado (o spawn pode lançar na hora, p. ex. EINVAL) é o «erro» desta unidade: nunca deita o motor abaixo
+      r.err = String(e.message ?? e); r.motivo = `arranque falhado: ${r.err}`; r.saiu = true; r.pid = 0;
+      r.fim = Promise.resolve();
+      correm.add(r);
+      escreve(false);
+      r.fim.then(() => termina(r));
+      return;
+    }
     r.pid = p.pid;
     p.stdout.on('data', (b) => { r.out += b; });
     p.stderr.on('data', (b) => { r.err += b; });
@@ -551,7 +642,10 @@ async function motorCorre(argv, saida) {
     correm.delete(r);
     vagas.larga(r.vaga.dirs);
     const { u } = r, cont = contagens(u.suite, r.out, r.status);
-    const estadoReal = r.limite ? 'limite' : r.status === null || r.status === undefined ? 'erro' : estadoDe(r.status, cont);
+    const naoAchou = u.suite.tipo === 'comando' && r.status === NAO_ENCONTRADO; // o shell não achou o comando (texto)
+    const estadoReal = r.limite ? 'limite' : r.status === null || r.status === undefined || naoAchou ? 'erro' : estadoDe(r.status, cont);
+    const motivo = r.motivo ?? (naoAchou ? `comando não encontrado (saída ${r.status})` : estadoReal === 'erro' ? cont.motivo : undefined);
+    const formato = u.suite.tipo === 'comando' ? { formato: u.suite.formato } : {};
     const estado = confere() ? estadoReal : 'invalidado'; // a unidade correu (ou acabou) sobre outro conteúdo
     const tap = tapDe(u);
     writeFileSync(join(raiz, tap), r.out);
@@ -573,10 +667,10 @@ async function motorCorre(argv, saida) {
     } else {
       feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado, pass: cont.pass ?? 0, fail: cont.fail ?? 0, skip: cont.skip ?? 0, todo: cont.todo ?? 0,
         skips: cont.skips, duracoes: cont.duracoes, duracao_s: Math.round((Date.now() - r.inicio) / 100) / 10, concorrentes_max: r.cmax, pid: r.pid, inicio: r.inicio.toISOString(),
-        fim: new Date().toISOString(), nonce_motor: o.nonce, tap });
+        fim: new Date().toISOString(), nonce_motor: o.nonce, tap, ...formato, ...(motivo ? { motivo } : {}) });
     }
     escreve(false);
-    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''}${u.fase === 2 ? ' [fase 2]' : ''} (${cont.pass ?? 0} pass, ${cont.fail ?? 0} fail) → ${tap}`);
+    if (estado !== 'pass') saida(`${estado.toUpperCase()} ${u.ficheiro}${u.bloco ? ` [${u.bloco}]` : ''}${u.fase === 2 ? ' [fase 2]' : ''} (${cont.pass ?? 0} pass, ${cont.fail ?? 0} fail${motivo ? `; ${motivo}` : ''}) → ${tap}`);
   };
 
   // o agendador: lança o que cabe nas vagas e nas faixas (o limite_s não entra); a carga global de cada unidade que corre é medida a cada passo
@@ -604,6 +698,41 @@ async function motorCorre(argv, saida) {
       await dorme(PASSO_MS + Math.floor(Math.random() * PASSO_MS));
     }
   };
+
+  // `prepara` (V-08, R2): com --preparar, o comando do manifesto corre uma vez antes das suítes, no clone do pós-merge, que não traz as dependências ignoradas; a marca
+  // em .forge/motor impede o --continuar de o repetir. Se falhar nenhuma suíte corre: todas ficam «erro», com o motivo.
+  const preparaDependencias = () => new Promise((fim) => {
+    const tap = `.forge/resultados/logs/${marca}-prepara.tap`, r = { limite: false, out: '', err: '', saiu: false, pid: 0 };
+    const acaba = (estado, motivo) => { writeFileSync(join(raiz, tap), r.out); if (r.err) writeFileSync(`${join(raiz, tap)}.err`, r.err); fim({ estado, motivo, tap }); };
+    let p;
+    try { p = lancaProc(m.preparaLinha, [], { cwd: raiz, env: semTokens(ambiente(join(raizTmp, 'prepara'))), stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', shell: true }); }
+    catch (e) { r.err = String(e.message ?? e); return acaba('erro', `arranque falhado: ${r.err}`); }
+    r.pid = p.pid; preparando.add(r);
+    p.stdout.on('data', (b) => { r.out += b; });
+    p.stderr.on('data', (b) => { r.err += b; });
+    const relogio = setTimeout(() => { r.limite = true; mataUnidade(r); }, PREPARA_LIMITE_S * 1000);
+    let feito = false;
+    const fecha = (status) => {
+      if (feito) return;
+      feito = true; clearTimeout(relogio); p.stdout.destroy(); p.stderr.destroy(); preparando.delete(r);
+      if (r.limite) acaba('erro', `passou o limite de ${PREPARA_LIMITE_S} s`); else if (status === 0) acaba('pass'); else acaba('erro', `saída ${status}`);
+    };
+    p.on('close', (status) => { r.saiu = true; fecha(status); });
+    p.on('exit', (status) => { r.saiu = true; setTimeout(() => fecha(status), 2000); });
+    p.on('error', (e) => { r.err += String(e); r.saiu = true; fecha(null); });
+  });
+  const marcaPrep = join(c.motorDir, `${marca}.prepara.json`);
+  if (!o.continuar) rm(marcaPrep);
+  if (o.preparar && m.preparaLinha && fila.length && !existsSync(marcaPrep)) {
+    const p = await preparaDependencias();
+    if (p.estado === 'pass') writeFileSync(marcaPrep, JSON.stringify({ fim: new Date().toISOString() }));
+    else {
+      saida(`PREPARA falhou (${p.motivo}) → ${p.tap}`);
+      const agora = new Date().toISOString();
+      for (const u of fila) feitas.set(u.chave, { suite: u.suite.nome, ficheiro: u.ficheiro, bloco: u.bloco, estado: 'erro', pass: 0, fail: 0, skip: 0, todo: 0, skips: [], duracoes: {},
+        duracao_s: 0, concorrentes_max: 0, pid: 0, inicio: agora, fim: agora, nonce_motor: o.nonce, tap: p.tap, motivo: `prepara falhou: ${p.motivo}` });
+    }
+  }
 
   await roda(fila);
   // fase 2 (spec §4.4): com a fase 1 inteira feita, os testes que saltaram com o motivo do lote voltam a correr, sozinhos, a ler o resultado

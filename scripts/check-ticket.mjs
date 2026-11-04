@@ -96,11 +96,12 @@ const ambito = (ficheiros, globs) => {
 
 // 4 e 5: as suítes afetadas pelo executor, na raiz ou no clone; só dá ok com o resultado completo, deste sha, e `pass` em cada suíte pedida
 const lerJson = (f) => JSON.parse(readFileSync(f, 'utf8'));
-async function corre(prefixo, raiz, suites, sha, continuar, orcamentoS) {
+async function corre(prefixo, raiz, suites, sha, continuar, orcamentoS, preparar = false) {
   const saidas = [];
   let codigo;
   const resto = Math.max(5, Math.floor(orcamentoS - (Date.now() - T0) / 1000));
-  try { codigo = await executa(['--suites', suites.join(','), '--orcamento', String(resto), '--raiz', raiz, ...(continuar ? ['--continuar'] : [])], { saida: (l) => { saidas.push(l); console.log(`  [${prefixo}] ${l}`); } }); }
+  // --preparar só no clone do pós-merge (não traz as dependências ignoradas): o `prepara` do manifesto corre lá uma vez; o ramo já as tem
+  try { codigo = await executa(['--suites', suites.join(','), '--orcamento', String(resto), '--raiz', raiz, ...(preparar ? ['--preparar'] : []), ...(continuar ? ['--continuar'] : [])], { saida: (l) => { saidas.push(l); console.log(`  [${prefixo}] ${l}`); } }); }
   catch (e) { return { estado: 'FAIL', detalhe: curto(`executor: ${e.message}`), suites: {} }; }
   const ficheiro = /→ (.+)$/.exec(saidas.at(-1) ?? '')?.[1];
   // código 3 sem ficheiro: o motor ainda corre e a chamada só disse «repita com --continuar»
@@ -108,7 +109,7 @@ async function corre(prefixo, raiz, suites, sha, continuar, orcamentoS) {
   if (!ficheiro || !existsSync(ficheiro)) return { estado: 'FAIL', detalhe: 'o executor não deixou resultados', suites: {} };
   const res = lerJson(ficheiro);
   if (res.valido === false) return { estado: 'FAIL', detalhe: curto(`resultado invalidado: ${res.motivo ?? 'a árvore ou o HEAD mudaram'}`), suites: {}, ficheiro };
-  const maus = res.unidades.filter((u) => u.estado !== 'pass').map((u) => `${u.suite}: ${u.estado} ${u.ficheiro}`);
+  const maus = res.unidades.filter((u) => u.estado !== 'pass').map((u) => `${u.suite}: ${u.estado} ${u.ficheiro}${u.motivo ? ` (${u.motivo})` : ''}`);
   const estados = Object.fromEntries(Object.entries(res.suites).map(([n, s]) => [n, s.estado]));
   // o executor dá 1 com uma falha mesmo com o resultado incompleto, e as unidades por correr ainda podem falhar: só um resultado completo fecha o passo
   if (!res.completo) return { estado: 'pendente', detalhe: curto(`incompleto${maus.length ? `, com falhas até agora (${maus.join('; ')})` : ''}: repetir com --continuar`), suites: estados, ficheiro };
@@ -165,6 +166,10 @@ async function main(argv) {
   const rev = git(raiz, 'rev-parse', 'HEAD');
   if (rev.status !== 0) throw new Uso(`${raiz} não é um repositório git com commits`);
   const sha = rev.stdout.trim();
+  // um manifesto sem suítes não corre nada: «0/0» seria um verde sem testes, por isso é erro de uso (como no executor)
+  let vazio = false;
+  try { const s = lerJson(join(raiz, fonteDe(raiz, 'suites.json'))).suites; vazio = Array.isArray(s) && !s.length; } catch { /* sem manifesto legível os passos já dizem o motivo */ }
+  if (vazio) throw new Uso('suites.json: suites está vazio: sem suítes nada corre, e um VERDE seria sem testes');
   // o token só serve ao gh: os testes que o executor lança não o herdam (e GITHUB_HEAD_REF, do CI, não pode enganar o soNoTicket do clone)
   const ghEnv = { ...process.env };
   for (const k of [...TOKENS, 'GITHUB_HEAD_REF']) delete process.env[k];
@@ -192,7 +197,7 @@ async function main(argv) {
       if (suites.includes('*')) suites = todas;
       if (!suites.length) throw new Error(ficheiros.length ? 'nenhuma suíte afetada (erro de mapa?)' : 'diff vazio contra a base');
       pRamo = corre('ramo', raiz, suites, sha, o.continuar, manifesto.orcamento_s).catch(falha);
-      pPos = Promise.resolve().then(() => corre('pós-merge', clona(raiz, sha, o.continuar), suites, sha, o.continuar, manifesto.orcamento_s)).catch(falha);
+      pPos = Promise.resolve().then(() => corre('pós-merge', clona(raiz, sha, o.continuar), suites, sha, o.continuar, manifesto.orcamento_s, true)).catch(falha);
     } catch (e) { pRamo = Promise.resolve(falha(e)); pPos = pRamo; suites = null; }
   }
   diz('âmbito', ficheiros ? ambito(ficheiros, o.ambito) : falha(erro));
