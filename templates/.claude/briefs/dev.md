@@ -33,6 +33,7 @@ Then post a comment `Round 0` on the issue: a table of criterion and evidence (t
 ## Operating rules
 - Run tests in the foreground, in blocks of at most 9 minutes (540 s) per command, and never with `run_in_background`.
 - Never kill a process by name (`taskkill /IM`, `killall`, `pkill`): other agents and the user share the machine. Kill only by PID, and only the processes you launched yourself.
+- Before you deliver, run `node .claude/check-ticket.mjs --ambito <globs of the files of the ticket>` in the foreground (it exits 3 while it is incomplete: repeat it with `--continuar`). Deliver only when it prints `CHECK-TICKET: VERDE`, and put its output in Round 0 as the green evidence.
 - Save a checkpoint in `.checkpoints/<role>-<ticket>.md` after each step, in the format of `.checkpoints/README.md`.
 - Commits are small, and their messages are in the language of the project.
 

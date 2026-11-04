@@ -297,6 +297,7 @@ Rules:
 4. Never cut: validation at a trust boundary, an error that prevents data loss, security, accessibility, an explicit spec requirement.
 5. Wrong spec or missing seam in plan.md: record the "${PANEL.question}" note on the panel and stop the slice; do not improvise. A test that fails twice: skill mattpocock-skills:diagnosing-bugs.
 6. Evidence is the command plus the literal output, never "the tests pass".
+6b. Before you write greenEvidence, run node .claude/check-ticket.mjs --ambito <globs of the files you may edit> in the foreground (it exits 3 while it is incomplete: repeat it with --continuar); write greenEvidence only after it prints CHECK-TICKET: VERDE, and give its output as the greenEvidence.
 7. Deliver a commit: head = git rev-parse HEAD; diffHash = the sha256 of git diff <base>...HEAD, with <base> the integration branch your branch was cut from. responses: [] in round 1; from round 2 one answer per finding of the previous round.${fb}
 ${panel(bid, 'Dev · ' + short, 'builder', round === 1 ? p.goal.slice(0, 160) : 'Fix: ' + last.biggestGap.slice(0, 140), pid, round, '{"status":"building"}', DEV)}`,
       { label: `build:${p.id}:r${round}`, phase: 'Build', model: DEV.model, effort: DEV.effort, schema: BUILD })
@@ -337,6 +338,7 @@ A: ${ours ? OURS : p.bar}
 B: ${ours ? p.bar : OURS}
 Binary question: which of the two better does what this piece needs to do? Pick one, no tie.
 Method:
+0. Start with the executor, in the foreground: node .claude/executor.mjs ${round === 1 ? '--todas' : '--afetadas'} (it exits 3 while it is incomplete: repeat it with --continuar), and use its result as the first evidence of your run.
 1. Get the real reference (repository, page, binary, test suite) and compare directly against it, never against a description. If you cannot get it, list "bar unreachable" as a blocking failure (criterion "bar", materiality 2).
 2. Run the tests yourself and re-run the red and green commands below: they are claims to verify, not facts.
 3. Check coverage: every behavior of the goal (T### and FR###, per spec.md and tasks.md) needs a test through the public interface.
