@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, EN, PT, NO_MERGE, REGRAS, temLiteral, ehWorkflow, gerar, conjunto, textos, check, lineState, fim } from './helpers.mjs';
+import { ROOT, EN, PT, NO_MERGE, REGRAS, AVANCAR, temLiteral, ehWorkflow, gerar, conjunto, textos, check, lineState, fim } from './helpers.mjs';
 
 const PINOS = [
   ['templates/.claude/check.cjs', String.raw`      ['no push, PR or merge without the yes of the user', [], [/^(?=.*\bpush\b)(?=.*\bPRs?\b)(?=.*\bmerge\b)(?=.*\b(user|utilizador|usu[áa]rio)\b)(?=.*\b(never|no|not|without)\b).*$/im]],`],
@@ -49,13 +49,13 @@ for (const [nome, lingua] of [[EN, 'EN'], [PT, 'PT']]) {
     assert.deepEqual(mas, [], 'linhas que falam de push, PR ou merge sem o proibir');
   });
 
-  test(`C2 (guarda, ${lingua}): o texto do projeto gerado não automatiza o merge: sem \`gh pr merge\` nem \`--modo forge\`, o avancar só com \`--modo projeto\` e fora dos workflows e dos briefs dos agentes`, async () => {
+  test(`C2 (guarda, ${lingua}): o texto do projeto gerado não automatiza o merge: sem \`gh pr merge\` nem \`--modo forge\`, o avancar só no comando do FRAMEWORK e fora dos workflows e dos briefs dos agentes`, async () => {
     const T = textos(await gerar(await conjunto(nome)));
     const mas = [];
     for (const [rel, s] of Object.entries(T)) {
       if (/gh pr merge/.test(s)) mas.push(`${rel}: gh pr merge`);
       if (s.includes('--modo forge')) mas.push(`${rel}: --modo forge`);
-      if (/avancar\.mjs(?! --modo projeto)/.test(s) && !/\.json$/.test(rel)) mas.push(`${rel}: avancar sem --modo projeto`);
+      if (s.split(AVANCAR).join('').includes('avancar.mjs') && !/\.json$/.test(rel)) mas.push(`${rel}: avancar fora do comando do FRAMEWORK`);
       if (s.includes('avancar.mjs') && (ehWorkflow(rel) || rel.startsWith('.claude/briefs/'))) mas.push(`${rel}: o avancar é do orquestrador`);
     }
     assert.deepEqual(mas, []);
