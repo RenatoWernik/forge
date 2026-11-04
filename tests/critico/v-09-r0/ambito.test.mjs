@@ -15,7 +15,8 @@ test('ÂMBITO: nenhum ataque de outro ticket (tests/critico/* fora de v-09-r0) m
   if (soNoTicket(t, 'v-09')) return;
   const b = pre(t);
   if (!b) return;
-  const mudou = gitRoot('diff', '--name-status', b, '--', 'tests/critico').split(/\r?\n/).filter(Boolean).filter((l) => !/^\S+\s+tests\/critico\/v-09-r0\//.test(l));
+  // Única exceção, autorizada por escrito pelo orquestrador na #133: o MAX_NEW do f-06 C8 passa de 10 para 12 (as 4 mutações de brief que o V-09 exige). Qualquer outro ficheiro antigo continua a reprovar.
+  const mudou = gitRoot('diff', '--name-status', b, '--', 'tests/critico').split(/\r?\n/).filter(Boolean).filter((l) => !/^\S+\s+tests\/critico\/v-09-r0\//.test(l) && !/^M\s+tests\/critico\/f-06-r0\/c8-corpus-mutacoes\.test\.mjs$/.test(l));
   assert.deepEqual(mudou, [], 'ataques antigos alterados ou apagados');
 });
 
