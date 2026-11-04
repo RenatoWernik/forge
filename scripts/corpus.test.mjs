@@ -62,11 +62,11 @@ const build = async (set) => {
   if (/^pt/i.test(forge.langTag)) for (const rel of [...PROSE, ...readdirSync(join(dest, '.claude/briefs')).map((f) => '.claude/briefs/' + f)]) writeFileSync(join(dest, rel), translatePt(readFileSync(join(dest, rel), 'utf8')));
   return { dest, forge, pending };
 };
-// At most 2 check.cjs run at once (a slot is handed to the next waiting call, so the count never goes above 2)
+// At most 4 check.cjs run at once (a slot is handed to the next waiting call, so the count never goes above 4; it was 2 from the time the tests ran without the executor)
 let active = 0;
 const waiting = [];
 // `urgent` goes to the front: a seeded mutation has two more checks after its first, and at the back of the queue they would stretch the whole run
-const slot = async (urgent) => { if (active >= 2) await new Promise((r) => (urgent ? waiting.unshift(r) : waiting.push(r))); else active++; };
+const slot = async (urgent) => { if (active >= 4) await new Promise((r) => (urgent ? waiting.unshift(r) : waiting.push(r))); else active++; };
 const free = () => { const next = waiting.shift(); if (next) next(); else active--; };
 const check = async (cwd, urgent = false) => {
   await slot(urgent);
