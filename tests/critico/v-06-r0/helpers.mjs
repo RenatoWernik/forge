@@ -198,7 +198,7 @@ export function correAvancar(m, { limite_ms = 240000 } = {}) {
       setTimeout(() => {
         p.stdout.destroy(); p.stderr.destroy();
         const f = join(m.trab, '.forge', 'proxima-fase.json');
-        resolve({ status, out, ms: Date.now() - t0, pendurado, chamadas: lerJsonl(join(m.estado, 'chamadas.jsonl')), refsDepois: refs(m.origem),
+        resolve({ status, out, ms: Date.now() - t0, pendurado, chamadas: lerJsonl(join(m.estado, 'chamadas.jsonl')), refsDepois: existsSync(m.origem) ? refs(m.origem) : null, // #175: a limpa() pode já ter apagado a pasta (sem git nela)
           proxima: existsSync(f) ? readFileSync(f, 'utf8') : null });
       }, 200);
     };
