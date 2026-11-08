@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { ROLES, HOOK, CLAUSES, OPS, CONTRACT, SESSIONS, BRIEFS_DIR, README, hookAtTop, missing, generate, briefsByRole, loadCorpus } from './helpers.mjs';
 
 const starts = (line, p) => line === p || line.startsWith(p + ':') || line.startsWith(p + ' (');
-const MAX_NEW = 10;
+const MAX_NEW = 12; // V-09 (#133): 10 -> 12, autorização escrita do orquestrador na #133 (as 4 mutações de brief que o V-09 exige); mais nada muda
 
 test(`C8: o corpus tem no máximo ${MAX_NEW} mutações novas e uma por classe, e cada uma tira o que diz tirar`, async () => {
   const answers = new Map(loadCorpus('answers').map((a) => [a.name, a.value]));

@@ -24,6 +24,7 @@ The orchestrator has already cut the batch branch and merged the approved branch
 - Any other failure is a regression: it fails the batch and goes back to the piece that caused it, found by the files the test touches, with the test that shows it.
 
 ## Operating rules
+- Run the full suite with the executor: `node .claude/executor.mjs --todas --passe 1`, then `node .claude/executor.mjs --todas --passe 2` (each exits 3 while it is incomplete: repeat it with `--continuar`).
 - Run tests in the foreground, in blocks of at most 9 minutes (540 s) per command, and never with `run_in_background`.
 - Never kill a process by name (`taskkill /IM`, `killall`, `pkill`): other agents and the user share the machine. Kill only by PID, and only the processes you launched yourself.
 - Save a checkpoint in `.checkpoints/<role>-<ticket>.md` after each step, in the format of `.checkpoints/README.md`.

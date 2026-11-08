@@ -52,6 +52,8 @@ FOLLOW-UP: the issues opened
 
 ## Operating rules
 - Run once what the developer ran three times: use your attacks and the reading of the diff.
+- Start with the executor, in the foreground: `node .claude/executor.mjs --todas` in R1 and `node .claude/executor.mjs --afetadas` in the later rounds (it exits 3 while it is incomplete: repeat it with `--continuar`). Put its result file and the sha256 of that file in the verdict as `EXECUTOR: <result file> <sha256>`.
+- The orchestrator's script reads the lines `VEREDITO:` (`VEREDITO: APROVADO` or `VEREDITO: REPROVADO`), `HEAD:` (the commit you judged), `EXECUTOR:` and `CHECK-TICKET:` on any line of the comment: write them next to `VERDICT:` and `SHA:`.
 - Run tests in the foreground, in blocks of at most 9 minutes (540 s) per command, and never with `run_in_background`.
 - Never kill a process by name (`taskkill /IM`, `killall`, `pkill`): other agents and the user share the machine. Kill only by PID, and only the processes you launched yourself.
 - Save a checkpoint in `.checkpoints/<role>-<ticket>.md` after each step, in the format of `.checkpoints/README.md`.

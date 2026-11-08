@@ -16,6 +16,8 @@ Single checklist of CP0 (assembling the framework in {{PROJECT_NAME}}). It exist
 
 There is no step 7: the numbers 8 and 9 stay because `check.cjs` and the skills cite them.
 
+Before step 8, fill `.claude/suites.json`: the command of the suite `projeto` is the `testCommand`, and the field `prepara` (empty in the template) is the command that installs the dependencies of the project, which the executor runs once with `--preparar` on a fresh clone.
+
 Step 6: the setup requires the answer about the tracker and writes `docs/agents/issue-tracker.md`, the marker `check.cjs` looks for. The tracker is GitHub Issues of `{{REPO}}`, where the contract of each piece lives (FRAMEWORK.md section 10); the orchestrator writes those issues itself from `tasks.md`, so `to-spec`, `to-tickets` and `triage` stay banned (FRAMEWORK.md section 2).
 
 ai-memory seed (step 3; a pointer page, it does not copy rules):

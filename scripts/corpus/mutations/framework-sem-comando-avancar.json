@@ -1,0 +1,7 @@
+{
+  "base": "en-plain-published",
+  "file": "FRAMEWORK.md",
+  "find": "node .claude/avancar.mjs --pr <n> --repo <owner/repo> --modo projeto --integracao <branch>",
+  "replace": "a manual run",
+  "line": "advance: FRAMEWORK.md teaches `node .claude/avancar.mjs --pr <n> --repo <owner/repo> --modo projeto --integracao <branch>` in a code span"
+}
